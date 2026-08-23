@@ -1,6 +1,7 @@
 package discordsignup
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -22,141 +23,88 @@ func tableEvents(n int) []Event {
 	return out
 }
 
-// TestPanelStaysInsideDiscordsComponentBudget is the ceiling that shapes this
-// layout, and it is not a guess: measured against the live API, a container of
-// sections with separators and one menu fits nine events, without separators
-// eleven, with neither eighteen. Everything nested counts — the container, each
-// section, the text inside it, every separator, and every option in the menu.
-func TestPanelStaysInsideDiscordsComponentBudget(t *testing.T) {
-	for _, n := range []int{0, 1, 5, 9, 12, 20, 50, 200} {
-		payload := RenderEventPanel(tableEvents(n))
-		if got := countComponents(payload["components"].([]any)); got > messageComponentBudget {
-			t.Errorf("%d events render %d components, over the budget of %d",
-				n, got, messageComponentBudget)
-		}
+// TestEveryRowCarriesAllFourButtons is why this is one message per event.
+//
+// A Section's accessory can be a Button or a Thumbnail and nothing else — a
+// select is rejected outright, measured against the live API — so a
+// single-message layout gets exactly one button per row. An Action Row inside a
+// container holds five, which is what makes all four fit.
+func TestEveryRowCarriesAllFourButtons(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Board games", Status: StatusOpen, Capacity: 8,
+		AttendingCount: 3, StartsAt: time.Now().Unix()}
+	container := RenderEventRow(ev)["components"].([]any)[0].(map[string]any)
+	if container["type"] != componentTypeContainer {
+		t.Fatalf("row is type %v, want a container", container["type"])
 	}
-}
-
-// countComponents mirrors Discord's own accounting, including select options.
-func countComponents(components []any) int {
-	total := 0
-	for _, c := range components {
-		m := c.(map[string]any)
-		total++
-		if nested, ok := m["components"].([]any); ok {
-			total += countComponents(nested)
-		}
-		if options, ok := m["options"].([]any); ok {
-			total += len(options)
-		}
+	inner := container["components"].([]any)
+	if len(inner) != 2 {
+		t.Fatalf("container holds %d components, want text and an action row", len(inner))
 	}
-	return total
-}
-
-// TestPanelGivesUpDecorationBeforeInformation pins the degradation order:
-// separators are decoration and go first, then the menu, and only then are
-// events dropped — and dropping them is said out loud.
-func TestPanelGivesUpDecorationBeforeInformation(t *testing.T) {
-	small := planPanel(tableEvents(5))
-	if !small.Separators || !small.Menu || small.Dropped != 0 {
-		t.Errorf("five events should get the full layout, got %+v", small)
+	buttons := inner[1].(map[string]any)["components"].([]any)
+	var ids []string
+	for _, b := range buttons {
+		ids = append(ids, b.(map[string]any)["custom_id"].(string))
 	}
-	medium := planPanel(tableEvents(11))
-	if medium.Separators {
-		t.Error("eleven events kept separators, which do not fit alongside the menu")
+	want := []string{JoinCustomID(1), LeaveCustomID(1), DetailsCustomID(1), EditCustomID(1)}
+	if len(ids) != len(want) {
+		t.Fatalf("buttons = %v, want %v", ids, want)
 	}
-	if medium.Dropped != 0 {
-		t.Errorf("eleven events dropped %d — decoration should go first", medium.Dropped)
-	}
-	large := planPanel(tableEvents(60))
-	if large.Dropped == 0 {
-		t.Error("sixty events fit, which contradicts the measured budget")
-	}
-	content := RenderEventPanel(tableEvents(60))["components"].([]any)[0].(map[string]any)["components"].([]any)[0].(map[string]any)["content"].(string)
-	if !strings.Contains(content, "Showing") {
-		t.Errorf("heading = %q, want it to say how many were left out", content)
-	}
-}
-
-// TestPanelIsSortedByDate is free here and was not in the row-per-message
-// version: a single message is redrawn whole, so it is always in order, whereas
-// Discord will not reorder separate messages.
-func TestPanelIsSortedByDate(t *testing.T) {
-	base := time.Now().Add(24 * time.Hour).Unix()
-	events := []Event{
-		{ID: 1, Name: "Third", Status: StatusOpen, StartsAt: base + 3000},
-		{ID: 2, Name: "First", Status: StatusOpen, StartsAt: base + 1000},
-		{ID: 3, Name: "Second", Status: StatusOpen, StartsAt: base + 2000},
-	}
-	panel := RenderEventPanel(events)["components"].([]any)[0].(map[string]any)["components"].([]any)
-	var order []string
-	for _, c := range panel {
-		m := c.(map[string]any)
-		if m["type"] != componentTypeSection {
-			continue
-		}
-		content := m["components"].([]any)[0].(map[string]any)["content"].(string)
-		order = append(order, strings.Split(strings.TrimPrefix(content, "**"), "**")[0])
-	}
-	want := []string{"First", "Second", "Third"}
 	for i := range want {
-		if i >= len(order) || order[i] != want[i] {
-			t.Fatalf("order = %v, want %v", order, want)
+		if ids[i] != want[i] {
+			t.Errorf("button %d = %q, want %q", i, ids[i], want[i])
 		}
+	}
+	if len(buttons) > 5 {
+		t.Errorf("%d buttons, over Discord's five per action row", len(buttons))
 	}
 }
 
-// TestClosedEventsGetDetailsNotJoin keeps a trap off the panel. A Section must
-// have an accessory, so the button becomes Details rather than disappearing.
-func TestClosedEventsGetDetailsNotJoin(t *testing.T) {
-	events := tableEvents(2)
-	events[0].Status = StatusClosed
-	panel := RenderEventPanel(events)["components"].([]any)[0].(map[string]any)["components"].([]any)
-	var accessories []string
-	for _, c := range panel {
-		m := c.(map[string]any)
-		if m["type"] != componentTypeSection {
-			continue
-		}
-		accessories = append(accessories, m["accessory"].(map[string]any)["custom_id"].(string))
+// TestClosedRowsLoseJoinAndLeave keeps a button that cannot act off the row.
+func TestClosedRowsLoseJoinAndLeave(t *testing.T) {
+	ev := &Event{ID: 4, Name: "Shut", Status: StatusClosed, Capacity: 8}
+	inner := RenderEventRow(ev)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	buttons := inner[1].(map[string]any)["components"].([]any)
+	var ids []string
+	for _, b := range buttons {
+		ids = append(ids, b.(map[string]any)["custom_id"].(string))
 	}
-	if len(accessories) != 2 {
-		t.Fatalf("got %d sections, want 2", len(accessories))
-	}
-	if accessories[0] != DetailsCustomID(events[0].ID) {
-		t.Errorf("a closed event offers %q, want Details", accessories[0])
-	}
-	if accessories[1] != JoinCustomID(events[1].ID) {
-		t.Errorf("an open event offers %q, want Join", accessories[1])
+	if len(ids) != 2 || ids[0] != DetailsCustomID(4) || ids[1] != EditCustomID(4) {
+		t.Errorf("buttons = %v, want just Details and Edit", ids)
 	}
 }
 
-// TestPanelUsesComponentsV2AndNoContent covers a rule that rejects the whole
+// TestRowsUseComponentsV2AndNoContent covers a rule that rejects the whole
 // message: with the V2 flag set, a message must carry no content field.
-func TestPanelUsesComponentsV2AndNoContent(t *testing.T) {
-	payload := RenderEventPanel(tableEvents(3))
-	if payload["flags"] != messageFlagComponentsV2 {
-		t.Errorf("flags = %v, want the Components V2 flag", payload["flags"])
-	}
-	if _, present := payload["content"]; present {
-		t.Error("a Components V2 message must not carry a content field")
+func TestRowsUseComponentsV2AndNoContent(t *testing.T) {
+	for name, payload := range map[string]map[string]any{
+		"row":    RenderEventRow(&Event{ID: 1, Name: "One", Status: StatusOpen}),
+		"header": RenderTableHeader(3),
+	} {
+		if payload["flags"] != messageFlagComponentsV2 {
+			t.Errorf("%s flags = %v, want the Components V2 flag", name, payload["flags"])
+		}
+		if _, present := payload["content"]; present {
+			t.Errorf("%s carries a content field, which V2 forbids", name)
+		}
 	}
 }
 
-// TestPanelIsEditedNotReposted keeps it where people scrolled to.
-func TestPanelIsEditedNotReposted(t *testing.T) {
+// TestRowsAreEditedNotReposted keeps each row where it is. A signup rewrites one
+// message; anything else walks the whole table down the channel.
+func TestRowsAreEditedNotReposted(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	if err := store.SetGuildTable("g1", "panel-channel"); err != nil {
+	if err := store.SetGuildTable("g1", "table-channel"); err != nil {
 		t.Fatalf("set table: %v", err)
 	}
-	if _, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "One",
-		StartsAt: time.Now().Add(time.Hour).Unix()}); err != nil {
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "One",
+		StartsAt: time.Now().Add(time.Hour).Unix()})
+	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	for i := 0; i < 4; i++ {
-		if err := srv.RefreshEventPanel("g1"); err != nil {
+		if err := srv.RefreshTableRow(ev); err != nil {
 			t.Fatalf("refresh %d: %v", i, err)
 		}
 	}
@@ -169,8 +117,80 @@ func TestPanelIsEditedNotReposted(t *testing.T) {
 			edits++
 		}
 	}
-	if posts != 1 || edits != 3 {
-		t.Errorf("%d posts and %d edits, want 1 and 3", posts, edits)
+	// The row and the header, posted once each; three edits of the row.
+	if posts != 2 || edits != 3 {
+		t.Errorf("%d posts and %d edits, want 2 and 3", posts, edits)
+	}
+}
+
+// TestFinishedEventsLeaveTheTable stops the board filling with things that
+// already happened.
+func TestFinishedEventsLeaveTheTable(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+	if err := store.SetGuildTable("g1", "table-channel"); err != nil {
+		t.Fatalf("set table: %v", err)
+	}
+	past := time.Now().Add(-10 * time.Hour).Unix()
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Over",
+		StartsAt: past, EndsAt: past + 3600})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := srv.RefreshTableRow(ev); err != nil {
+		t.Fatalf("draw row: %v", err)
+	}
+	if _, err := srv.CompleteFinishedEvents(); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if left, _ := store.TableRowMessageID(ev.ID); left != "" {
+		t.Errorf("the row is still recorded as %q after the event finished", left)
+	}
+}
+
+// TestRebuildRepostsInDateOrder covers the one thing Discord will not do:
+// messages sit in posting order and cannot be moved, so sorting means deleting
+// and reposting.
+func TestRebuildRepostsInDateOrder(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	if err := store.SetGuildTable("g1", "table-channel"); err != nil {
+		t.Fatalf("set table: %v", err)
+	}
+	base := time.Now().Add(24 * time.Hour).Unix()
+	for _, offset := range []int64{3, 1, 2} {
+		if _, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board",
+			Name: fmt.Sprintf("Event +%d", offset), StartsAt: base + offset*3600}); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+	}
+	if err := srv.RebuildEventTable("g1"); err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+	var order []string
+	for _, c := range fake.recorded() {
+		if c.Method != "POST" || !strings.HasSuffix(c.Path, "/messages") {
+			continue
+		}
+		body, _ := json.Marshal(c.Body)
+		for _, offset := range []string{"+1", "+2", "+3"} {
+			if strings.Contains(string(body), "Event "+offset) {
+				order = append(order, offset)
+			}
+		}
+	}
+	want := []string{"+1", "+2", "+3"}
+	if len(order) != len(want) {
+		t.Fatalf("posted %v, want %v", order, want)
+	}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Errorf("posted %v, want soonest first %v", order, want)
+			break
+		}
 	}
 }
 

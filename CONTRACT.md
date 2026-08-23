@@ -102,54 +102,30 @@ separate requests and nothing stops the second arriving alone.
 Raising a limit promotes people off the waitlist in arrival order and messages
 each of them. Lowering it promotes nobody and removes nobody.
 
-## The consolidated panel
+## The consolidated table
 
-**One Components V2 message per guild**, redrawn in place on every change. A
-container of Sections, one per event: name, when and where, the count, and a
-**Join** button as the section's accessory.
+**One message per event**, each a Components V2 container holding the event's
+line and an action row of **Join · Leave · Details · Edit**, plus a header
+message above them.
 
-Because it is one message redrawn whole, it is always in date order — the
-row-per-message version it replaced could not sort itself, since Discord will
-not reorder messages.
+One message per event because a **Section's accessory can only be a Button or a
+Thumbnail** — a select is rejected with `UNION_TYPE_CHOICES`, measured — so a
+single-message layout gets exactly one button per row. An Action Row inside a
+container holds five, which is what lets all four sit on the row they act on.
 
-⚠️ **A Section takes exactly one accessory.** Join is the only button that fits
-beside a row, so Details is a menu underneath and Leave and Edit are on the
-event's card. A closed event gets Details instead of Join rather than no button,
-because the accessory is required and a Join on something not taking signups is
-a trap.
+A closed event keeps Details and Edit and loses Join and Leave: a button that
+cannot act is a trap, not an affordance.
 
-### The component budget
-
-Discord allows **40 components in a message**, and everything nested counts —
-the container, each section, the text inside it, every separator, and every
-option in the menu. Measured against the live API, not inferred:
-
-| Layout | Events that fit |
+| | |
 |---|---|
-| separators + menu | 9 |
-| menu only | 11 |
-| neither | 18 |
+| A signup | rewrites that one message, in place |
+| An event finishing | deletes its row and updates the header |
+| `signup:table-rebuild:0` | deletes everything and reposts in date order |
 
-`planPanel` degrades in that order and the heading says when events were left
-out. Separators go before the menu because they are lines and the menu is the
-only way to read a description and roster.
-
-## The native event's title
-
-When a linked event has a capacity, its Discord title carries a badge:
-`[3/8] Board game night`. Pushed on every roster change, since the count is
-stale the moment somebody joins. No badge on an uncapped event — `[7/∞]` is
-noise.
-
-⚠️ **The badge is never stored.** The importer strips it off any name read back
-from Discord, exactly as it strips the signup pointer off a description.
-Without that, pushing `[3/8] Games` and reading it back makes the stored name
-`[3/8] Games`, and the next push produces `[4/8] [3/8] Games` — in a field
-capped at 100 characters, so it breaks within twenty signups. Pinned by a test
-that round-trips twenty times.
-
-The name is trimmed to fit, never the badge: `[3/8] Board game ni` still says
-what the badge is for.
+**Discord will not reorder messages**, so rows sit in posting order and a new
+event starting sooner lands at the bottom. Rebuild is the only way to sort,
+needs Manage Events since it deletes every message, and answers before it starts
+because it cannot finish inside the three-second interaction window.
 
 ## Conventions## The native event's title
 

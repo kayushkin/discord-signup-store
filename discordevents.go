@@ -655,7 +655,9 @@ func (s *Server) CompleteFinishedEvents() ([]int64, error) {
 		}
 		// It has left the live list, so the panel has to stop showing it.
 		if ev, err := s.store.GetEvent(id); err == nil {
-			s.refreshEventPanelQuietly(ev.GuildID)
+			if err := s.RemoveTableRow(ev); err != nil {
+				log.Printf("[discord-signup] remove table row for %d: %v", id, err)
+			}
 		}
 	}
 	return finished, nil
