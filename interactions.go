@@ -265,6 +265,14 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		s.handleCreateButton(w, in)
 	case "details":
 		s.handleDetailsButton(w, eventID)
+	case "my-events":
+		// The routing bug this fixes: "my-events" matched no case and no
+		// "table-" prefix, so the button shipped answering "Unknown signup
+		// action." Routed explicitly now, and pinned by a test that presses it
+		// through the signed handler.
+		s.handleMyEventsButton(w, in)
+	case "dash-join", "dash-leave":
+		s.handleDashboardAction(w, in, action, eventID)
 	default:
 		s.replyEphemeral(w, "Unknown signup action.")
 	}

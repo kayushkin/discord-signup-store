@@ -139,6 +139,23 @@ sort.
 A closed event keeps Details and Edit and loses Join and Leave: a button that
 cannot act is a trap, not an affordance.
 
+## The personal dashboard
+
+`signup:my-events:0` (on the table's last page and the standing message in the
+dashboard channel) opens an **ephemeral** Components V2 view — the one surface
+that is genuinely per-viewer, because a channel message renders identically for
+everyone and Discord fires no event when someone opens a channel.
+
+Each row conditions its buttons on the viewer: **Join** or **Leave** depending
+on whether they are in the event, their own state written on the row ("going",
+"waitlist #2"), and **Edit** only with `MANAGE_EVENTS`/`ADMINISTRATOR` or for
+the event's creator. `signup:dash-join:{id}` and `signup:dash-leave:{id}`
+answer with callback type 7 (**UPDATE_MESSAGE**), re-rendering the dashboard in
+place so the row flips under the cursor.
+
+Capped at six events: a row costs up to five components plus a separator, so
+six is 37 of the 40 budget — seven measured out at 43.
+
 ## Conventions## The native event's title
 
 When a linked event has a capacity, its Discord title carries a badge:
@@ -155,6 +172,23 @@ that round-trips twenty times.
 
 The name is trimmed to fit, never the badge: `[3/8] Board game ni` still says
 what the badge is for.
+
+## The personal dashboard
+
+`signup:my-events:0` (on the table's last page and the standing message in the
+dashboard channel) opens an **ephemeral** Components V2 view — the one surface
+that is genuinely per-viewer, because a channel message renders identically for
+everyone and Discord fires no event when someone opens a channel.
+
+Each row conditions its buttons on the viewer: **Join** or **Leave** depending
+on whether they are in the event, their own state written on the row ("going",
+"waitlist #2"), and **Edit** only with `MANAGE_EVENTS`/`ADMINISTRATOR` or for
+the event's creator. `signup:dash-join:{id}` and `signup:dash-leave:{id}`
+answer with callback type 7 (**UPDATE_MESSAGE**), re-rendering the dashboard in
+place so the row flips under the cursor.
+
+Capped at six events: a row costs up to five components plus a separator, so
+six is 37 of the 40 budget — seven measured out at 43.
 
 ## Conventions
 

@@ -512,10 +512,6 @@ func (s *Server) liveEventsFor(guildID string) ([]Event, error) {
 // Rebuild exists for when the messages and the database disagree — someone
 // deleted one by hand, or a post failed midway.
 func (s *Server) handleTableAction(w http.ResponseWriter, in *Interaction, action string) {
-	if action == "my-events" {
-		s.replyMyEvents(w, in)
-		return
-	}
 	if action != "table-rebuild" {
 		s.replyEphemeral(w, "Unknown table action.")
 		return
@@ -563,38 +559,4 @@ func (s *Server) RebuildEventTable(guildID string) error {
 		}
 	}
 	return s.RefreshEventTable(guildID)
-}
-
-// replyMyEvents answers "which of these am I in?" privately.
-func (s *Server) replyMyEvents(w http.ResponseWriter, in *Interaction) {
-	userID, _ := in.actor()
-	if userID == "" {
-		s.replyEphemeral(w, "Could not read your Discord user id from that click.")
-		return
-	}
-	signups, err := s.store.UserSignupsInGuild(in.GuildID, userID)
-	if err != nil {
-		log.Printf("[discord-signup] my events for %s: %v", userID, err)
-		s.replyEphemeral(w, "Something went wrong reading your signups.")
-		return
-	}
-	if len(signups) == 0 {
-		s.replyEphemeral(w, "You are not signed up for anything here.")
-		return
-	}
-	var b strings.Builder
-	b.WriteString("**Your events**\n")
-	for _, u := range signups {
-		switch u.Signup.State {
-		case StateWaitlisted:
-			fmt.Fprintf(&b, "· **%s** — waitlist #%d", u.Event.Name, u.Signup.WaitlistPlace)
-		default:
-			fmt.Fprintf(&b, "· **%s** — going", u.Event.Name)
-		}
-		if u.Event.StartsAt > 0 {
-			b.WriteString("  ·  " + compactWhen(&u.Event))
-		}
-		b.WriteString("\n")
-	}
-	s.replyEphemeral(w, strings.TrimRight(b.String(), "\n"))
 }
