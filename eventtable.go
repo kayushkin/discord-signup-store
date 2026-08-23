@@ -136,6 +136,9 @@ const textDisplayLimit = 4000
 //
 // Every component is a Text Display. Nothing here is an input, so nothing looks
 // editable, and there is no submit to explain away.
+// buildDetailsModal deliberately carries NO forum reference, unlike every
+// other surface: a modal resolves neither <#…> mentions nor markdown links, so
+// the reference would render as dead text — a raw id in angle brackets.
 func buildDetailsModal(ev *Event, roster []Signup) map[string]any {
 	text := func(content string) map[string]any {
 		return map[string]any{"type": componentTypeTextDisplay, "content": trimTo(content, textDisplayLimit)}
@@ -364,11 +367,12 @@ func eventLine(ev *Event) string {
 		parts = append(parts, compactWhen(ev))
 	}
 	if ev.ForumPostID != "" {
-		// A masked link rather than a <#…> mention: a mention renders the
-		// post's full title, which is this same line again. Costs no component,
-		// which a link button would.
-		parts = append(parts, fmt.Sprintf("[💬](https://discord.com/channels/%s/%s)",
-			ev.GuildID, ev.ForumPostID))
+		// The same reference the #events card uses: a 💬 and a thread mention.
+		// A mention renders the post's full title, which repeats much of this
+		// line — the price of every surface referencing the forum identically,
+		// chosen deliberately over a terser masked link that looked different
+		// everywhere it appeared.
+		parts = append(parts, fmt.Sprintf("💬 <#%s>", ev.ForumPostID))
 	}
 	return strings.Join(parts, "  ·  ")
 }

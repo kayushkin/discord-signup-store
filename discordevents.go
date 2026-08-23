@@ -296,7 +296,7 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 			Status:                 status,
 			StartsAt:               startsAt,
 			EndsAt:                 endsAt,
-			Location:               r.EntityMetadata.Location,
+			Location:               stripLocationPlaceholder(r.EntityMetadata.Location),
 			EntityType:             discordEntityTypeNames[r.EntityType],
 			RecurrenceRule:         recurrenceRuleText(r.RecurrenceRule),
 			Timezone:               recurrenceTimezone(r.RecurrenceRule),
@@ -334,9 +334,8 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 	if existing.Status != status {
 		patch.Status = &status
 	}
-	if existing.Location != r.EntityMetadata.Location {
-		loc := r.EntityMetadata.Location
-		patch.Location = &loc
+	if incoming := stripLocationPlaceholder(r.EntityMetadata.Location); existing.Location != incoming {
+		patch.Location = &incoming
 	}
 	if existing.DiscordInterestedCount != r.UserCount {
 		count := r.UserCount
@@ -459,8 +458,9 @@ func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event,
 	if location == "" {
 		// Discord requires a non-empty location on an EXTERNAL event and
 		// refuses the whole request without one. This is a label, not invented
-		// data: it says where to look rather than claiming to know a venue.
-		location = "See the signup card"
+		// data — and the import strips it back to empty, or it would come home
+		// as a location somebody typed.
+		location = locationPlaceholder
 	}
 	payload := map[string]any{
 		"guild_id":             ev.GuildID,
@@ -480,6 +480,22 @@ func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event,
 	// is the window in which the gateway can see an event we own but cannot
 	// recognise, which is why syncOneScheduledEvent checks the creator.
 	return s.store.UpdateEvent(eventID, EventPatch{DiscordScheduledEventID: &created.ID})
+}
+
+// locationPlaceholder is what gets sent as a native event's location when the
+// event has none — Discord refuses an EXTERNAL event without one. Like the
+// badge and the pointer, it must be stripped on import or it round-trips: the
+// placeholder comes back as if a person typed it, and then shows on every
+// surface as a location that locates nothing. Found live, on two events.
+const locationPlaceholder = "See the signup card"
+
+// stripLocationPlaceholder maps our own filler back to the empty value it
+// stands for.
+func stripLocationPlaceholder(location string) string {
+	if location == locationPlaceholder {
+		return ""
+	}
+	return location
 }
 
 // capacityPrefixPattern matches the badge this service puts at the front of a
@@ -706,7 +722,7 @@ func (s *Server) PushEditToDiscord(ev *Event) error {
 	}
 	location := ev.Location
 	if location == "" {
-		location = "See the signup card"
+		location = locationPlaceholder
 	}
 	payload := map[string]any{
 		"name":                 nativeEventName(ev),

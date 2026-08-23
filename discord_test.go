@@ -833,3 +833,18 @@ func TestReconcileDeletesTheNativeEventWhenCancelledLocally(t *testing.T) {
 		t.Errorf("the native event for cancelled %q was not deleted", ev.Name)
 	}
 }
+
+// TestTheLocationPlaceholderDoesNotRoundTrip: the third instance of the same
+// corruption, after the description pointer and the title badge. The filler
+// sent because Discord refuses an EXTERNAL event with no location must not
+// come home as a location somebody typed. Found live, on two events.
+func TestTheLocationPlaceholderDoesNotRoundTrip(t *testing.T) {
+	if got := stripLocationPlaceholder(locationPlaceholder); got != "" {
+		t.Errorf("the placeholder came home as %q", got)
+	}
+	for _, real := range []string{"The pub", "See the signup card please", ""} {
+		if got := stripLocationPlaceholder(real); got != real {
+			t.Errorf("stripLocationPlaceholder(%q) = %q, want untouched", real, got)
+		}
+	}
+}

@@ -260,9 +260,11 @@ func TestSurfacesLinkToTheForumPostExceptTheForumItself(t *testing.T) {
 	if strings.Contains(forumCard, "post-9") {
 		t.Error("the forum card links to its own post")
 	}
+	// The table and the My events dashboard share eventLine, so this one
+	// assertion covers both — and it is the SAME reference the card uses.
 	line := eventLine(ev)
-	if !strings.Contains(line, "https://discord.com/channels/g1/post-9") {
-		t.Errorf("the table line does not carry the masked link: %q", line)
+	if !strings.Contains(line, "💬 <#post-9>") {
+		t.Errorf("the table line does not reference the forum the way the card does: %q", line)
 	}
 	pointer := signupPointer(ev, "board")
 	if !strings.Contains(pointer, "the forum: https://discord.com/channels/g1/post-9") {
