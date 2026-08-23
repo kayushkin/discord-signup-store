@@ -28,7 +28,7 @@ func tableEvents(n int) []Event {
 // in a message. Six fit; seven is COMPONENT_MAX_TOTAL_COMPONENTS_EXCEEDED.
 func TestAPageStaysInsideDiscordsComponentBudget(t *testing.T) {
 	for _, n := range []int{1, 3, eventsPerPage} {
-		payload := RenderTablePage(tableEvents(n), 0, 1)
+		payload := RenderTablePage(tableEvents(n), 0, 1, true)
 		if got := countComponents(payload["components"].([]any)); got > 40 {
 			t.Errorf("%d events render %d components, over Discord's 40", n, got)
 		}
@@ -55,7 +55,7 @@ func countComponents(components []any) int {
 func TestOneTextBlockPerEvent(t *testing.T) {
 	events := tableEvents(3)
 	events[0].Description = "Bring dice."
-	body := RenderTablePage(events, 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderTablePage(events, 0, 1, false)["components"].([]any)[0].(map[string]any)["components"].([]any)
 
 	var textBlocks, actionRows int
 	for _, c := range body {
@@ -78,7 +78,7 @@ func TestOneTextBlockPerEvent(t *testing.T) {
 // TestEveryEventCarriesAllFourButtons is what one message per event used to be
 // needed for, and no longer is.
 func TestEveryEventCarriesAllFourButtons(t *testing.T) {
-	body := RenderTablePage(tableEvents(1), 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderTablePage(tableEvents(1), 0, 1, false)["components"].([]any)[0].(map[string]any)["components"].([]any)
 	for _, c := range body {
 		m := c.(map[string]any)
 		if m["type"] != componentTypeActionRow {
@@ -106,7 +106,7 @@ func TestEveryEventCarriesAllFourButtons(t *testing.T) {
 func TestClosedEventsLoseJoinAndLeave(t *testing.T) {
 	events := tableEvents(1)
 	events[0].Status = StatusClosed
-	body := RenderTablePage(events, 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderTablePage(events, 0, 1, false)["components"].([]any)[0].(map[string]any)["components"].([]any)
 	for _, c := range body {
 		m := c.(map[string]any)
 		if m["type"] != componentTypeActionRow {
@@ -131,7 +131,7 @@ func TestPaginationSpillsPastSixAndNumbersContinuously(t *testing.T) {
 	}
 	// No page carries a heading, including the first.
 	for _, p := range []map[string]any{
-		RenderTablePage(pages[0], 0, 3), RenderTablePage(pages[1], 1, 3),
+		RenderTablePage(pages[0], 0, 3, false), RenderTablePage(pages[1], 1, 3, true),
 	} {
 		body := p["components"].([]any)[0].(map[string]any)["components"].([]any)
 		if strings.Contains(body[0].(map[string]any)["content"].(string), "## Events") {
@@ -349,7 +349,7 @@ func TestCompactWhenKeepsMinutesOnlyWhenTheyMatter(t *testing.T) {
 // TestSeparatorsSitBetweenEventsNotAround pins the divider placement: four
 // separators for five events, none leading or trailing.
 func TestSeparatorsSitBetweenEventsNotAround(t *testing.T) {
-	body := RenderTablePage(tableEvents(5), 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderTablePage(tableEvents(5), 0, 1, false)["components"].([]any)[0].(map[string]any)["components"].([]any)
 	var kinds []int
 	for _, c := range body {
 		kinds = append(kinds, int(c.(map[string]any)["type"].(int)))
@@ -365,5 +365,89 @@ func TestSeparatorsSitBetweenEventsNotAround(t *testing.T) {
 	}
 	if kinds[0] == componentTypeSeparator || kinds[len(kinds)-1] == componentTypeSeparator {
 		t.Error("a separator leads or trails the page")
+	}
+}
+
+// TestMyEventsButtonSitsOnTheLastPageAndFitsTheBudget: a full page is 35
+// components and the button costs two, so even the fullest page carries it.
+func TestMyEventsButtonSitsOnTheLastPageAndFitsTheBudget(t *testing.T) {
+	full := RenderTablePage(tableEvents(eventsPerPage), 1, 2, true)
+	if got := countComponents(full["components"].([]any)); got > 40 {
+		t.Errorf("a full page with the button renders %d components, over 40", got)
+	}
+	var found bool
+	for _, c := range full["components"].([]any)[0].(map[string]any)["components"].([]any) {
+		m := c.(map[string]any)
+		if m["type"] != componentTypeActionRow {
+			continue
+		}
+		for _, b := range m["components"].([]any) {
+			if b.(map[string]any)["custom_id"] == tableMyEventsButtonID {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("the last page does not carry the My events button")
+	}
+	notLast := RenderTablePage(tableEvents(eventsPerPage), 0, 2, false)
+	if strings.Contains(fmt.Sprint(notLast), tableMyEventsButtonID) {
+		t.Error("a non-last page carries the My events button")
+	}
+}
+
+// TestUserSignupsInGuildAnswersThePerViewerQuestion: attending and waitlisted
+// events with their place, withdrawn and archived ones excluded.
+func TestUserSignupsInGuildAnswersThePerViewerQuestion(t *testing.T) {
+	store := testStore(t)
+	base := time.Now().Add(24 * time.Hour).Unix()
+
+	going := timedEvent(t, store, Event{Name: "Going one", Capacity: 5, StartsAt: base})
+	full := timedEvent(t, store, Event{Name: "Full one", Capacity: 1, StartsAt: base + 3600})
+	left := timedEvent(t, store, Event{Name: "Left one", Capacity: 5, StartsAt: base + 7200})
+	over := timedEvent(t, store, Event{Name: "Over one", Capacity: 5,
+		StartsAt: base - 90*3600, EndsAt: base - 89*3600})
+
+	for _, ev := range []*Event{going, full, left, over} {
+		if ev.ID == full.ID {
+			if _, err := store.Join(ev.ID, "someone-else", "", JoinedViaButton); err != nil {
+				t.Fatalf("fill: %v", err)
+			}
+		}
+		if _, err := store.Join(ev.ID, "alice", "Alice", JoinedViaButton); err != nil {
+			t.Fatalf("join: %v", err)
+		}
+	}
+	if _, err := store.Leave(left.ID, "alice", ActorUser); err != nil {
+		t.Fatalf("leave: %v", err)
+	}
+	if _, err := store.CompleteFinishedEvents(); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+
+	signups, err := store.UserSignupsInGuild("g1", "alice")
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	got := map[string]string{}
+	for _, u := range signups {
+		got[u.Event.Name] = u.Signup.State
+	}
+	if got["Going one"] != StateAttending {
+		t.Errorf("Going one = %q, want attending", got["Going one"])
+	}
+	if got["Full one"] != StateWaitlisted {
+		t.Errorf("Full one = %q, want waitlisted", got["Full one"])
+	}
+	if _, there := got["Left one"]; there {
+		t.Error("a withdrawn signup is listed")
+	}
+	if _, there := got["Over one"]; there {
+		t.Error("an archived event is listed")
+	}
+	for _, u := range signups {
+		if u.Event.Name == "Full one" && u.Signup.WaitlistPlace != 1 {
+			t.Errorf("waitlist place = %d, want 1", u.Signup.WaitlistPlace)
+		}
 	}
 }

@@ -278,14 +278,17 @@ const (
 	eventsPerPage = 5
 )
 
-const tableRebuildButtonID = customIDPrefix + ":table-rebuild:0"
+const (
+	tableRebuildButtonID  = customIDPrefix + ":table-rebuild:0"
+	tableMyEventsButtonID = customIDPrefix + ":my-events:0"
+)
 
 // RenderTablePage draws up to eventsPerPage events as one message: one line of
 // text and one row of buttons each, wrapped in a container.
 //
 // firstIndex numbers the rows continuously across pages, so the second message
 // starts at 7 rather than beginning again at 1.
-func RenderTablePage(events []Event, page, totalPages int) map[string]any {
+func RenderTablePage(events []Event, page, totalPages int, withMyEvents bool) map[string]any {
 	body := []any{}
 	// No heading. The channel is called what it is, and a line saying how many
 	// events there are and how they are sorted is a component spent restating
@@ -308,6 +311,21 @@ func RenderTablePage(events []Event, page, totalPages int) map[string]any {
 	}
 	if totalPages > 1 {
 		body = append(body, textBlock(fmt.Sprintf("-# Page %d of %d", page+1, totalPages)))
+	}
+	// On the last page only, because it is one control for the whole table.
+	// A shared message cannot mark "you are in this one" per viewer — Discord
+	// renders it identically for everyone — so this button is how the question
+	// gets answered: an ephemeral reply, which IS per-viewer.
+	//
+	// It fits the budget: a full page is 35 components and this costs two.
+	if withMyEvents {
+		body = append(body, map[string]any{
+			"type": componentTypeActionRow,
+			"components": []any{map[string]any{
+				"type": componentTypeButton, "style": buttonStyleSecondary,
+				"label": "My events", "custom_id": tableMyEventsButtonID,
+			}},
+		})
 	}
 
 	return map[string]any{
@@ -440,7 +458,7 @@ func (s *Server) RefreshEventTable(guildID string) error {
 	}
 
 	for i, chunk := range pages {
-		payload := RenderTablePage(chunk, i, len(pages))
+		payload := RenderTablePage(chunk, i, len(pages), i == len(pages)-1)
 		if messageID, ok := byPage[i]; ok {
 			if err := s.discord.EditMessage(table.ChannelID, messageID, payload); err != nil {
 				return fmt.Errorf("edit table page %d: %w", i, err)
@@ -494,6 +512,10 @@ func (s *Server) liveEventsFor(guildID string) ([]Event, error) {
 // Rebuild exists for when the messages and the database disagree — someone
 // deleted one by hand, or a post failed midway.
 func (s *Server) handleTableAction(w http.ResponseWriter, in *Interaction, action string) {
+	if action == "my-events" {
+		s.replyMyEvents(w, in)
+		return
+	}
 	if action != "table-rebuild" {
 		s.replyEphemeral(w, "Unknown table action.")
 		return
@@ -541,4 +563,38 @@ func (s *Server) RebuildEventTable(guildID string) error {
 		}
 	}
 	return s.RefreshEventTable(guildID)
+}
+
+// replyMyEvents answers "which of these am I in?" privately.
+func (s *Server) replyMyEvents(w http.ResponseWriter, in *Interaction) {
+	userID, _ := in.actor()
+	if userID == "" {
+		s.replyEphemeral(w, "Could not read your Discord user id from that click.")
+		return
+	}
+	signups, err := s.store.UserSignupsInGuild(in.GuildID, userID)
+	if err != nil {
+		log.Printf("[discord-signup] my events for %s: %v", userID, err)
+		s.replyEphemeral(w, "Something went wrong reading your signups.")
+		return
+	}
+	if len(signups) == 0 {
+		s.replyEphemeral(w, "You are not signed up for anything here.")
+		return
+	}
+	var b strings.Builder
+	b.WriteString("**Your events**\n")
+	for _, u := range signups {
+		switch u.Signup.State {
+		case StateWaitlisted:
+			fmt.Fprintf(&b, "· **%s** — waitlist #%d", u.Event.Name, u.Signup.WaitlistPlace)
+		default:
+			fmt.Fprintf(&b, "· **%s** — going", u.Event.Name)
+		}
+		if u.Event.StartsAt > 0 {
+			b.WriteString("  ·  " + compactWhen(&u.Event))
+		}
+		b.WriteString("\n")
+	}
+	s.replyEphemeral(w, strings.TrimRight(b.String(), "\n"))
 }

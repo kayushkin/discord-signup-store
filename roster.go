@@ -420,3 +420,62 @@ func (s *Store) SetDisplayName(eventID int64, discordUserID, displayName string)
 	}
 	return nil
 }
+
+// UserSignup is one person's standing on one event, for the "My events" reply.
+type UserSignup struct {
+	Event  Event
+	Signup Signup
+}
+
+// UserSignupsInGuild lists every live event in a guild the person is currently
+// on — attending or waitlisted, never withdrawn.
+//
+// This exists for the one thing a shared message cannot do: a channel message
+// renders identically for every viewer, so "which of these am I in?" can only
+// be answered per person, in an ephemeral reply.
+func (s *Store) UserSignupsInGuild(guildID, discordUserID string) ([]UserSignup, error) {
+	rows, err := s.db.Query(`
+		SELECT e.id, e.name, e.capacity, e.status, e.starts_at, e.timezone,
+		       sg.id, sg.position, sg.state
+		FROM signups sg
+		JOIN events e ON e.id = sg.event_id
+		WHERE e.guild_id = ? AND sg.discord_user_id = ?
+		  AND sg.state != ? AND e.deleted_at = 0
+		ORDER BY e.starts_at ASC`,
+		guildID, discordUserID, StateWithdrawn)
+	if err != nil {
+		return nil, fmt.Errorf("list user signups: %w", err)
+	}
+	defer rows.Close()
+
+	var out []UserSignup
+	for rows.Next() {
+		var u UserSignup
+		if err := rows.Scan(&u.Event.ID, &u.Event.Name, &u.Event.Capacity, &u.Event.Status,
+			&u.Event.StartsAt, &u.Event.Timezone,
+			&u.Signup.ID, &u.Signup.Position, &u.Signup.State); err != nil {
+			return nil, fmt.Errorf("scan user signup: %w", err)
+		}
+		u.Signup.EventID = u.Event.ID
+		u.Signup.DiscordUserID = discordUserID
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate user signups: %w", err)
+	}
+	// Archived events are excluded here rather than in SQL so the definition
+	// of "over" stays in one place, vocabulary.go.
+	live := out[:0]
+	for _, u := range out {
+		if IsArchived(u.Event.Status) {
+			continue
+		}
+		if u.Signup.State == StateWaitlisted {
+			if err := s.fillWaitlistPlace(&u.Signup); err != nil {
+				return nil, err
+			}
+		}
+		live = append(live, u)
+	}
+	return live, nil
+}
