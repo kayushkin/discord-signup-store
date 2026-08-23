@@ -92,8 +92,20 @@ func (c *DiscordClient) ListScheduledEvents(guildID string) ([]DiscordScheduledE
 // CreateScheduledEvent publishes a local roster to Discord as a native event,
 // so it appears in the server's event list and fires Discord's own start
 // notification. Requires CREATE_EVENTS.
-func (c *DiscordClient) CreateScheduledEvent(payload any) (*DiscordScheduledEvent, error) {
-	raw, err := c.do(http.MethodPost, "/guilds/"+escapePathSegment(payloadGuildID(payload))+"/scheduled-events", payload)
+//
+// The guild id is a parameter, like it is on every sibling method here, rather
+// than something dug back out of the payload map. Discord's create body has no
+// guild_id field at all — the guild is the route — so reading one out of the
+// body was archaeology on a value the caller already held.
+//
+// An empty guild id is refused rather than sent. "/guilds//scheduled-events"
+// is a different route, not a bad argument, so whatever Discord answers would
+// describe the request and never the mistake that built it.
+func (c *DiscordClient) CreateScheduledEvent(guildID string, payload any) (*DiscordScheduledEvent, error) {
+	if guildID == "" {
+		return nil, errors.New("create scheduled event: no guild id")
+	}
+	raw, err := c.do(http.MethodPost, "/guilds/"+escapePathSegment(guildID)+"/scheduled-events", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -112,15 +124,6 @@ func (c *DiscordClient) ModifyScheduledEvent(guildID, eventID string, payload an
 	_, err := c.do(http.MethodPatch,
 		"/guilds/"+escapePathSegment(guildID)+"/scheduled-events/"+escapePathSegment(eventID), payload)
 	return err
-}
-
-func payloadGuildID(payload any) string {
-	m, ok := payload.(map[string]any)
-	if !ok {
-		return ""
-	}
-	s, _ := m["guild_id"].(string)
-	return s
 }
 
 // SyncResult reports what one sync pass did.
@@ -463,7 +466,6 @@ func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event,
 		location = locationPlaceholder
 	}
 	payload := map[string]any{
-		"guild_id":             ev.GuildID,
 		"name":                 nativeEventName(ev),
 		"description":          ev.Description + signupPointer(ev, boardChannelID),
 		"scheduled_start_time": time.Unix(ev.StartsAt, 0).UTC().Format(time.RFC3339),
@@ -472,7 +474,7 @@ func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event,
 		"entity_type":          entityNameToDiscordType["external"],
 		"entity_metadata":      map[string]any{"location": location},
 	}
-	created, err := s.discord.CreateScheduledEvent(payload)
+	created, err := s.discord.CreateScheduledEvent(ev.GuildID, payload)
 	if err != nil {
 		return nil, fmt.Errorf("create discord scheduled event: %w", err)
 	}

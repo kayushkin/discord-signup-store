@@ -184,13 +184,16 @@ func TestADiscordIDStaysOnePathSegment(t *testing.T) {
 			func(c *DiscordClient, p string) { _ = c.DeleteScheduledEvent(fixedID, p) },
 			func(e string) string { return "/guilds/" + fixedID + "/scheduled-events/" + e }},
 
-		// CreateScheduledEvent is the one site where the value is NOT a
-		// snowflake by construction: payloadGuildID digs it out of a caller's
-		// payload map. Everything else on this list arrives from the store or
-		// from Discord itself.
-		{"CreateScheduledEvent payload guild", `{"id":"ev-1"}`,
+		// CreateScheduledEvent used to be the one site where the value was NOT
+		// a snowflake by construction: it dug the id out of a caller's payload
+		// map. It now takes the guild id as a parameter, like every sibling,
+		// and the value arrives from the store the same way theirs do. The site
+		// stays on this list because the escape is still the property under
+		// test — the parameter changed where the value comes from, not what the
+		// wire has to carry.
+		{"CreateScheduledEvent guild", `{"id":"ev-1"}`,
 			func(c *DiscordClient, p string) {
-				_, _ = c.CreateScheduledEvent(map[string]any{"guild_id": p})
+				_, _ = c.CreateScheduledEvent(p, map[string]any{})
 			},
 			func(e string) string { return "/guilds/" + e + "/scheduled-events" }},
 	}
