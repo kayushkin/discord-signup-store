@@ -363,6 +363,13 @@ func eventLine(ev *Event) string {
 	if ev.StartsAt > 0 {
 		parts = append(parts, compactWhen(ev))
 	}
+	if ev.ForumPostID != "" {
+		// A masked link rather than a <#…> mention: a mention renders the
+		// post's full title, which is this same line again. Costs no component,
+		// which a link button would.
+		parts = append(parts, fmt.Sprintf("[💬](https://discord.com/channels/%s/%s)",
+			ev.GuildID, ev.ForumPostID))
+	}
 	return strings.Join(parts, "  ·  ")
 }
 

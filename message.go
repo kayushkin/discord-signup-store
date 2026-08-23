@@ -46,6 +46,17 @@ type stateChange struct {
 // this counts places — and a message that quietly picks one is worse than one
 // that is clear about which it means.
 func RenderSignupMessage(ev *Event, roster []Signup) map[string]any {
+	return renderSignupMessage(ev, roster, true)
+}
+
+// RenderForumCard is the same card without the discussion link: the forum
+// post's first message IS the card, and a card pointing at its own post would
+// read as a working link that goes nowhere new.
+func RenderForumCard(ev *Event, roster []Signup) map[string]any {
+	return renderSignupMessage(ev, roster, false)
+}
+
+func renderSignupMessage(ev *Event, roster []Signup, withForumLink bool) map[string]any {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "## %s\n", ev.Name)
@@ -73,6 +84,12 @@ func RenderSignupMessage(ev *Event, roster []Signup) map[string]any {
 			fmt.Fprintf(&b, " · %d waiting", ev.WaitlistCount)
 		}
 		b.WriteString("\n")
+	}
+
+	if withForumLink && ev.ForumPostID != "" {
+		// A thread mention: renders as the post's clickable name and needs no
+		// guild id or URL building.
+		fmt.Fprintf(&b, "\n💬 <#%s>\n", ev.ForumPostID)
 	}
 
 	attending, waiting := splitRoster(roster)

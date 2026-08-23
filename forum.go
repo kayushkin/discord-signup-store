@@ -211,7 +211,8 @@ func forumTagFor(ev *Event, f *GuildForum) string {
 // refreshForumPost creates or updates an event's post: the title and tag on
 // the thread, and the card in its first message.
 //
-// The card is RenderSignupMessage verbatim — the same buttons with the same
+// The card is RenderForumCard — RenderSignupMessage minus the discussion link,
+// since the post cannot usefully link to itself — but otherwise verbatim — the same buttons with the same
 // custom_ids as the board card, so one handler serves both surfaces and they
 // cannot drift.
 //
@@ -234,7 +235,7 @@ func (s *Server) refreshForumPost(ev *Event) error {
 	if err != nil {
 		return err
 	}
-	card := RenderSignupMessage(ev, roster)
+	card := RenderForumCard(ev, roster)
 	title := forumPostTitle(ev)
 	tag := forumTagFor(ev, forum)
 

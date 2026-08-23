@@ -243,3 +243,42 @@ func TestLeavingByButtonClearsTheReaction(t *testing.T) {
 		t.Error("alice's ✅ was left on the post after she left by button")
 	}
 }
+
+// TestSurfacesLinkToTheForumPostExceptTheForumItself: the card and the table
+// row point at the discussion; the forum post's own first message IS the card
+// and must not link to itself.
+func TestSurfacesLinkToTheForumPostExceptTheForumItself(t *testing.T) {
+	ev := &Event{ID: 1, GuildID: "g1", Name: "Games", Capacity: 4, AttendingCount: 1,
+		StartsAt: time.Now().Add(time.Hour).Unix(), Status: StatusOpen,
+		ForumPostID: "post-9"}
+
+	card := fmt.Sprint(RenderSignupMessage(ev, nil)["content"])
+	if !strings.Contains(card, "<#post-9>") {
+		t.Error("the board card does not link to the forum post")
+	}
+	forumCard := fmt.Sprint(RenderForumCard(ev, nil)["content"])
+	if strings.Contains(forumCard, "post-9") {
+		t.Error("the forum card links to its own post")
+	}
+	line := eventLine(ev)
+	if !strings.Contains(line, "https://discord.com/channels/g1/post-9") {
+		t.Errorf("the table line does not carry the masked link: %q", line)
+	}
+	pointer := signupPointer(ev, "board")
+	if !strings.Contains(pointer, "https://discord.com/channels/g1/post-9") {
+		t.Error("the native description does not carry the discussion URL")
+	}
+	// And the round-trip strip still removes the whole pointer, link included.
+	if got := stripSignupPointer("Real description." + pointer); got != "Real description." {
+		t.Errorf("stripSignupPointer left %q", got)
+	}
+
+	// No post yet: no dangling links anywhere.
+	bare := &Event{ID: 2, GuildID: "g1", Name: "Fresh", Status: StatusOpen}
+	if strings.Contains(fmt.Sprint(RenderSignupMessage(bare, nil)["content"]), "💬") {
+		t.Error("a card links to a post that does not exist")
+	}
+	if strings.Contains(eventLine(bare), "💬") {
+		t.Error("a table line links to a post that does not exist")
+	}
+}

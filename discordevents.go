@@ -559,6 +559,13 @@ func signupPointer(ev *Event, boardChannelID string) string {
 		b.WriteString(")")
 	}
 	b.WriteString(". Pressing Interested here does not hold you a place.")
+	if ev.ForumPostID != "" {
+		// A full URL, not a <#…> mention: the native event description is the
+		// one surface where mention rendering is not dependable across
+		// clients. Inside the pointer section on purpose, so the import strip
+		// removes it with the rest.
+		fmt.Fprintf(&b, "\nDiscussion: https://discord.com/channels/%s/%s", ev.GuildID, ev.ForumPostID)
+	}
 	return b.String()
 }
 
