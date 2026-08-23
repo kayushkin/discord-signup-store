@@ -197,10 +197,15 @@ func (s *Store) MarkInterested(eventID int64, discordUserID, displayName string)
 
 // MarkNotInterested handles GUILD_SCHEDULED_EVENT_USER_REMOVE.
 //
-// Un-marking Interested only removes people who got on that way. Someone who
-// pressed Join holds a place they asked for explicitly, and their Discord RSVP
-// is a separate, weaker statement — turning off a notification is not
-// forfeiting a seat.
+// Un-marking Interested takes the person off the roster, however they got on.
+//
+// An earlier version removed only people who had joined VIA Interested, on the
+// reasoning that turning off a notification is not forfeiting a seat. That was
+// wrong in practice: the two buttons are presented as doing the same thing, so
+// people reasonably expect undoing either one to have the same effect, and
+// someone who un-marks Interested and stays on a roster has no idea they are
+// still counted. Matching Join and Leave beats a distinction only this code
+// could see.
 //
 // It always clears discord_interested, which is what lets a later Interested
 // signal count as fresh intent instead of being suppressed as stale.
@@ -224,16 +229,13 @@ func (s *Store) MarkNotInterested(eventID int64, discordUserID string) (*Interes
 	if _, err := tx.Exec(`UPDATE signups SET discord_interested = 0 WHERE id = ?`, existing.ID); err != nil {
 		return nil, fmt.Errorf("clear interest: %w", err)
 	}
-	shouldLeave := existing.State != StateWithdrawn && existing.JoinedVia == JoinedViaInterested
+	shouldLeave := existing.State != StateWithdrawn
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}
 	if !shouldLeave {
-		outcome := OutcomeKeptPlace
-		if existing.State == StateWithdrawn {
-			outcome = OutcomeNotOnRoster
-		}
-		return &InterestResult{Outcome: outcome, Signup: existing}, nil
+		// Already off the roster, so there is nothing to undo.
+		return &InterestResult{Outcome: OutcomeNotOnRoster, Signup: existing}, nil
 	}
 
 	// Leave runs in its own transaction so the promotion and its history are

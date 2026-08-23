@@ -594,7 +594,7 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 	// own event list and fires Discord's start notification. Best effort: the
 	// roster and its card already exist and are the real thing, so a failure
 	// here is reported rather than allowed to undo them.
-	go s.refreshTableRowQuietly(ev)
+	go s.refreshEventTableQuietly(ev.GuildID)
 
 	published := true
 	if _, err := s.PublishToDiscord(ev.ID, s.BoardChannelID()); err != nil {

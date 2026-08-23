@@ -66,7 +66,8 @@ service's, and proxying any other route publishes roster editing to the world.
 
 Closed sets, defined in `vocabulary.go` and validated on write.
 
-- **signup state** — `attending`, `waitlisted`, `withdrawn`
+- **signup state** — `attending`, `waitlisted`, `withdrawn`. Un-marking
+  Interested on Discord removes someone **however they joined**, matching Leave.
 - **event status** — `open`, `closed`, `completed`, `cancelled`. When an event
   becomes `completed`, its card is reposted to `DISCORD_PAST_CHANNEL_ID` and the
   original deleted; `message_id` and `channel_id` follow it, because they mean
@@ -104,28 +105,29 @@ each of them. Lowering it promotes nobody and removes nobody.
 
 ## The consolidated table
 
-**One message per event**, each a Components V2 container holding the event's
-line and an action row of **Join · Leave · Details · Edit**, plus a header
-message above them.
+**Six events per message**, each one line of text plus a row of
+**Join · Leave · Details · Edit**, wrapped in a Components V2 container. Past
+six it spills onto another message.
 
-One message per event because a **Section's accessory can only be a Button or a
-Thumbnail** — a select is rejected with `UNION_TYPE_CHOICES`, measured — so a
-single-message layout gets exactly one button per row. An Action Row inside a
-container holds five, which is what lets all four sit on the row they act on.
+Six is measured, not inferred: an event costs a text block, an action row and
+four buttons, and Discord allows 40 components in a message. Seven is
+`COMPONENT_MAX_TOTAL_COMPONENTS_EXCEEDED`. The five-action-row limit that caps
+an ordinary message does **not** apply under Components V2 — the total budget
+replaces it, which is what makes six rows of buttons in one message possible.
+
+Everything about one event is **one** text block. Splitting it into title,
+description and time would cost three components each and cut the page from six
+events to two.
+
+**The table sorts itself.** Every page is rewritten in place on each change, so
+events move *between* pages while the messages stay where they are. A page is
+only ever posted when the table grows past its current page count, and a new
+message belongs at the bottom anyway. `signup:table-rebuild:0` is now a repair
+tool for when the recorded messages and the channel disagree, not the way to
+sort.
 
 A closed event keeps Details and Edit and loses Join and Leave: a button that
 cannot act is a trap, not an affordance.
-
-| | |
-|---|---|
-| A signup | rewrites that one message, in place |
-| An event finishing | deletes its row and updates the header |
-| `signup:table-rebuild:0` | deletes everything and reposts in date order |
-
-**Discord will not reorder messages**, so rows sit in posting order and a new
-event starting sooner lands at the bottom. Rebuild is the only way to sort,
-needs Manage Events since it deletes every message, and answers before it starts
-because it cannot finish inside the three-second interaction window.
 
 ## Conventions## The native event's title
 

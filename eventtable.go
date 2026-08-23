@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -78,215 +77,53 @@ func (s *Store) GuildTable(guildID string) (*GuildTable, error) {
 	return &t, nil
 }
 
-// TableRowMessageID reports which message holds an event's row, or "" if it has
-// none yet.
-func (s *Store) TableRowMessageID(eventID int64) (string, error) {
-	var messageID string
-	err := s.db.QueryRow(
-		`SELECT message_id FROM event_table_rows WHERE event_id = ?`, eventID).Scan(&messageID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("read table row: %w", err)
-	}
-	return messageID, nil
+// TablePage is one message of the consolidated table.
+type TablePage struct {
+	Page      int
+	MessageID string
 }
 
-// SetTableRowMessageID records it.
-func (s *Store) SetTableRowMessageID(eventID int64, guildID, messageID string) error {
-	_, err := s.db.Exec(`
-		INSERT INTO event_table_rows (event_id, guild_id, message_id, updated_at)
-		VALUES (?,?,?,?)
-		ON CONFLICT(event_id) DO UPDATE SET message_id = excluded.message_id,
-		                                    updated_at = excluded.updated_at`,
-		eventID, guildID, messageID, now())
-	if err != nil {
-		return fmt.Errorf("set table row: %w", err)
-	}
-	return nil
-}
-
-// DeleteTableRow forgets an event's row.
-func (s *Store) DeleteTableRow(eventID int64) error {
-	_, err := s.db.Exec(`DELETE FROM event_table_rows WHERE event_id = ?`, eventID)
-	if err != nil {
-		return fmt.Errorf("delete table row: %w", err)
-	}
-	return nil
-}
-
-// TableRowsFor lists every row message in a guild, for a rebuild to clear.
-func (s *Store) TableRowsFor(guildID string) (map[int64]string, error) {
+// TablePages lists a guild's pages in order.
+func (s *Store) TablePages(guildID string) ([]TablePage, error) {
 	rows, err := s.db.Query(
-		`SELECT event_id, message_id FROM event_table_rows WHERE guild_id = ?`, guildID)
+		`SELECT page, message_id FROM table_pages WHERE guild_id = ? ORDER BY page ASC`, guildID)
 	if err != nil {
-		return nil, fmt.Errorf("list table rows: %w", err)
+		return nil, fmt.Errorf("list table pages: %w", err)
 	}
 	defer rows.Close()
-	out := map[int64]string{}
+	var out []TablePage
 	for rows.Next() {
-		var id int64
-		var messageID string
-		if err := rows.Scan(&id, &messageID); err != nil {
-			return nil, fmt.Errorf("scan table row: %w", err)
+		var p TablePage
+		if err := rows.Scan(&p.Page, &p.MessageID); err != nil {
+			return nil, fmt.Errorf("scan table page: %w", err)
 		}
-		out[id] = messageID
+		out = append(out, p)
 	}
 	return out, rows.Err()
 }
 
-// handleTableAction routes the panel's own controls.
-//
-// The panel has one: a select that picks an event to read. A Components V2
-// Section takes exactly one accessory, so Join is the only button that fits
-// beside a row and everything else has to come from a menu underneath.
-func (s *Server) handleTableAction(w http.ResponseWriter, in *Interaction, action string) {
-	if strings.HasSuffix(action, "-select") {
-		s.handleTableSelect(w, in, strings.TrimSuffix(action, "-select"))
-		return
-	}
-	if action != "table-rebuild" {
-		s.replyEphemeral(w, "Unknown table action.")
-		return
-	}
-	if !in.canManageEvents() {
-		s.replyEphemeral(w, "Rebuilding deletes and reposts every row, so it needs Manage Events.")
-		return
-	}
-	guildID := in.GuildID
-	// Answered first: deleting and reposting every message will not finish
-	// inside Discord's three-second interaction window.
-	s.replyEphemeral(w, "Rebuilding in date order — it will settle in a moment.")
-	go func() {
-		if err := s.RebuildEventTable(guildID); err != nil {
-			log.Printf("[discord-signup] rebuild table for %s: %v", guildID, err)
-		}
-	}()
-}
-
-// handleTableSelect acts on the event chosen from a menu under the table.
-//
-// The event id travels in the select's chosen value rather than its custom_id,
-// because one menu covers every event on the table.
-func (s *Server) handleTableSelect(w http.ResponseWriter, in *Interaction, want string) {
-	if len(in.Data.Values) == 0 {
-		s.replyEphemeral(w, "Nothing was selected.")
-		return
-	}
-	eventID, err := strconv.ParseInt(in.Data.Values[0], 10, 64)
+// SetTablePage records the message holding one page.
+func (s *Store) SetTablePage(guildID string, page int, messageID string) error {
+	_, err := s.db.Exec(`
+		INSERT INTO table_pages (guild_id, page, message_id, updated_at) VALUES (?,?,?,?)
+		ON CONFLICT(guild_id, page) DO UPDATE SET message_id = excluded.message_id,
+		                                          updated_at = excluded.updated_at`,
+		guildID, page, messageID, now())
 	if err != nil {
-		s.replyEphemeral(w, "That row does not point at an event any more.")
-		return
+		return fmt.Errorf("set table page: %w", err)
 	}
-	ev, err := s.store.GetEvent(eventID)
+	return nil
+}
+
+// DeleteTablePage forgets a page that is no longer needed.
+func (s *Store) DeleteTablePage(guildID string, page int) error {
+	_, err := s.db.Exec(`DELETE FROM table_pages WHERE guild_id = ? AND page = ?`, guildID, page)
 	if err != nil {
-		// The table is a snapshot. An event deleted since it was drawn is a
-		// stale row, not an error, and saying so tells them what to do.
-		s.replyEphemeral(w, "That event is gone — press Rebuild to redraw the table.")
-		return
+		return fmt.Errorf("delete table page: %w", err)
 	}
-
-	switch want {
-	case "table-details":
-		s.handleDetailsButton(w, eventID)
-	default:
-		s.replyEphemeral(w, "Unknown menu.")
-	}
-	_ = ev
+	return nil
 }
 
-func mustActorID(in *Interaction) string {
-	id, _ := in.actor()
-	return id
-}
-
-// Components V2 lets one message hold a button beside every row: a Section
-// carries text plus a single accessory, and Sections do not count against the
-// five-action-row limit that caps an ordinary message.
-//
-// What they do count against is a total of 40 components per message, and
-// everything nested counts — the container, each section, the text inside each
-// section, every separator, and every option in every select menu. Measured
-// against the live API rather than inferred: with separators and one menu, nine
-// events fit; without separators, eleven; with neither, eighteen.
-//
-// So the panel degrades in that order rather than being rejected: separators
-// go first because they are decoration, then the menu, then events are dropped
-// and the message says how many.
-const componentTypeStringSelect = 3
-
-const (
-	componentTypeContainer = 17
-
-	// panelAccentColour is the bar down the left of each row.
-	panelAccentColour = 0x5865F2
-
-	// messageFlagComponentsV2 opts a message into the component system that has
-	// containers in it. With the flag set the message must carry NO content
-	// field — every word lives in a component.
-	messageFlagComponentsV2 = 1 << 15
-)
-
-const (
-	tableDetailsSelectID = customIDPrefix + ":table-details-select:0"
-	tableRebuildButtonID = customIDPrefix + ":table-rebuild:0"
-)
-
-// panelWhen renders the start time using Discord's own markup, so it lands in
-// each reader's timezone rather than the host's.
-func panelWhen(ev *Event) string {
-	if ev.StartsAt == 0 {
-		return "no date set"
-	}
-	return fmt.Sprintf("<t:%d:f>", ev.StartsAt)
-}
-
-// liveEventsFor returns a guild's current events, archived ones excluded.
-func (s *Server) liveEventsFor(guildID string) ([]Event, error) {
-	events, err := s.store.ListEvents(guildID, "", 200)
-	if err != nil {
-		return nil, err
-	}
-	live, _ := splitByArchived(events)
-	return live, nil
-}
-
-// refreshEventPanelQuietly redraws one guild's whole table. Kept for the call
-// sites that know only a guild — an import, or an event leaving the live list.
-func (s *Server) refreshEventPanelQuietly(guildID string) {
-	live, err := s.liveEventsFor(guildID)
-	if err != nil {
-		log.Printf("[discord-signup] refresh table for %s: %v", guildID, err)
-		return
-	}
-	for i := range live {
-		s.refreshTableRowQuietly(&live[i])
-	}
-	if table, err := s.store.GuildTable(guildID); err == nil {
-		if err := s.refreshTableHeader(table); err != nil {
-			log.Printf("[discord-signup] refresh table header for %s: %v", guildID, err)
-		}
-	}
-}
-
-// RefreshEventPanel redraws a guild's table from scratch, used when it is first
-// pointed at a channel.
-func (s *Server) RefreshEventPanel(guildID string) error {
-	return s.RebuildEventTable(guildID)
-}
-
-// componentTypeTextDisplay is read-only text. Discord allows it in a modal, so
-// the details view needs no text inputs at all — which matters because there is
-// no read-only text input, and prefilled boxes look editable and are not.
-//
-// A modal made ENTIRELY of these is valid, with no interactive component in it
-// at all. Discord's documentation says a modal takes "between 1 and 5
-// components" and lists Text Display among the valid ones, but does not say
-// whether one can be text-only — so this was settled by opening one, on
-// 2026-08-23, and it opens. Recorded because the obvious defensive move is to
-// pad the modal with a throwaway input, and that would put back exactly the
-// editable-looking box this replaced.
 const componentTypeTextDisplay = 10
 
 // textDisplayLimit is the cap on one block's content.
@@ -415,184 +252,116 @@ func (s *Server) handleDetailsButton(w http.ResponseWriter, eventID int64) {
 	})
 }
 
-// RefreshTableRow rewrites one event's row, posting it if it has none.
+// Components V2 constants for the table.
+const (
+	componentTypeContainer = 17
+
+	// panelAccentColour is the bar down the left of each page.
+	panelAccentColour = 0x5865F2
+
+	// messageFlagComponentsV2 opts a message into the component system with
+	// containers in it. With the flag set the message must carry NO content
+	// field — every word lives in a component.
+	messageFlagComponentsV2 = 1 << 15
+
+	// eventsPerPage is how many events fit in one message. Measured against the
+	// live API rather than inferred: each event costs a text block, an action
+	// row and four buttons, and Discord allows 40 components in a message. Six
+	// fit; seven is COMPONENT_MAX_TOTAL_COMPONENTS_EXCEEDED.
+	//
+	// The five-action-row limit that caps an ordinary message does NOT apply
+	// here — Components V2 replaces it with the total budget, which is what
+	// makes six rows of buttons in one message possible at all.
+	eventsPerPage = 6
+)
+
+const tableRebuildButtonID = customIDPrefix + ":table-rebuild:0"
+
+// RenderTablePage draws up to eventsPerPage events as one message: one line of
+// text and one row of buttons each, wrapped in a container.
 //
-// Edited rather than reposted so it keeps its place in the channel. This is the
-// hot path — every signup runs it — and it touches exactly one message.
-func (s *Server) RefreshTableRow(ev *Event) error {
-	if s.discord == nil {
-		return nil
+// firstIndex numbers the rows continuously across pages, so the second message
+// starts at 7 rather than beginning again at 1.
+func RenderTablePage(events []Event, firstIndex, totalEvents, page, totalPages int) map[string]any {
+	body := []any{}
+	if page == 0 {
+		var heading strings.Builder
+		heading.WriteString("## Events\n")
+		if totalEvents == 0 {
+			heading.WriteString("-# Nothing coming up.")
+		} else {
+			fmt.Fprintf(&heading, "-# %s, soonest first.", pluralise(totalEvents, "event"))
+		}
+		body = append(body, textBlock(heading.String()))
 	}
-	table, err := s.store.GuildTable(ev.GuildID)
-	if errors.Is(err, ErrNotFound) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	messageID, err := s.store.TableRowMessageID(ev.ID)
-	if err != nil {
-		return err
-	}
-	payload := RenderEventRow(ev)
 
-	if messageID == "" {
-		newID, err := s.discord.CreateMessage(table.ChannelID, payload)
-		if err != nil {
-			return fmt.Errorf("post table row: %w", err)
-		}
-		if err := s.store.SetTableRowMessageID(ev.ID, ev.GuildID, newID); err != nil {
-			return err
-		}
-		return s.refreshTableHeader(table)
+	for i := range events {
+		ev := &events[i]
+		body = append(body, textBlock(eventLine(ev, firstIndex+i)))
+		body = append(body, map[string]any{
+			"type": componentTypeActionRow, "components": eventButtons(ev),
+		})
 	}
-	if err := s.discord.EditMessage(table.ChannelID, messageID, payload); err != nil {
-		return fmt.Errorf("edit table row: %w", err)
+	if totalPages > 1 {
+		body = append(body, textBlock(fmt.Sprintf("-# Page %d of %d", page+1, totalPages)))
 	}
-	return nil
+
+	return map[string]any{
+		"flags": messageFlagComponentsV2,
+		"components": []any{map[string]any{
+			"type": componentTypeContainer, "accent_color": panelAccentColour,
+			"components": body,
+		}},
+		"allowed_mentions": map[string]any{"parse": []string{}},
+	}
 }
 
-// RemoveTableRow takes an event out of the table, for one that has finished.
-func (s *Server) RemoveTableRow(ev *Event) error {
-	if s.discord == nil {
-		return nil
-	}
-	table, err := s.store.GuildTable(ev.GuildID)
-	if errors.Is(err, ErrNotFound) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	messageID, err := s.store.TableRowMessageID(ev.ID)
-	if err != nil || messageID == "" {
-		return err
-	}
-	if err := s.discord.DeleteMessage(table.ChannelID, messageID); err != nil {
-		log.Printf("[discord-signup] could not delete table row for event %d: %v", ev.ID, err)
-	}
-	if err := s.store.DeleteTableRow(ev.ID); err != nil {
-		return err
-	}
-	return s.refreshTableHeader(table)
+func textBlock(content string) map[string]any {
+	return map[string]any{"type": componentTypeTextDisplay, "content": trimTo(content, textDisplayLimit)}
 }
 
-func (s *Server) refreshTableHeader(table *GuildTable) error {
-	live, err := s.liveEventsFor(table.GuildID)
-	if err != nil {
-		return err
-	}
-	payload := RenderTableHeader(len(live))
-	if table.MessageID == "" {
-		newID, err := s.discord.CreateMessage(table.ChannelID, payload)
-		if err != nil {
-			return fmt.Errorf("post table header: %w", err)
-		}
-		return s.store.SetGuildTableMessage(table.GuildID, newID)
-	}
-	if err := s.discord.EditMessage(table.ChannelID, table.MessageID, payload); err != nil {
-		return fmt.Errorf("edit table header: %w", err)
-	}
-	return nil
-}
-
-// RebuildEventTable deletes every message and reposts them in date order.
+// eventLine is the whole of an event on one line: how full it is, what it is,
+// what it is about, and when.
 //
-// The only way to sort the table: Discord orders messages by when they were
-// posted and offers no way to move one. Expensive and visibly noisy, so it is
-// a button somebody presses rather than something that happens on its own.
-func (s *Server) RebuildEventTable(guildID string) error {
-	if s.discord == nil {
-		return nil
-	}
-	table, err := s.store.GuildTable(guildID)
-	if errors.Is(err, ErrNotFound) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	existing, err := s.store.TableRowsFor(guildID)
-	if err != nil {
-		return err
-	}
-	for eventID, messageID := range existing {
-		if err := s.discord.DeleteMessage(table.ChannelID, messageID); err != nil {
-			log.Printf("[discord-signup] rebuild: could not delete row for %d: %v", eventID, err)
-		}
-		if err := s.store.DeleteTableRow(eventID); err != nil {
-			return err
-		}
-	}
-	if table.MessageID != "" {
-		if err := s.discord.DeleteMessage(table.ChannelID, table.MessageID); err != nil {
-			log.Printf("[discord-signup] rebuild: could not delete header: %v", err)
-		}
-		if err := s.store.SetGuildTableMessage(guildID, ""); err != nil {
-			return err
-		}
-		table.MessageID = ""
-	}
-
-	live, err := s.liveEventsFor(guildID)
-	if err != nil {
-		return err
-	}
-	// Header first so it sits above the rows.
-	if err := s.refreshTableHeader(table); err != nil {
-		return err
-	}
-	sort.SliceStable(live, func(i, j int) bool { return live[i].StartsAt < live[j].StartsAt })
-	for i := range live {
-		if err := s.RefreshTableRow(&live[i]); err != nil {
-			log.Printf("[discord-signup] rebuild: row for %d: %v", live[i].ID, err)
-		}
-	}
-	return nil
-}
-
-// refreshTableRowQuietly updates one row as a side effect of something that has
-// already succeeded, so a failure is logged rather than propagated.
-func (s *Server) refreshTableRowQuietly(ev *Event) {
-	if err := s.RefreshTableRow(ev); err != nil {
-		log.Printf("[discord-signup] refresh table row for event %d: %v", ev.ID, err)
-	}
-}
-
-// RenderEventRow draws one event as one message: a container holding its line
-// and a full row of buttons.
-//
-// One message per event rather than one for the whole list, because a Section's
-// accessory can only be a Button or a Thumbnail — a select is rejected outright,
-// measured — so a single-message layout gets exactly one button per row. An
-// Action Row inside a container holds five, which is what lets Join, Leave,
-// Details and Edit sit on the row they act on.
-//
-// The cost is that Discord will not reorder messages, so rows sit in the order
-// they were posted and sorting means Rebuild.
-func RenderEventRow(ev *Event) map[string]any {
+// One text block per event rather than several, because each component counts
+// against the message budget and splitting this into three would cut the number
+// of events per message from six to two.
+func eventLine(ev *Event, index int) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "**%s**\n", ev.Name)
-	b.WriteString("-# " + panelWhen(ev))
+	slots := fmt.Sprintf("%d/%d", ev.AttendingCount, ev.Capacity)
+	if ev.Capacity == 0 {
+		slots = fmt.Sprintf("%d", ev.AttendingCount)
+	}
+	fmt.Fprintf(&b, "`%2d`  `%-7s`  **%s**", index, slots, ev.Name)
+	if ev.StartsAt > 0 {
+		fmt.Fprintf(&b, "  ·  <t:%d:f>", ev.StartsAt)
+	}
 	if ev.Location != "" {
 		b.WriteString("  ·  " + ev.Location)
 	}
-	b.WriteString("\n")
-	if ev.Capacity > 0 {
-		fmt.Fprintf(&b, "**%d/%d** taken", ev.AttendingCount, ev.Capacity)
-	} else {
-		fmt.Fprintf(&b, "**%d** signed up · no limit", ev.AttendingCount)
-	}
+
+	var notes []string
 	if ev.WaitlistCount > 0 {
-		fmt.Fprintf(&b, " · %s waiting", pluralise(ev.WaitlistCount, "person"))
+		notes = append(notes, pluralise(ev.WaitlistCount, "person")+" waiting")
 	}
 	if ev.Status != StatusOpen {
-		fmt.Fprintf(&b, " · **signups %s**", ev.Status)
+		notes = append(notes, "signups "+ev.Status)
 	}
+	// The description is trimmed hard: it shares a line with everything else,
+	// and the Details button exists for the whole of it.
+	if ev.Description != "" {
+		notes = append(notes, trimTo(strings.ReplaceAll(ev.Description, "\n", " "), 90))
+	}
+	if len(notes) > 0 {
+		b.WriteString("\n-# " + strings.Join(notes, "  ·  "))
+	}
+	return b.String()
+}
 
+func eventButtons(ev *Event) []any {
 	buttons := []any{}
 	// A closed event keeps Details and Edit and loses Join and Leave. A button
-	// that cannot do anything is a trap rather than an affordance.
+	// that cannot act is a trap rather than a disabled affordance.
 	if ev.Status == StatusOpen {
 		buttons = append(buttons,
 			map[string]any{"type": componentTypeButton, "style": buttonStylePrimary,
@@ -605,39 +374,159 @@ func RenderEventRow(ev *Event) map[string]any {
 			"label": "Details", "custom_id": DetailsCustomID(ev.ID)},
 		map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
 			"label": "Edit", "custom_id": EditCustomID(ev.ID)})
+	return buttons
+}
 
-	return map[string]any{
-		"flags": messageFlagComponentsV2,
-		"components": []any{map[string]any{
-			"type": componentTypeContainer, "accent_color": panelAccentColour,
-			"components": []any{
-				map[string]any{"type": componentTypeTextDisplay, "content": b.String()},
-				map[string]any{"type": componentTypeActionRow, "components": buttons},
-			},
-		}},
-		"allowed_mentions": map[string]any{"parse": []string{}},
+// paginate splits events into messages of eventsPerPage.
+func paginate(events []Event) [][]Event {
+	if len(events) == 0 {
+		return [][]Event{nil} // one page, saying there is nothing
+	}
+	var pages [][]Event
+	for start := 0; start < len(events); start += eventsPerPage {
+		end := start + eventsPerPage
+		if end > len(events) {
+			end = len(events)
+		}
+		pages = append(pages, events[start:end])
+	}
+	return pages
+}
+
+// RefreshEventTable redraws a guild's whole table, editing each page in place.
+//
+// Every page is rewritten, which is what keeps the table sorted without ever
+// reposting: events move BETWEEN pages while the messages stay where they are.
+// A page is only ever posted when the table grows past its current page count,
+// and a new message goes to the bottom, which is exactly where a new last page
+// belongs.
+func (s *Server) RefreshEventTable(guildID string) error {
+	if s.discord == nil {
+		return nil
+	}
+	table, err := s.store.GuildTable(guildID)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	events, err := s.liveEventsFor(guildID)
+	if err != nil {
+		return err
+	}
+	sort.SliceStable(events, func(i, j int) bool { return events[i].StartsAt < events[j].StartsAt })
+	pages := paginate(events)
+
+	existing, err := s.store.TablePages(guildID)
+	if err != nil {
+		return err
+	}
+	byPage := map[int]string{}
+	for _, p := range existing {
+		byPage[p.Page] = p.MessageID
+	}
+
+	for i, chunk := range pages {
+		payload := RenderTablePage(chunk, i*eventsPerPage+1, len(events), i, len(pages))
+		if messageID, ok := byPage[i]; ok {
+			if err := s.discord.EditMessage(table.ChannelID, messageID, payload); err != nil {
+				return fmt.Errorf("edit table page %d: %w", i, err)
+			}
+			continue
+		}
+		messageID, err := s.discord.CreateMessage(table.ChannelID, payload)
+		if err != nil {
+			return fmt.Errorf("post table page %d: %w", i, err)
+		}
+		if err := s.store.SetTablePage(guildID, i, messageID); err != nil {
+			return err
+		}
+	}
+
+	// Pages that are no longer needed. Deleted from the end so the remaining
+	// ones keep their positions.
+	for i := len(existing) - 1; i >= len(pages); i-- {
+		if err := s.discord.DeleteMessage(table.ChannelID, existing[i].MessageID); err != nil {
+			log.Printf("[discord-signup] could not delete surplus table page %d: %v", i, err)
+		}
+		if err := s.store.DeleteTablePage(guildID, existing[i].Page); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// refreshEventTableQuietly redraws the table as a side effect of something that
+// already succeeded, so a failure is logged rather than propagated.
+func (s *Server) refreshEventTableQuietly(guildID string) {
+	if err := s.RefreshEventTable(guildID); err != nil {
+		log.Printf("[discord-signup] refresh event table for %s: %v", guildID, err)
 	}
 }
 
-// RenderTableHeader is the one message above the rows.
-func RenderTableHeader(count int) map[string]any {
-	var b strings.Builder
-	b.WriteString("## Events\n")
-	if count == 0 {
-		b.WriteString("-# Nothing coming up.")
-	} else {
-		fmt.Fprintf(&b, "-# %s. Rows sit in the order they were added; "+
-			"Rebuild sorts them by date.", pluralise(count, "event"))
+// liveEventsFor returns a guild's current events, archived ones excluded.
+func (s *Server) liveEventsFor(guildID string) ([]Event, error) {
+	events, err := s.store.ListEvents(guildID, "", 200)
+	if err != nil {
+		return nil, err
 	}
-	return map[string]any{
-		"flags": messageFlagComponentsV2,
-		"components": []any{
-			map[string]any{"type": componentTypeTextDisplay, "content": b.String()},
-			map[string]any{"type": componentTypeActionRow, "components": []any{
-				map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
-					"label": "Rebuild", "custom_id": tableRebuildButtonID},
-			}},
-		},
-		"allowed_mentions": map[string]any{"parse": []string{}},
+	live, _ := splitByArchived(events)
+	return live, nil
+}
+
+// handleTableAction routes the table's own controls.
+//
+// Only Rebuild, and it is now a repair tool rather than the way to sort:
+// pages are rewritten in place on every change, so the table sorts itself.
+// Rebuild exists for when the messages and the database disagree — someone
+// deleted one by hand, or a post failed midway.
+func (s *Server) handleTableAction(w http.ResponseWriter, in *Interaction, action string) {
+	if action != "table-rebuild" {
+		s.replyEphemeral(w, "Unknown table action.")
+		return
 	}
+	if !in.canManageEvents() {
+		s.replyEphemeral(w, "Rebuilding deletes and reposts the table, so it needs Manage Events.")
+		return
+	}
+	guildID := in.GuildID
+	// Answered first: deleting and reposting will not finish inside Discord's
+	// three-second interaction window.
+	s.replyEphemeral(w, "Rebuilding the table — it will settle in a moment.")
+	go func() {
+		if err := s.RebuildEventTable(guildID); err != nil {
+			log.Printf("[discord-signup] rebuild table for %s: %v", guildID, err)
+		}
+	}()
+}
+
+// RebuildEventTable deletes every page and draws the table again.
+//
+// Not needed for ordering — a redraw already sorts. This is the repair path for
+// when the recorded messages and the channel disagree.
+func (s *Server) RebuildEventTable(guildID string) error {
+	if s.discord == nil {
+		return nil
+	}
+	table, err := s.store.GuildTable(guildID)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	pages, err := s.store.TablePages(guildID)
+	if err != nil {
+		return err
+	}
+	for _, p := range pages {
+		if err := s.discord.DeleteMessage(table.ChannelID, p.MessageID); err != nil {
+			log.Printf("[discord-signup] rebuild: could not delete page %d: %v", p.Page, err)
+		}
+		if err := s.store.DeleteTablePage(guildID, p.Page); err != nil {
+			return err
+		}
+	}
+	return s.RefreshEventTable(guildID)
 }

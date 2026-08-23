@@ -1,7 +1,6 @@
 package discordsignup
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -23,137 +22,130 @@ func tableEvents(n int) []Event {
 	return out
 }
 
-// TestEveryRowCarriesAllFourButtons is why this is one message per event.
-//
-// A Section's accessory can be a Button or a Thumbnail and nothing else — a
-// select is rejected outright, measured against the live API — so a
-// single-message layout gets exactly one button per row. An Action Row inside a
-// container holds five, which is what makes all four fit.
-func TestEveryRowCarriesAllFourButtons(t *testing.T) {
-	ev := &Event{ID: 1, Name: "Board games", Status: StatusOpen, Capacity: 8,
-		AttendingCount: 3, StartsAt: time.Now().Unix()}
-	container := RenderEventRow(ev)["components"].([]any)[0].(map[string]any)
-	if container["type"] != componentTypeContainer {
-		t.Fatalf("row is type %v, want a container", container["type"])
-	}
-	inner := container["components"].([]any)
-	if len(inner) != 2 {
-		t.Fatalf("container holds %d components, want text and an action row", len(inner))
-	}
-	buttons := inner[1].(map[string]any)["components"].([]any)
-	var ids []string
-	for _, b := range buttons {
-		ids = append(ids, b.(map[string]any)["custom_id"].(string))
-	}
-	want := []string{JoinCustomID(1), LeaveCustomID(1), DetailsCustomID(1), EditCustomID(1)}
-	if len(ids) != len(want) {
-		t.Fatalf("buttons = %v, want %v", ids, want)
-	}
-	for i := range want {
-		if ids[i] != want[i] {
-			t.Errorf("button %d = %q, want %q", i, ids[i], want[i])
-		}
-	}
-	if len(buttons) > 5 {
-		t.Errorf("%d buttons, over Discord's five per action row", len(buttons))
-	}
-}
-
-// TestClosedRowsLoseJoinAndLeave keeps a button that cannot act off the row.
-func TestClosedRowsLoseJoinAndLeave(t *testing.T) {
-	ev := &Event{ID: 4, Name: "Shut", Status: StatusClosed, Capacity: 8}
-	inner := RenderEventRow(ev)["components"].([]any)[0].(map[string]any)["components"].([]any)
-	buttons := inner[1].(map[string]any)["components"].([]any)
-	var ids []string
-	for _, b := range buttons {
-		ids = append(ids, b.(map[string]any)["custom_id"].(string))
-	}
-	if len(ids) != 2 || ids[0] != DetailsCustomID(4) || ids[1] != EditCustomID(4) {
-		t.Errorf("buttons = %v, want just Details and Edit", ids)
-	}
-}
-
-// TestRowsUseComponentsV2AndNoContent covers a rule that rejects the whole
-// message: with the V2 flag set, a message must carry no content field.
-func TestRowsUseComponentsV2AndNoContent(t *testing.T) {
-	for name, payload := range map[string]map[string]any{
-		"row":    RenderEventRow(&Event{ID: 1, Name: "One", Status: StatusOpen}),
-		"header": RenderTableHeader(3),
-	} {
-		if payload["flags"] != messageFlagComponentsV2 {
-			t.Errorf("%s flags = %v, want the Components V2 flag", name, payload["flags"])
-		}
-		if _, present := payload["content"]; present {
-			t.Errorf("%s carries a content field, which V2 forbids", name)
+// TestAPageStaysInsideDiscordsComponentBudget is the ceiling that sets
+// eventsPerPage, and it is measured rather than inferred: each event costs a
+// text block, an action row and four buttons, and Discord allows 40 components
+// in a message. Six fit; seven is COMPONENT_MAX_TOTAL_COMPONENTS_EXCEEDED.
+func TestAPageStaysInsideDiscordsComponentBudget(t *testing.T) {
+	for _, n := range []int{1, 3, eventsPerPage} {
+		payload := RenderTablePage(tableEvents(n), 1, n, 0, 1)
+		if got := countComponents(payload["components"].([]any)); got > 40 {
+			t.Errorf("%d events render %d components, over Discord's 40", n, got)
 		}
 	}
 }
 
-// TestRowsAreEditedNotReposted keeps each row where it is. A signup rewrites one
-// message; anything else walks the whole table down the channel.
-func TestRowsAreEditedNotReposted(t *testing.T) {
-	fake := newFakeDiscord(t)
-	store := testStore(t)
-	srv := NewServer(store, nil, fake.client())
-	if err := store.SetGuildTable("g1", "table-channel"); err != nil {
-		t.Fatalf("set table: %v", err)
-	}
-	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "One",
-		StartsAt: time.Now().Add(time.Hour).Unix()})
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	for i := 0; i < 4; i++ {
-		if err := srv.RefreshTableRow(ev); err != nil {
-			t.Fatalf("refresh %d: %v", i, err)
+func countComponents(components []any) int {
+	total := 0
+	for _, c := range components {
+		m := c.(map[string]any)
+		total++
+		if nested, ok := m["components"].([]any); ok {
+			total += countComponents(nested)
+		}
+		if options, ok := m["options"].([]any); ok {
+			total += len(options)
 		}
 	}
-	var posts, edits int
-	for _, c := range fake.recorded() {
-		switch c.Method {
-		case "POST":
-			posts++
-		case "PATCH":
-			edits++
+	return total
+}
+
+// TestOneTextBlockPerEvent is why six fit rather than two. Splitting the line
+// into title, description and time would cost three components each.
+func TestOneTextBlockPerEvent(t *testing.T) {
+	events := tableEvents(3)
+	events[0].Description = "Bring dice."
+	body := RenderTablePage(events, 1, 3, 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
+
+	var textBlocks, actionRows int
+	for _, c := range body {
+		switch c.(map[string]any)["type"] {
+		case componentTypeTextDisplay:
+			textBlocks++
+		case componentTypeActionRow:
+			actionRows++
 		}
 	}
-	// The row and the header, posted once each; three edits of the row.
-	if posts != 2 || edits != 3 {
-		t.Errorf("%d posts and %d edits, want 2 and 3", posts, edits)
+	// One heading plus one block per event.
+	if textBlocks != 4 {
+		t.Errorf("%d text blocks, want 4 (a heading and one per event)", textBlocks)
+	}
+	if actionRows != 3 {
+		t.Errorf("%d action rows, want one per event", actionRows)
 	}
 }
 
-// TestFinishedEventsLeaveTheTable stops the board filling with things that
-// already happened.
-func TestFinishedEventsLeaveTheTable(t *testing.T) {
-	fake := newFakeDiscord(t)
-	store := testStore(t)
-	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
-	if err := store.SetGuildTable("g1", "table-channel"); err != nil {
-		t.Fatalf("set table: %v", err)
+// TestEveryEventCarriesAllFourButtons is what one message per event used to be
+// needed for, and no longer is.
+func TestEveryEventCarriesAllFourButtons(t *testing.T) {
+	body := RenderTablePage(tableEvents(1), 1, 1, 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	for _, c := range body {
+		m := c.(map[string]any)
+		if m["type"] != componentTypeActionRow {
+			continue
+		}
+		var ids []string
+		for _, b := range m["components"].([]any) {
+			ids = append(ids, b.(map[string]any)["custom_id"].(string))
+		}
+		want := []string{JoinCustomID(1), LeaveCustomID(1), DetailsCustomID(1), EditCustomID(1)}
+		if len(ids) != len(want) {
+			t.Fatalf("buttons = %v, want %v", ids, want)
+		}
+		for i := range want {
+			if ids[i] != want[i] {
+				t.Errorf("button %d = %q, want %q", i, ids[i], want[i])
+			}
+		}
+		return
 	}
-	past := time.Now().Add(-10 * time.Hour).Unix()
-	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Over",
-		StartsAt: past, EndsAt: past + 3600})
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	if err := srv.RefreshTableRow(ev); err != nil {
-		t.Fatalf("draw row: %v", err)
-	}
-	if _, err := srv.CompleteFinishedEvents(); err != nil {
-		t.Fatalf("sweep: %v", err)
-	}
-	if left, _ := store.TableRowMessageID(ev.ID); left != "" {
-		t.Errorf("the row is still recorded as %q after the event finished", left)
+	t.Fatal("no action row found")
+}
+
+// TestClosedEventsLoseJoinAndLeave keeps a button that cannot act off the row.
+func TestClosedEventsLoseJoinAndLeave(t *testing.T) {
+	events := tableEvents(1)
+	events[0].Status = StatusClosed
+	body := RenderTablePage(events, 1, 1, 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	for _, c := range body {
+		m := c.(map[string]any)
+		if m["type"] != componentTypeActionRow {
+			continue
+		}
+		if len(m["components"].([]any)) != 2 {
+			t.Errorf("a closed event has %d buttons, want just Details and Edit",
+				len(m["components"].([]any)))
+		}
 	}
 }
 
-// TestRebuildRepostsInDateOrder covers the one thing Discord will not do:
-// messages sit in posting order and cannot be moved, so sorting means deleting
-// and reposting.
-func TestRebuildRepostsInDateOrder(t *testing.T) {
+// TestPaginationSpillsPastSixAndNumbersContinuously covers the spill-over.
+func TestPaginationSpillsPastSixAndNumbersContinuously(t *testing.T) {
+	pages := paginate(tableEvents(14))
+	if len(pages) != 3 {
+		t.Fatalf("%d pages for 14 events, want 3", len(pages))
+	}
+	if len(pages[0]) != 6 || len(pages[1]) != 6 || len(pages[2]) != 2 {
+		t.Errorf("page sizes %d/%d/%d, want 6/6/2",
+			len(pages[0]), len(pages[1]), len(pages[2]))
+	}
+	// The second page continues the numbering rather than restarting.
+	second := RenderTablePage(pages[1], eventsPerPage+1, 14, 1, 3)
+	body := second["components"].([]any)[0].(map[string]any)["components"].([]any)
+	first := body[0].(map[string]any)["content"].(string)
+	if !strings.Contains(first, "` 7`") {
+		t.Errorf("second page starts with %q, want row 7", first)
+	}
+	// And only the first page carries the heading.
+	if strings.Contains(first, "## Events") {
+		t.Error("the heading is repeated on the second page")
+	}
+}
+
+// TestTableIsEditedInPlaceAndShrinks covers the reason pages beat one message
+// per event: rewriting them keeps the table sorted without reposting, because
+// events move between pages while the messages stay put.
+func TestTableIsEditedInPlaceAndShrinks(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
@@ -161,36 +153,44 @@ func TestRebuildRepostsInDateOrder(t *testing.T) {
 		t.Fatalf("set table: %v", err)
 	}
 	base := time.Now().Add(24 * time.Hour).Unix()
-	for _, offset := range []int64{3, 1, 2} {
-		if _, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board",
-			Name: fmt.Sprintf("Event +%d", offset), StartsAt: base + offset*3600}); err != nil {
+	var ids []int64
+	for i := 0; i < 8; i++ {
+		ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board",
+			Name: fmt.Sprintf("Event %d", i), StartsAt: base + int64(i)*3600})
+		if err != nil {
 			t.Fatalf("create: %v", err)
 		}
+		ids = append(ids, ev.ID)
 	}
-	if err := srv.RebuildEventTable("g1"); err != nil {
-		t.Fatalf("rebuild: %v", err)
+	if err := srv.RefreshEventTable("g1"); err != nil {
+		t.Fatalf("first draw: %v", err)
 	}
-	var order []string
-	for _, c := range fake.recorded() {
-		if c.Method != "POST" || !strings.HasSuffix(c.Path, "/messages") {
-			continue
+	if pages, _ := store.TablePages("g1"); len(pages) != 2 {
+		t.Fatalf("%d pages for 8 events, want 2", len(pages))
+	}
+
+	// Redrawing again must edit, never post.
+	before := len(fake.recorded())
+	if err := srv.RefreshEventTable("g1"); err != nil {
+		t.Fatalf("second draw: %v", err)
+	}
+	for _, c := range fake.recorded()[before:] {
+		if c.Method == "POST" {
+			t.Errorf("redrawing posted a new message: %s", c.Path)
 		}
-		body, _ := json.Marshal(c.Body)
-		for _, offset := range []string{"+1", "+2", "+3"} {
-			if strings.Contains(string(body), "Event "+offset) {
-				order = append(order, offset)
-			}
+	}
+
+	// Dropping below seven events must delete the surplus page.
+	for _, id := range ids[6:] {
+		if err := store.DeleteEvent(id); err != nil {
+			t.Fatalf("delete: %v", err)
 		}
 	}
-	want := []string{"+1", "+2", "+3"}
-	if len(order) != len(want) {
-		t.Fatalf("posted %v, want %v", order, want)
+	if err := srv.RefreshEventTable("g1"); err != nil {
+		t.Fatalf("third draw: %v", err)
 	}
-	for i := range want {
-		if order[i] != want[i] {
-			t.Errorf("posted %v, want soonest first %v", order, want)
-			break
-		}
+	if pages, _ := store.TablePages("g1"); len(pages) != 1 {
+		t.Errorf("%d pages for 6 events, want 1", len(pages))
 	}
 }
 

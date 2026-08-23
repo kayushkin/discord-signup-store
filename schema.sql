@@ -172,3 +172,19 @@ CREATE TABLE IF NOT EXISTS event_table_rows (
     updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_event_table_rows_guild ON event_table_rows(guild_id);
+
+-- table_pages: the consolidated table, which is more than one message when it
+-- has to be.
+--
+-- Six events fit in a message — measured, not inferred: each costs a text
+-- block, an action row and four buttons, and Discord allows 40 components in
+-- total. Page 0 is posted first and stays first, and because a redraw rewrites
+-- every page in place, events move BETWEEN pages while the messages stay put.
+-- That is what keeps the table sorted without ever reposting it.
+CREATE TABLE IF NOT EXISTS table_pages (
+    guild_id   TEXT NOT NULL,
+    page       INTEGER NOT NULL,
+    message_id TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, page)
+);

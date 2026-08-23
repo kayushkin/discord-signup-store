@@ -69,9 +69,14 @@ func TestUnmarkingThenRemarkingInterestedIsFreshIntent(t *testing.T) {
 	}
 }
 
-// TestUnmarkingInterestedDoesNotEvictSomeoneWhoPressedJoin keeps the two
-// signals independent. Turning off a notification is not forfeiting a seat.
-func TestUnmarkingInterestedDoesNotEvictSomeoneWhoPressedJoin(t *testing.T) {
+// TestUnmarkingInterestedRemovesSomeoneWhoPressedJoin pins the rule that
+// replaced an earlier, cleverer one.
+//
+// Interested and Join are presented as doing the same thing, so undoing either
+// has to do the same thing too. The previous behaviour left someone who
+// un-marked Interested still holding a place, with nothing anywhere telling
+// them so.
+func TestUnmarkingInterestedRemovesSomeoneWhoPressedJoin(t *testing.T) {
 	store := testStore(t)
 	ev := testEvent(t, store, 5)
 
@@ -86,13 +91,36 @@ func TestUnmarkingInterestedDoesNotEvictSomeoneWhoPressedJoin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unmark: %v", err)
 	}
-	if result.Outcome != OutcomeKeptPlace {
-		t.Errorf("outcome = %q, want %q", result.Outcome, OutcomeKeptPlace)
+	if result.Outcome != OutcomeLeft {
+		t.Errorf("outcome = %q, want %q", result.Outcome, OutcomeLeft)
 	}
 	got, _ := store.GetEvent(ev.ID)
-	if got.AttendingCount != 1 {
-		t.Errorf("attending = %d, want 1 — she pressed Join, which stands on its own",
+	if got.AttendingCount != 0 {
+		t.Errorf("attending = %d, want 0 — un-marking Interested is leaving",
 			got.AttendingCount)
+	}
+}
+
+// TestUnmarkingInterestedPromotesTheNextPerson follows from that: if it removes
+// like Leave does, it has to promote like Leave does.
+func TestUnmarkingInterestedPromotesTheNextPerson(t *testing.T) {
+	store := testStore(t)
+	ev := testEvent(t, store, 1)
+	if _, err := store.Join(ev.ID, "alice", "Alice", JoinedViaButton); err != nil {
+		t.Fatalf("join alice: %v", err)
+	}
+	if _, err := store.Join(ev.ID, "bob", "Bob", JoinedViaButton); err != nil {
+		t.Fatalf("join bob: %v", err)
+	}
+	if _, err := store.MarkInterested(ev.ID, "alice", "Alice"); err != nil {
+		t.Fatalf("mark: %v", err)
+	}
+	result, err := store.MarkNotInterested(ev.ID, "alice")
+	if err != nil {
+		t.Fatalf("unmark: %v", err)
+	}
+	if result.Promoted == nil || result.Promoted.DiscordUserID != "bob" {
+		t.Error("bob should have been promoted into the place alice gave up")
 	}
 }
 

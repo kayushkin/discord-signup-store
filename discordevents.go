@@ -176,7 +176,7 @@ func (s *Server) SyncScheduledEvents(guildID, boardChannelID string) (*SyncResul
 	// Imported and edited events both change what the panel should say, and
 	// the panel is one message, so one redraw covers all of them.
 	if result.Imported > 0 || result.Updated > 0 {
-		s.refreshEventPanelQuietly(guildID)
+		s.refreshEventTableQuietly(guildID)
 	}
 	return result, nil
 }
@@ -654,10 +654,9 @@ func (s *Server) CompleteFinishedEvents() ([]int64, error) {
 			log.Printf("[discord-signup] move event %d to past events: %v", id, err)
 		}
 		// It has left the live list, so the panel has to stop showing it.
+		// It has left the live list, so the table has to stop showing it.
 		if ev, err := s.store.GetEvent(id); err == nil {
-			if err := s.RemoveTableRow(ev); err != nil {
-				log.Printf("[discord-signup] remove table row for %d: %v", id, err)
-			}
+			s.refreshEventTableQuietly(ev.GuildID)
 		}
 	}
 	return finished, nil
