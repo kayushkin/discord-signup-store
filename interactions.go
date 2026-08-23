@@ -59,6 +59,10 @@ type Interaction struct {
 
 	Data struct {
 		CustomID string `json:"custom_id"`
+		// Values is populated when a select menu is used: the chosen option's
+		// value. The table's menus put the event id here rather than in the
+		// custom_id, because one menu covers every event.
+		Values []string `json:"values"`
 		// Components is populated on a modal submit: one action row per field,
 		// each holding one text input carrying the typed value.
 		Components []struct {
@@ -223,6 +227,14 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		// Someone else's component on a message we happen to see. Say nothing
 		// meaningful, but do not error — a 500 here would make Discord retry.
 		s.replyEphemeral(w, "That button is not one of mine.")
+		return
+	}
+
+	// Table actions are handled before anything looks the event up by message.
+	// Their message is the table, which belongs to no single event, and their
+	// chosen event arrives in the select's value instead.
+	if strings.HasPrefix(action, "table-") {
+		s.handleTableAction(w, in, action)
 		return
 	}
 
@@ -563,6 +575,8 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 	// own event list and fires Discord's start notification. Best effort: the
 	// roster and its card already exist and are the real thing, so a failure
 	// here is reported rather than allowed to undo them.
+	go s.refreshEventTableQuietly(ev.GuildID)
+
 	published := true
 	if _, err := s.PublishToDiscord(ev.ID, s.BoardChannelID()); err != nil {
 		log.Printf("[discord-signup] publish event %d to discord: %v", ev.ID, err)

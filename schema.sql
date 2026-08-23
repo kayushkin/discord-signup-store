@@ -142,3 +142,19 @@ CREATE TABLE IF NOT EXISTS oauth_states (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_events_one_roster_per_discord_event
     ON events(discord_scheduled_event_id)
     WHERE discord_scheduled_event_id != '' AND deleted_at = 0;
+
+-- guild_tables: where each guild's consolidated event table lives.
+--
+-- One row per guild, holding the message that gets rewritten in place rather
+-- than reposted. A table that reposted itself on every signup would push the
+-- channel down and lose its position in everyone's client.
+--
+-- Kept in its own table rather than as columns on events, because it belongs to
+-- the guild and not to any one event — the whole point of it is that it outlives
+-- the events it lists.
+CREATE TABLE IF NOT EXISTS guild_tables (
+    guild_id   TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    message_id TEXT NOT NULL DEFAULT '',
+    updated_at INTEGER NOT NULL
+);

@@ -225,6 +225,11 @@ func (s *Server) syncAfterChange(ev *Event, changes []stateChange) {
 	if err := s.RefreshSignupMessage(ev.ID); err != nil {
 		log.Printf("[discord-signup] refresh message event=%d: %v", ev.ID, err)
 	}
+	// The consolidated table is a second view of the same roster. Refreshed
+	// from here because this is the one place every roster change passes
+	// through — join, leave, Interested, promotion, operator override — so
+	// there is no path that updates a card and forgets the table.
+	s.refreshEventTableQuietly(ev.GuildID)
 }
 
 // applyRoles makes one person's roles match one state.

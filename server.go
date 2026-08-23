@@ -114,6 +114,8 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/guilds/{guildID}/sync", s.handleSyncGuild)
 	mux.HandleFunc("POST /api/sync", s.handleSyncAllGuilds)
 	mux.HandleFunc("POST /api/channels/{channelID}/how-to", s.handlePostHowTo)
+	mux.HandleFunc("PUT /api/guilds/{guildID}/table", s.handleSetGuildTable)
+	mux.HandleFunc("POST /api/guilds/{guildID}/table/refresh", s.handleRefreshGuildTable)
 	mux.HandleFunc("POST /api/events/complete-finished", s.handleCompleteFinished)
 
 	// Browser surface — session-gated.
@@ -131,6 +133,43 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/post-message", s.handleWebPostMessage)
 	mux.HandleFunc("POST /events/{id}/publish", s.handleWebPublish)
 	mux.HandleFunc("POST /sync", s.handleWebSync)
+}
+
+// handleSetGuildTable points a guild's consolidated table at a channel and
+// draws it. Calling it again with the same channel redraws in place; with a
+// different one, the next refresh posts a fresh message there.
+func (s *Server) handleSetGuildTable(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		ChannelID string `json:"channel_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "malformed JSON"})
+		return
+	}
+	guildID := r.PathValue("guildID")
+	if err := s.store.SetGuildTable(guildID, in.ChannelID); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if err := s.RefreshEventTable(guildID); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	table, err := s.store.GuildTable(guildID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, table)
+}
+
+// handleRefreshGuildTable redraws it.
+func (s *Server) handleRefreshGuildTable(w http.ResponseWriter, r *http.Request) {
+	if err := s.RefreshEventTable(r.PathValue("guildID")); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // handlePostHowTo puts the standing how-to and its Create button in a channel.

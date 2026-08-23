@@ -172,6 +172,10 @@ func (s *Server) SyncScheduledEvents(guildID, boardChannelID string) (*SyncResul
 	posted, problems := s.postMissingCards(guildID)
 	result.Posted = posted
 	result.Problems = append(result.Problems, problems...)
+	// Imported and edited events both change what the table should say.
+	if result.Imported > 0 || result.Updated > 0 || result.Posted > 0 {
+		s.refreshEventTableQuietly(guildID)
+	}
 	return result, nil
 }
 
@@ -585,6 +589,10 @@ func (s *Server) CompleteFinishedEvents() ([]int64, error) {
 		}
 		if err := s.moveCardToPastEvents(id); err != nil {
 			log.Printf("[discord-signup] move event %d to past events: %v", id, err)
+		}
+		// It has left the live list, so the table has to stop showing it.
+		if ev, err := s.store.GetEvent(id); err == nil {
+			s.refreshEventTableQuietly(ev.GuildID)
 		}
 	}
 	return finished, nil

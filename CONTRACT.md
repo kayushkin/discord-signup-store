@@ -102,6 +102,29 @@ separate requests and nothing stops the second arriving alone.
 Raising a limit promotes people off the waitlist in arrival order and messages
 each of them. Lowering it promotes nobody and removes nobody.
 
+## The consolidated table
+
+One message per guild, listing every live event, edited in place rather than
+reposted so it keeps its position in the channel.
+
+Its shape is dictated by Discord's component ceilings, not by preference: a
+message holds **five action rows**, and a select menu takes a whole row and
+holds **25 options**. A Join button per row would top out around twelve events
+and line up with nothing, so the table itself is text in a code block — the only
+way to get a fixed-width font — and four select menus act as columns over it:
+
+| Row | |
+|---|---|
+| `signup:table-join:0` | Join. Open events only; a full one says so in its option. |
+| `signup:table-leave:0` | Leave. |
+| `signup:table-details:0` | Description and roster, ephemerally. |
+| `signup:table-edit:0` | Opens the edit modal. Same permission check as the card. |
+| `signup:table-refresh:0` | Redraw. |
+
+The event id travels in the select's chosen **value**, not the custom_id,
+because one menu covers every event. Past 25 events the surplus is named in the
+text and said to be unselectable rather than silently dropped.
+
 ## Conventions
 
 - **Capacity `0` means unlimited**, matching Discord's own convention for

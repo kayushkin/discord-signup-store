@@ -179,6 +179,8 @@ func (s *Server) SetCapacity(eventID int64, capacity int, actor string) (*Event,
 	}
 	// Roles and the card in one pass; the card refreshes even when nobody moved,
 	// because the number printed on it has changed.
+	// syncAfterChange refreshes the card AND the table, so an edit that moved
+	// nobody still redraws both.
 	go s.syncAfterChange(after, changes)
 	for i := range promoted {
 		go s.notifyPromoted(after, &promoted[i])
