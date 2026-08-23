@@ -532,7 +532,11 @@ func nativeEventName(ev *Event) string {
 // the sync reads the whole description back as ours, and the next publish
 // appends the pointer to a description that already ends in one. It grows by a
 // paragraph every edit, forever, until Discord refuses the event for length.
-const signupPointerMarker = "\n\n— Signups are in <#"
+// The marker deliberately stops before the destination: it has to match both
+// the old form ("— Signups are in <#channel>") still sitting in descriptions
+// Discord holds, and the forum form ("— Signups are in the forum: <url>"), or
+// the strip misses one of them and the round-trip corruption returns.
+const signupPointerMarker = "\n\n— Signups are in "
 
 // stripSignupPointer removes this service's own footer from a description read
 // back from Discord, so what is stored is what a person actually wrote.
@@ -548,7 +552,14 @@ func stripSignupPointer(description string) string {
 // elsewhere" is much less convincing than "20 places, 3 left".
 func signupPointer(ev *Event, boardChannelID string) string {
 	var b strings.Builder
-	b.WriteString(signupPointerMarker + boardChannelID + ">")
+	if ev.ForumPostID != "" {
+		// The forum post is signups AND discussion in one place, so it wins
+		// over the board channel whenever it exists.
+		fmt.Fprintf(&b, "%sthe forum: https://discord.com/channels/%s/%s",
+			signupPointerMarker, ev.GuildID, ev.ForumPostID)
+	} else {
+		b.WriteString(signupPointerMarker + "<#" + boardChannelID + ">")
+	}
 	if ev.Capacity > 0 {
 		fmt.Fprintf(&b, " (%s", pluralise(ev.Capacity, "place"))
 		if left := ev.Capacity - ev.AttendingCount; left > 0 {
@@ -559,13 +570,6 @@ func signupPointer(ev *Event, boardChannelID string) string {
 		b.WriteString(")")
 	}
 	b.WriteString(". Pressing Interested here does not hold you a place.")
-	if ev.ForumPostID != "" {
-		// A full URL, not a <#…> mention: the native event description is the
-		// one surface where mention rendering is not dependable across
-		// clients. Inside the pointer section on purpose, so the import strip
-		// removes it with the rest.
-		fmt.Fprintf(&b, "\nDiscussion: https://discord.com/channels/%s/%s", ev.GuildID, ev.ForumPostID)
-	}
 	return b.String()
 }
 

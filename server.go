@@ -335,10 +335,15 @@ func (s *Server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	// Capacity or status may have changed, so the public message is now stale.
+	// Capacity or status may have changed, so the public message is now stale —
+	// and so is the native event, which an API edit never used to reach: the
+	// modal and the web form pushed, this path silently did not.
 	go func() {
 		if err := s.RefreshSignupMessage(id); err != nil {
 			log.Printf("[discord-signup] refresh after update event=%d: %v", id, err)
+		}
+		if err := s.PushEditToDiscord(ev); err != nil {
+			log.Printf("[discord-signup] push after update event=%d: %v", id, err)
 		}
 	}()
 	writeJSON(w, http.StatusOK, ev)

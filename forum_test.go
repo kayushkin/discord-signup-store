@@ -265,8 +265,8 @@ func TestSurfacesLinkToTheForumPostExceptTheForumItself(t *testing.T) {
 		t.Errorf("the table line does not carry the masked link: %q", line)
 	}
 	pointer := signupPointer(ev, "board")
-	if !strings.Contains(pointer, "https://discord.com/channels/g1/post-9") {
-		t.Error("the native description does not carry the discussion URL")
+	if !strings.Contains(pointer, "the forum: https://discord.com/channels/g1/post-9") {
+		t.Errorf("the native description should send people to the forum post: %q", pointer)
 	}
 	// And the round-trip strip still removes the whole pointer, link included.
 	if got := stripSignupPointer("Real description." + pointer); got != "Real description." {
