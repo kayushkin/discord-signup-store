@@ -106,6 +106,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/events/{id}", s.handleUpdateEvent)
 	mux.HandleFunc("DELETE /api/events/{id}", s.handleDeleteEvent)
 	mux.HandleFunc("POST /api/events/{id}/message", s.handlePostMessage)
+	mux.HandleFunc("POST /api/events/{id}/publish", s.handlePublish)
 	mux.HandleFunc("GET /api/events/{id}/signups", s.handleRoster)
 	mux.HandleFunc("POST /api/events/{id}/signups", s.handleAdminJoin)
 	mux.HandleFunc("DELETE /api/events/{id}/signups/{userID}", s.handleAdminLeave)
@@ -301,6 +302,23 @@ func (s *Server) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ev, err := s.PostSignupMessage(id)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ev)
+}
+
+// handlePublish creates a native Discord scheduled event for a local roster.
+// The browser has had this since the web page existed; the machine API had not,
+// which made the two surfaces disagree about what was possible.
+func (s *Server) handlePublish(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id must be an integer"})
+		return
+	}
+	ev, err := s.PublishToDiscord(id, s.boardChannelID)
 	if err != nil {
 		writeStoreError(w, err)
 		return

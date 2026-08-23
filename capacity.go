@@ -183,6 +183,14 @@ func (s *Server) SetCapacity(eventID int64, capacity int, actor string) (*Event,
 	for i := range promoted {
 		go s.notifyPromoted(after, &promoted[i])
 	}
+	// Keep the native event in step. After the reply, like the roles and the
+	// card: the person editing must not wait on Discord, and a copy failing to
+	// update must not make a saved edit look failed.
+	go func() {
+		if err := s.PushEditToDiscord(after); err != nil {
+			log.Printf("[discord-signup] push edit of event %d to discord: %v", after.ID, err)
+		}
+	}()
 	return after, promoted, nil
 }
 

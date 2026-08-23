@@ -249,6 +249,19 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 
 	existing, err := s.store.EventByDiscordScheduledEventID(r.ID)
 	if errors.Is(err, ErrNotFound) {
+		// An event this bot created, with no local roster pointing at it yet,
+		// is almost always one we published seconds ago whose id has not been
+		// written back yet — the gateway is faster than the round trip.
+		// Importing it would create a second local event for the same native
+		// one, which the unique index then refuses, leaving a duplicate and a
+		// broken link. Skipping is right in the rare genuine-orphan case too:
+		// an event we made and then lost the roster for is not something to
+		// silently re-adopt.
+		if r.CreatorID != "" && r.CreatorID == s.applicationUserID() {
+			log.Printf("[discord-signup] skipping discord event %s (%q) — this bot created it "+
+				"and no local roster points at it yet", r.ID, r.Name)
+			return false, false, nil
+		}
 		// The board channel, not the event's own channel. A voice event's
 		// channel_id is the voice room people talk in; posting a signup card
 		// there would be invisible.
@@ -430,7 +443,10 @@ func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event,
 	}
 	location := ev.Location
 	if location == "" {
-		location = "See #" + boardChannelID
+		// Discord requires a non-empty location on an EXTERNAL event and
+		// refuses the whole request without one. This is a label, not invented
+		// data: it says where to look rather than claiming to know a venue.
+		location = "See the signup card"
 	}
 	payload := map[string]any{
 		"guild_id":             ev.GuildID,
@@ -446,6 +462,9 @@ func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event,
 	if err != nil {
 		return nil, fmt.Errorf("create discord scheduled event: %w", err)
 	}
+	// Written back immediately. Everything between the line above and this one
+	// is the window in which the gateway can see an event we own but cannot
+	// recognise, which is why syncOneScheduledEvent checks the creator.
 	return s.store.UpdateEvent(eventID, EventPatch{DiscordScheduledEventID: &created.ID})
 }
 
@@ -456,7 +475,7 @@ func signupPointer(ev *Event, boardChannelID string) string {
 	var b strings.Builder
 	b.WriteString("\n\n— Signups are in <#" + boardChannelID + ">")
 	if ev.Capacity > 0 {
-		fmt.Fprintf(&b, " (%d places", ev.Capacity)
+		fmt.Fprintf(&b, " (%s", pluralise(ev.Capacity, "place"))
 		if left := ev.Capacity - ev.AttendingCount; left > 0 {
 			fmt.Fprintf(&b, ", %d left", left)
 		} else {
@@ -569,4 +588,43 @@ func (s *Server) CompleteFinishedEvents() ([]int64, error) {
 		}
 	}
 	return finished, nil
+}
+
+// PushEditToDiscord updates the native scheduled event linked to a local
+// roster, so the two do not drift apart after an edit.
+//
+// Silently does nothing when there is no link, which is the common case: an
+// event that was never published has nothing to push to. A failure is returned
+// rather than swallowed, but callers treat it as non-fatal — the roster is the
+// source of truth and the native event is a copy of it.
+func (s *Server) PushEditToDiscord(ev *Event) error {
+	if s.discord == nil || ev.DiscordScheduledEventID == "" {
+		return nil
+	}
+	endsAt := ev.EndsAt
+	if endsAt == 0 {
+		endsAt = ev.StartsAt + assumedRunTimeWithoutEndTime
+	}
+	location := ev.Location
+	if location == "" {
+		location = "See the signup card"
+	}
+	payload := map[string]any{
+		"name":                 ev.Name,
+		"description":          ev.Description + signupPointer(ev, s.boardChannelID),
+		"scheduled_start_time": time.Unix(ev.StartsAt, 0).UTC().Format(time.RFC3339),
+		"scheduled_end_time":   time.Unix(endsAt, 0).UTC().Format(time.RFC3339),
+		"entity_metadata":      map[string]any{"location": location},
+	}
+	return s.discord.ModifyScheduledEvent(ev.GuildID, ev.DiscordScheduledEventID, payload)
+}
+
+// pluralise writes "1 place" and "6 places". A count is almost always rendered
+// next to its noun, and "1 places" in a description that Discord shows to the
+// whole server reads as carelessness.
+func pluralise(count int, noun string) string {
+	if count == 1 {
+		return fmt.Sprintf("%d %s", count, noun)
+	}
+	return fmt.Sprintf("%d %ss", count, noun)
 }

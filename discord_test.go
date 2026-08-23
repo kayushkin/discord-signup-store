@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // recordedCall is one request the fake Discord received.
@@ -330,5 +331,177 @@ func TestPostingACardIsRetriedOnTheNextSync(t *testing.T) {
 	posted, problems = srv.postMissingCards("g1")
 	if posted != 1 || len(problems) != 0 {
 		t.Fatalf("second pass: posted=%d problems=%v, want 1 and none", posted, problems)
+	}
+}
+
+// TestCreatingFromDiscordAlsoMakesANativeEvent covers the point of publishing:
+// the event shows up in the server's own event list, not only on the board.
+func TestCreatingFromDiscordAlsoMakesANativeEvent(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+	srv.SetDefaultTimezone("UTC")
+
+	fake.on(http.MethodPost, "/guilds/g1/scheduled-events", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"id":"native-99","name":"Board game night"}`)
+	})
+
+	start := time.Now().Add(72 * time.Hour).Unix()
+	ev, err := store.CreateEvent(Event{
+		GuildID: "g1", ChannelID: "board", Name: "Board game night",
+		StartsAt: start, Capacity: 8, Timezone: "UTC",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := srv.PublishToDiscord(ev.ID, "board"); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	var payload map[string]any
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPost && c.Path == "/guilds/g1/scheduled-events" {
+			payload = c.Body
+		}
+	}
+	if payload == nil {
+		t.Fatal("no native event was created")
+	}
+	// EXTERNAL (3) is the only entity type that needs no voice or stage
+	// channel, and GUILD_ONLY (2) is the only privacy level Discord accepts.
+	if payload["entity_type"].(float64) != 3 {
+		t.Errorf("entity_type = %v, want 3 (EXTERNAL)", payload["entity_type"])
+	}
+	if payload["privacy_level"].(float64) != 2 {
+		t.Errorf("privacy_level = %v, want 2", payload["privacy_level"])
+	}
+	// Discord refuses an EXTERNAL event with an empty location, so one is
+	// always sent even when nobody typed one.
+	meta := payload["entity_metadata"].(map[string]any)
+	if meta["location"].(string) == "" {
+		t.Error("no location sent; Discord refuses an EXTERNAL event without one")
+	}
+	// The description has to say that Interested does not hold a place, because
+	// the native event's own button cannot be capped or cleared.
+	if desc, _ := payload["description"].(string); !strings.Contains(desc, "does not hold you a place") {
+		t.Errorf("description = %q, want the warning about Interested", desc)
+	}
+	if payload["scheduled_end_time"] == nil || payload["scheduled_end_time"] == "" {
+		t.Error("no end time sent; Discord requires one on an EXTERNAL event")
+	}
+
+	got, err := store.GetEvent(ev.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got.DiscordScheduledEventID != "native-99" {
+		t.Errorf("link = %q, want the id Discord handed back", got.DiscordScheduledEventID)
+	}
+}
+
+// TestSyncSkipsEventsThisBotJustPublished closes the race that automatic
+// publishing opens.
+//
+// The gateway sees GUILD_SCHEDULED_EVENT_CREATE before the id we were handed
+// has been written back. Without the creator check, the sync would import our
+// own output as a second local event, and the unique index would then refuse
+// the link — leaving a duplicate and a broken pointer.
+func TestSyncSkipsEventsThisBotJustPublished(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+
+	fake.on(http.MethodGet, "/users/@me", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"id":"the-bot"}`)
+	})
+	fake.on(http.MethodGet, "/guilds/g1/scheduled-events", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `[
+			{"id":"ours","guild_id":"g1","creator_id":"the-bot","name":"Just published",
+			 "scheduled_start_time":"2026-09-05T19:00:00+00:00","status":1,"entity_type":3},
+			{"id":"theirs","guild_id":"g1","creator_id":"a-person","name":"Made by a human",
+			 "scheduled_start_time":"2026-09-06T19:00:00+00:00","status":1,"entity_type":3}
+		]`)
+	})
+
+	result, err := srv.SyncScheduledEvents("g1", "board")
+	if err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	if result.Imported != 1 {
+		t.Errorf("imported %d, want 1 — only the human's event", result.Imported)
+	}
+	events, err := store.ListEvents("g1", "", 50)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, ev := range events {
+		if ev.Name == "Just published" {
+			t.Error("the bot imported an event it had created itself")
+		}
+	}
+}
+
+// TestEditingPushesThroughToTheNativeEvent keeps the two from drifting.
+func TestEditingPushesThroughToTheNativeEvent(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+
+	start := time.Now().Add(48 * time.Hour).Unix()
+	ev, err := store.CreateEvent(Event{
+		GuildID: "g1", ChannelID: "board", Name: "Before", StartsAt: start,
+		Capacity: 4, Timezone: "UTC", DiscordScheduledEventID: "native-7",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	ev.Name = "After"
+	ev.Location = "The new place"
+	if err := srv.PushEditToDiscord(ev); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+
+	var patched map[string]any
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPatch && c.Path == "/guilds/g1/scheduled-events/native-7" {
+			patched = c.Body
+		}
+	}
+	if patched == nil {
+		t.Fatal("the native event was not updated")
+	}
+	if patched["name"].(string) != "After" {
+		t.Errorf("name = %v, want \"After\"", patched["name"])
+	}
+	meta := patched["entity_metadata"].(map[string]any)
+	if meta["location"].(string) != "The new place" {
+		t.Errorf("location = %v", meta["location"])
+	}
+}
+
+// TestUnpublishedEventsPushNothing stops an edit on an ordinary event making a
+// pointless Discord call.
+func TestUnpublishedEventsPushNothing(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+
+	if err := srv.PushEditToDiscord(&Event{ID: 1, GuildID: "g1", Name: "Local only"}); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	if calls := fake.recorded(); len(calls) != 0 {
+		t.Errorf("made %d Discord calls for an event with no native counterpart", len(calls))
+	}
+}
+
+func TestPluralise(t *testing.T) {
+	for count, want := range map[int]string{0: "0 places", 1: "1 place", 2: "2 places", 20: "20 places"} {
+		if got := pluralise(count, "place"); got != want {
+			t.Errorf("pluralise(%d) = %q, want %q", count, got, want)
+		}
 	}
 }

@@ -559,9 +559,26 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 			ev.Name, s.BoardChannelID()))
 		return
 	}
-	s.replyEphemeral(w, fmt.Sprintf("**%s** is up in <#%s>.\n%s\n\nAnyone can press Join. "+
-		"Press Edit on the card to change any of this.",
-		ev.Name, s.BoardChannelID(), describeEventLine(ev, values.Capacity)))
+	// Also published as a native Discord event, so it appears in the server's
+	// own event list and fires Discord's start notification. Best effort: the
+	// roster and its card already exist and are the real thing, so a failure
+	// here is reported rather than allowed to undo them.
+	published := true
+	if _, err := s.PublishToDiscord(ev.ID, s.BoardChannelID()); err != nil {
+		log.Printf("[discord-signup] publish event %d to discord: %v", ev.ID, err)
+		published = false
+	}
+	reply := fmt.Sprintf("**%s** is up in <#%s>.\n%s",
+		ev.Name, s.BoardChannelID(), describeEventLine(ev, values.Capacity))
+	if published {
+		reply += "\n\nIt is also in the server's own event list. Pressing **Interested** " +
+			"there signs people up here too."
+	} else {
+		reply += "\n\n⚠️ It could not be added to the server's event list — the signup " +
+			"card is unaffected. Use Publish on the web page to try again."
+	}
+	reply += "\n\nAnyone can press Join. Press Edit on the card to change any of this."
+	s.replyEphemeral(w, reply)
 }
 
 func describeEventLine(ev *Event, capacity int) string {
