@@ -654,9 +654,15 @@ func (s *Server) CompleteFinishedEvents() ([]int64, error) {
 			log.Printf("[discord-signup] move event %d to past events: %v", id, err)
 		}
 		// It has left the live list, so the panel has to stop showing it.
-		// It has left the live list, so the table has to stop showing it.
+		// It has left the live list, so the table has to stop showing it and
+		// its discussion closes with it.
 		if ev, err := s.store.GetEvent(id); err == nil {
 			s.refreshEventTableQuietly(ev.GuildID)
+			if ev.ThreadID != "" {
+				if err := s.discord.ArchiveThread(ev.ThreadID); err != nil {
+					log.Printf("[discord-signup] archive thread for event %d: %v", id, err)
+				}
+			}
 		}
 	}
 	return finished, nil

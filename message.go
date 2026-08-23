@@ -182,7 +182,47 @@ func (s *Server) PostSignupMessage(eventID int64) (*Event, error) {
 	if err != nil {
 		return nil, fmt.Errorf("post signup message: %w", err)
 	}
-	return s.store.UpdateEvent(eventID, EventPatch{MessageID: &messageID})
+	updated, err := s.store.UpdateEvent(eventID, EventPatch{MessageID: &messageID})
+	if err != nil {
+		return nil, err
+	}
+	s.ensureEventThread(updated)
+	return updated, nil
+}
+
+// ensureEventThread makes sure a live event's card carries a discussion
+// thread, exactly once.
+//
+// Hung off RefreshSignupMessage rather than only event creation, because that
+// is the choke point every maintained card passes through — so events that
+// existed before threads did grow one on their next activity, with no
+// backfill pass to write or forget. Idempotent via thread_id, so the cost on
+// every later refresh is one column read.
+func (s *Server) ensureEventThread(ev *Event) {
+	if s.discord == nil || ev.MessageID == "" || ev.ThreadID != "" || ev.Status != StatusOpen {
+		return
+	}
+	threadID, err := s.discord.CreateThreadFromMessage(ev.ChannelID, ev.MessageID, truncate(ev.Name, 100))
+	if err != nil {
+		// Loud and non-fatal: the card and roster are the product, the thread
+		// is a place to talk about them.
+		log.Printf("[discord-signup] create thread for event %d: %v", ev.ID, err)
+		return
+	}
+	if _, err := s.store.UpdateEvent(ev.ID, EventPatch{ThreadID: &threadID}); err != nil {
+		log.Printf("[discord-signup] record thread for event %d: %v", ev.ID, err)
+		return
+	}
+	// A seed so the thread opens with its purpose rather than empty. Best
+	// effort; the thread exists either way.
+	if _, err := s.discord.CreateMessage(threadID, map[string]any{
+		"content":          fmt.Sprintf("Chat about **%s** here. Signups stay on the card above.", ev.Name),
+		"allowed_mentions": map[string]any{"parse": []string{}},
+	}); err != nil {
+		log.Printf("[discord-signup] seed thread for event %d: %v", ev.ID, err)
+	}
+	log.Printf("[discord-signup] opened thread %s for event %d (%q)", threadID, ev.ID, ev.Name)
+	ev.ThreadID = threadID
 }
 
 // RefreshSignupMessage rewrites the public message to match the roster.
@@ -201,6 +241,7 @@ func (s *Server) RefreshSignupMessage(eventID int64) error {
 	if err != nil {
 		return err
 	}
+	s.ensureEventThread(ev)
 	return s.discord.EditMessage(ev.ChannelID, ev.MessageID, RenderSignupMessage(ev, roster))
 }
 

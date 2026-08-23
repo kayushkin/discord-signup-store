@@ -276,14 +276,21 @@ func TestOnlyImportedEventsGetACardPostedAutomatically(t *testing.T) {
 		t.Fatalf("posted %d cards, want exactly 1", posted)
 	}
 
-	var createdIn []string
+	var boardPosts, threadCreates int
 	for _, c := range fake.recorded() {
-		if c.Method == http.MethodPost && strings.HasSuffix(c.Path, "/messages") {
-			createdIn = append(createdIn, c.Path)
+		switch {
+		case c.Method == http.MethodPost && c.Path == "/channels/board-channel/messages":
+			boardPosts++
+		case c.Method == http.MethodPost && strings.HasSuffix(c.Path, "/threads"):
+			threadCreates++
 		}
 	}
-	if len(createdIn) != 1 || createdIn[0] != "/channels/board-channel/messages" {
-		t.Errorf("message posts = %v, want one to the board channel", createdIn)
+	if boardPosts != 1 {
+		t.Errorf("%d posts to the board, want 1", boardPosts)
+	}
+	// The card gets a discussion thread the moment it exists.
+	if threadCreates != 1 {
+		t.Errorf("%d threads created, want 1", threadCreates)
 	}
 
 	got, err := store.GetEvent(shouldPost.ID)
@@ -650,5 +657,67 @@ func TestTheTitleIsPushedOnEveryRosterChange(t *testing.T) {
 	}
 	if pushed != "[1/3] Games" {
 		t.Errorf("pushed name = %q, want the badge to reflect the new count", pushed)
+	}
+}
+
+// TestThreadIsCreatedOnceAndArchivedWhenTheEventEnds pins the lifecycle: one
+// thread per event however many times the card refreshes, closed by the sweep.
+func TestThreadIsCreatedOnceAndArchivedWhenTheEventEnds(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+
+	past := time.Now().Add(-10 * time.Hour).Unix()
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Talky",
+		StartsAt: past + 20*3600, EndsAt: past + 21*3600})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := srv.PostSignupMessage(ev.ID); err != nil {
+		t.Fatalf("post card: %v", err)
+	}
+	// Three more refreshes must not open three more threads.
+	for i := 0; i < 3; i++ {
+		if err := srv.RefreshSignupMessage(ev.ID); err != nil {
+			t.Fatalf("refresh %d: %v", i, err)
+		}
+	}
+	var creates int
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPost && strings.HasSuffix(c.Path, "/threads") {
+			creates++
+		}
+	}
+	if creates != 1 {
+		t.Fatalf("%d thread creates across four card writes, want 1", creates)
+	}
+	got, err := store.GetEvent(ev.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got.ThreadID == "" {
+		t.Fatal("the thread id was not recorded")
+	}
+
+	// Push the event into the past and sweep: the thread archives.
+	newEnd := past
+	newStart := past - 3600
+	if _, err := store.UpdateEvent(ev.ID, EventPatch{StartsAt: &newStart, EndsAt: &newEnd}); err != nil {
+		t.Fatalf("re-date: %v", err)
+	}
+	if _, err := srv.CompleteFinishedEvents(); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	var archived bool
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPatch && c.Path == "/channels/"+got.ThreadID {
+			if v, ok := c.Body["archived"].(bool); ok && v {
+				archived = true
+			}
+		}
+	}
+	if !archived {
+		t.Error("the thread was not archived when the event finished")
 	}
 }

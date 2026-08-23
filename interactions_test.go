@@ -451,14 +451,14 @@ func TestCreateButtonMakesAnEventAndPostsItsCard(t *testing.T) {
 	if created.MessageID == "" {
 		t.Error("no signup card was posted")
 	}
-	var posts []string
+	var boardPosts int
 	for _, c := range fake.recorded() {
-		if c.Method == http.MethodPost && strings.HasSuffix(c.Path, "/messages") {
-			posts = append(posts, c.Path)
+		if c.Method == http.MethodPost && c.Path == "/channels/board-channel/messages" {
+			boardPosts++
 		}
 	}
-	if len(posts) != 1 || posts[0] != "/channels/board-channel/messages" {
-		t.Errorf("card posted to %v, want the board channel", posts)
+	if boardPosts != 1 {
+		t.Errorf("%d posts to the board, want exactly the card", boardPosts)
 	}
 }
 

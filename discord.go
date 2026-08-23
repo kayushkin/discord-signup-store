@@ -466,3 +466,37 @@ func (c *DiscordClient) DeleteMessage(channelID, messageID string) error {
 	_, err := c.do(http.MethodDelete, "/channels/"+channelID+"/messages/"+messageID, nil)
 	return err
 }
+
+// CreateThreadFromMessage starts a public thread on a message and returns the
+// thread's channel id — which Discord makes the SAME as the message's id, a
+// fact worth knowing when reading logs but never relied on in code.
+func (c *DiscordClient) CreateThreadFromMessage(channelID, messageID, name string) (string, error) {
+	raw, err := c.do(http.MethodPost,
+		"/channels/"+channelID+"/messages/"+messageID+"/threads",
+		map[string]any{
+			"name": name,
+			// The longest Discord offers. Inactivity only hides a thread from
+			// the channel list; a new message unarchives it automatically, so
+			// nothing is lost either way.
+			"auto_archive_duration": 10080,
+		})
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", fmt.Errorf("decode created thread: %w", err)
+	}
+	return out.ID, nil
+}
+
+// ArchiveThread closes a discussion thread. Not locked: someone posting a
+// "how did it go?" into an archived thread should reopen it, and locking would
+// make that a permission error instead.
+func (c *DiscordClient) ArchiveThread(threadID string) error {
+	_, err := c.do(http.MethodPatch, "/channels/"+threadID,
+		map[string]any{"archived": true})
+	return err
+}

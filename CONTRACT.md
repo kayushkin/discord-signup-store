@@ -156,6 +156,20 @@ place so the row flips under the cursor.
 Capped at six events: a row costs up to five components plus a separator, so
 six is 37 of the 40 budget — seven measured out at 43.
 
+## Discussion threads
+
+Every open event's signup card grows a public thread, named after the event and
+seeded with one line saying what it is for. Created from `RefreshSignupMessage`
+— the choke point every maintained card passes through — so events that predate
+the feature grow a thread on their next activity, with no backfill pass to
+write or forget. Idempotent via `thread_id`, which is stored even though Discord
+gives a message thread the same id as its parent: a reposted card gets a new
+message id while the old thread lives on.
+
+When the event completes, the sweep archives the thread (not locked — a
+late "how did it go?" reopens it, and locking would turn that into a
+permission error).
+
 ## Conventions## The native event's title
 
 When a linked event has a capacity, its Discord title carries a badge:
@@ -189,6 +203,20 @@ place so the row flips under the cursor.
 
 Capped at six events: a row costs up to five components plus a separator, so
 six is 37 of the 40 budget — seven measured out at 43.
+
+## Discussion threads
+
+Every open event's signup card grows a public thread, named after the event and
+seeded with one line saying what it is for. Created from `RefreshSignupMessage`
+— the choke point every maintained card passes through — so events that predate
+the feature grow a thread on their next activity, with no backfill pass to
+write or forget. Idempotent via `thread_id`, which is stored even though Discord
+gives a message thread the same id as its parent: a reposted card gets a new
+message id while the old thread lives on.
+
+When the event completes, the sweep archives the thread (not locked — a
+late "how did it go?" reopens it, and locking would turn that into a
+permission error).
 
 ## Conventions
 

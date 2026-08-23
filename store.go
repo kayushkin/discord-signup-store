@@ -66,6 +66,10 @@ type Event struct {
 	// set. Never defaulted — see the note on the column.
 	Timezone string `json:"timezone"`
 	Origin   string `json:"origin"`
+	// ThreadID is the discussion thread on the signup card, "" until one is
+	// made. Stored rather than derived from MessageID because a reposted card
+	// gets a new message id while the old thread lives on.
+	ThreadID string `json:"thread_id"`
 	// DiscordInterestedCount is Discord's own number, carried for display
 	// beside ours. It is never the roster and never gates a capacity decision.
 	DiscordInterestedCount int    `json:"discord_interested_count"`
@@ -224,6 +228,13 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	{"events", "discord_synced_at", "INTEGER NOT NULL DEFAULT 0"},
 	{"events", "created_by", "TEXT NOT NULL DEFAULT ''"},
 
+	// The discussion thread hanging off the signup card. Discord gives a
+	// message thread the SAME id as its parent message, but it is stored
+	// separately anyway: the card can be reposted (new message id) while the
+	// old thread lives on, and a column that pretended they are one value
+	// would silently point at nothing after the first repost.
+	{"events", "thread_id", "TEXT NOT NULL DEFAULT ''"},
+
 	// How this person got onto the roster. Not cosmetic: it decides what
 	// un-marking Interested on Discord does to them. Someone who pressed Join
 	// keeps their place regardless of their Discord RSVP; someone who only ever
@@ -359,14 +370,14 @@ func (s *Store) CreateEvent(e Event) (*Event, error) {
 const eventColumns = `id, guild_id, channel_id, message_id, discord_scheduled_event_id,
 	name, description, capacity, status, attending_role_id, waitlist_role_id,
 	starts_at, ends_at, location, entity_type, recurrence_rule, timezone, origin,
-	discord_interested_count, discord_synced_at, created_by, created_at, updated_at`
+	thread_id, discord_interested_count, discord_synced_at, created_by, created_at, updated_at`
 
 func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 	var e Event
 	err := sc.Scan(&e.ID, &e.GuildID, &e.ChannelID, &e.MessageID, &e.DiscordScheduledEventID,
 		&e.Name, &e.Description, &e.Capacity, &e.Status, &e.AttendingRoleID, &e.WaitlistRoleID,
 		&e.StartsAt, &e.EndsAt, &e.Location, &e.EntityType, &e.RecurrenceRule, &e.Timezone,
-		&e.Origin, &e.DiscordInterestedCount, &e.DiscordSyncedAt, &e.CreatedBy,
+		&e.Origin, &e.ThreadID, &e.DiscordInterestedCount, &e.DiscordSyncedAt, &e.CreatedBy,
 		&e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -570,6 +581,9 @@ func (s *Store) UpdateEvent(id int64, patch EventPatch) (*Event, error) {
 		add("recurrence_rule", rule)
 		add("timezone", zone)
 	}
+	if patch.ThreadID != nil {
+		add("thread_id", *patch.ThreadID)
+	}
 	if patch.DiscordInterestedCount != nil {
 		add("discord_interested_count", *patch.DiscordInterestedCount)
 		add("discord_synced_at", now())
@@ -608,6 +622,7 @@ type EventPatch struct {
 	RecurrenceRule          *string `json:"recurrence_rule"`
 	Timezone                *string `json:"timezone"`
 	DiscordInterestedCount  *int    `json:"discord_interested_count"`
+	ThreadID                *string `json:"thread_id"`
 }
 
 // validateRecurrence enforces the one rule that cannot be defaulted: a
