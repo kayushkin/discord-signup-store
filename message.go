@@ -230,7 +230,7 @@ func (s *Server) syncAfterChange(ev *Event, changes []stateChange) {
 	// leave, Interested, promotion, operator override — so there is no path
 	// that updates a card and forgets the row. One message, not the whole
 	// table: this runs on every signup.
-	s.refreshTableRowQuietly(ev)
+	s.refreshEventPanelQuietly(ev.GuildID)
 }
 
 // applyRoles makes one person's roles match one state.

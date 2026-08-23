@@ -102,49 +102,39 @@ separate requests and nothing stops the second arriving alone.
 Raising a limit promotes people off the waitlist in arrival order and messages
 each of them. Lowering it promotes nobody and removes nobody.
 
-## The consolidated table
+## The consolidated panel
 
-**One Discord message per event**, each a single compact line with that event's
-buttons, plus a header message above them.
+**One Components V2 message per guild**, redrawn in place on every change. A
+container of Sections, one per event: name, when and where, the count, and a
+**Join** button as the section's accessory.
 
-That shape is forced, not chosen. A message carries **five action rows** and a
-button row holds **five buttons**, so the whole table in one message tops out
-around twelve events and leaves the buttons in a block that lines up with
-nothing. Split across messages, every row gets its own five-button row, the
-buttons sit beside the event they act on, and there is no ceiling on how many
-events fit.
+Because it is one message redrawn whole, it is always in date order — the
+row-per-message version it replaced could not sort itself, since Discord will
+not reorder messages.
 
-The buttons are the **same custom_ids the full card uses** — a row and a card
-are two views of one event, and separate ids would mean two handlers to keep in
-step. Only `signup:details:{id}` is new. It opens a **modal** rather than posting an
-ephemeral message, so reading an event is a dismissible overlay that leaves the
-channel alone.
+⚠️ **A Section takes exactly one accessory.** Join is the only button that fits
+beside a row, so Details is a menu underneath and Leave and Edit are on the
+event's card. A closed event gets Details instead of Join rather than no button,
+because the accessory is required and a Join on something not taking signups is
+a trap.
 
-Every component in it is a **Text Display** (type 10), which Discord allows in
-modals and which is genuinely read-only. An earlier version prefilled ordinary
-text inputs, because there is no read-only text input — boxes that looked
-editable and were not. There are now no inputs at all.
+### The component budget
 
-Three blocks, in the order the questions get asked: **description**, **going**,
-**waitlist**. The roster is listed by display name, not `<@id>` — a modal does
-not resolve a mention, so one shows as a raw snowflake.
+Discord allows **40 components in a message**, and everything nested counts —
+the container, each section, the text inside it, every separator, and every
+option in the menu. Measured against the live API, not inferred:
 
-A closed event keeps Details and Edit and loses Join and Leave.
-
-| | |
+| Layout | Events that fit |
 |---|---|
-| A signup | rewrites that one row, in place, so it keeps its position |
-| An event finishing | deletes its row and updates the header |
-| `signup:table-rebuild:0` | deletes every message and reposts in date order |
+| separators + menu | 9 |
+| menu only | 11 |
+| neither | 18 |
 
-**Discord will not reorder messages.** Rows sit in the order they were posted,
-so a new event that starts sooner than existing ones lands at the bottom.
-Rebuild is the only way to sort, which is why it is a button somebody presses
-rather than something that happens on its own — it deletes and reposts
-everything, and answers before it starts because it will not finish inside
-Discord's three-second interaction window.
+`planPanel` degrades in that order and the heading says when events were left
+out. Separators go before the menu because they are lines and the menu is the
+only way to read a description and roster.
 
-## Conventions
+## Conventions## Conventions
 
 - **Capacity `0` means unlimited**, matching Discord's own convention for
   channel `user_limit` and invite `max_uses`. It does not mean "unset".
