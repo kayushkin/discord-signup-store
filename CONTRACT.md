@@ -32,7 +32,8 @@ service's, and proxying any other route publishes roster editing to the world.
 | POST | `/api/events/{id}/signups` | Add someone by id. Goes through the same cap and waitlist as a click. |
 | DELETE | `/api/events/{id}/signups/{userID}?actor=` | Remove someone. Promotes the next in line, same as a click. |
 | GET | `/api/events/{id}/history?limit=` | The append-only transition log. |
-| POST | `/api/guilds/{guildID}/sync` | Pull that guild's native Discord scheduled events into the store. What the scheduler job calls. |
+| POST | `/api/sync` | Pull native events from **every** server the bot is in and post a card for any new one. What the scheduler job calls; names no guild, so adding a server needs no change. |
+| POST | `/api/guilds/{guildID}/sync` | The same, for one guild. |
 | POST | `/api/events/complete-finished` | Archive events whose time has passed and strip the buttons off their cards. Also runs on a five-minute ticker. |
 
 ## Browser surface (YOUR_DOMAIN — Discord login required)

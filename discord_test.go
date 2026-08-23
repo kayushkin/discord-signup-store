@@ -236,3 +236,99 @@ func TestLongRosterIsTrimmedToDiscordsLimit(t *testing.T) {
 		t.Error("the message was trimmed without saying so")
 	}
 }
+
+// TestOnlyImportedEventsGetACardPostedAutomatically pins the rule that decides
+// what appears in the channel without anyone asking.
+//
+// An event created in Discord is already public the moment it exists, so
+// mirroring it surprises nobody. One created on the web page has been announced
+// nowhere, and posting it the instant it is saved would take the decision away
+// from whoever wrote it.
+func TestOnlyImportedEventsGetACardPostedAutomatically(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board-channel")
+
+	mk := func(name, origin, status, messageID string) *Event {
+		ev, err := store.CreateEvent(Event{
+			GuildID: "g1", ChannelID: "board-channel", Name: name,
+			Origin: origin, Status: status, MessageID: messageID,
+			DiscordScheduledEventID: "d-" + name,
+		})
+		if err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		return ev
+	}
+	shouldPost := mk("imported-open", OriginDiscord, StatusOpen, "")
+	mk("imported-already-posted", OriginDiscord, StatusOpen, "existing-msg")
+	mk("imported-finished", OriginDiscord, StatusCompleted, "")
+	mk("imported-cancelled", OriginDiscord, StatusCancelled, "")
+	mk("made-here", OriginLocal, StatusOpen, "")
+
+	posted, problems := srv.postMissingCards("g1")
+	if len(problems) != 0 {
+		t.Fatalf("problems: %v", problems)
+	}
+	if posted != 1 {
+		t.Fatalf("posted %d cards, want exactly 1", posted)
+	}
+
+	var createdIn []string
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPost && strings.HasSuffix(c.Path, "/messages") {
+			createdIn = append(createdIn, c.Path)
+		}
+	}
+	if len(createdIn) != 1 || createdIn[0] != "/channels/board-channel/messages" {
+		t.Errorf("message posts = %v, want one to the board channel", createdIn)
+	}
+
+	got, err := store.GetEvent(shouldPost.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got.MessageID == "" {
+		t.Error("the posted card's message id was not recorded, so the next sync would post it again")
+	}
+}
+
+// TestPostingACardIsRetriedOnTheNextSync covers Discord being unavailable at
+// the moment an event is imported. The empty message id is what makes the
+// retry automatic — there is no failed-post flag to get stuck.
+func TestPostingACardIsRetriedOnTheNextSync(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board-channel")
+
+	if _, err := store.CreateEvent(Event{
+		GuildID: "g1", ChannelID: "board-channel", Name: "flaky",
+		Origin: OriginDiscord, DiscordScheduledEventID: "d-flaky",
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	var attempts int
+	fake.on(http.MethodPost, "/channels/board-channel/messages", func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"code":0,"message":"upstream is having a moment"}`)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"id":"msg-later"}`)
+	})
+
+	posted, problems := srv.postMissingCards("g1")
+	if posted != 0 || len(problems) != 1 {
+		t.Fatalf("first pass: posted=%d problems=%v, want 0 and one problem", posted, problems)
+	}
+
+	posted, problems = srv.postMissingCards("g1")
+	if posted != 1 || len(problems) != 0 {
+		t.Fatalf("second pass: posted=%d problems=%v, want 1 and none", posted, problems)
+	}
+}

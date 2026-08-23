@@ -323,10 +323,11 @@ func (s *Server) handleWebSync(w http.ResponseWriter, r *http.Request) {
 		total.Imported += result.Imported
 		total.Updated += result.Updated
 		total.Unchanged += result.Unchanged
+		total.Posted += result.Posted
 		total.Problems = append(total.Problems, result.Problems...)
 	}
-	notice := fmt.Sprintf("Pulled from Discord: %d new, %d updated, %d unchanged.",
-		total.Imported, total.Updated, total.Unchanged)
+	notice := fmt.Sprintf("Pulled from Discord: %d new, %d updated, %d unchanged, %d cards posted.",
+		total.Imported, total.Updated, total.Unchanged, total.Posted)
 	if len(total.Problems) > 0 {
 		notice += " Problems: " + strings.Join(total.Problems, "; ")
 	}

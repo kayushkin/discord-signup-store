@@ -55,6 +55,7 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver) (*GatewayLis
 	listener := &GatewayListener{session: session, server: server}
 	session.AddHandler(listener.onUserAdd)
 	session.AddHandler(listener.onUserRemove)
+	session.AddHandler(listener.onScheduledEventCreated)
 	session.AddHandler(listener.onScheduledEventChanged)
 	session.AddHandler(func(_ *discordgo.Session, r *discordgo.Ready) {
 		log.Printf("[discord-signup] gateway ready as %s#%s, %d guild(s)",
@@ -154,6 +155,26 @@ func (g *GatewayListener) onUserRemove(_ *discordgo.Session, e *discordgo.GuildS
 		go g.server.notifyPromoted(fresh, result.Promoted)
 	}
 	g.server.syncAfterChange(fresh, changes)
+}
+
+// onScheduledEventCreated imports a brand new native event and posts its card
+// straight away.
+//
+// The ten-minute poll would get there eventually, but "eventually" is the wrong
+// answer for something a person just created and is watching for. Someone can
+// make an event in Discord and press Interested on it within seconds, and that
+// first RSVP has nowhere to land until the import has happened.
+func (g *GatewayListener) onScheduledEventCreated(_ *discordgo.Session, e *discordgo.GuildScheduledEventCreate) {
+	if e.GuildScheduledEvent == nil {
+		return
+	}
+	result, err := g.server.SyncScheduledEvents(e.GuildID, g.server.BoardChannelID())
+	if err != nil {
+		log.Printf("[discord-signup] import new discord event %s: %v", e.ID, err)
+		return
+	}
+	log.Printf("[discord-signup] discord event %q created: %d imported, %d cards posted",
+		e.Name, result.Imported, result.Posted)
 }
 
 // onScheduledEventChanged keeps the local copy fresh when someone edits a

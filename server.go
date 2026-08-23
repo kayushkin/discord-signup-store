@@ -83,6 +83,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/events/{id}/signups/{userID}", s.handleAdminLeave)
 	mux.HandleFunc("GET /api/events/{id}/history", s.handleHistory)
 	mux.HandleFunc("POST /api/guilds/{guildID}/sync", s.handleSyncGuild)
+	mux.HandleFunc("POST /api/sync", s.handleSyncAllGuilds)
 	mux.HandleFunc("POST /api/events/complete-finished", s.handleCompleteFinished)
 
 	// Browser surface — session-gated.
@@ -100,6 +101,18 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/post-message", s.handleWebPostMessage)
 	mux.HandleFunc("POST /events/{id}/publish", s.handleWebPublish)
 	mux.HandleFunc("POST /sync", s.handleWebSync)
+}
+
+// handleSyncAllGuilds pulls native events from every server the bot is in and
+// posts cards for the new ones. This is what the scheduler job calls: it names
+// no guild, so adding the bot to another server needs no change here or there.
+func (s *Server) handleSyncAllGuilds(w http.ResponseWriter, r *http.Request) {
+	result, err := s.SyncAllGuilds()
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 // handleCompleteFinished archives events whose time has passed. Exposed as well

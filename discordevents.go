@@ -127,6 +127,7 @@ type SyncResult struct {
 	Imported  int      `json:"imported"`
 	Updated   int      `json:"updated"`
 	Unchanged int      `json:"unchanged"`
+	Posted    int      `json:"posted"`
 	Problems  []string `json:"problems,omitempty"`
 }
 
@@ -168,7 +169,74 @@ func (s *Server) SyncScheduledEvents(guildID, boardChannelID string) (*SyncResul
 			result.Unchanged++
 		}
 	}
+	posted, problems := s.postMissingCards(guildID)
+	result.Posted = posted
+	result.Problems = append(result.Problems, problems...)
 	return result, nil
+}
+
+// postMissingCards puts a signup card on the board for every imported event
+// that has not got one yet.
+//
+// Only events with origin 'discord'. An event created here is deliberately not
+// posted automatically: it has not been announced anywhere, so its author gets
+// to look at it before it appears in a channel. One created in Discord is
+// already public the moment it exists, so mirroring it costs nobody a surprise.
+//
+// Driven off an empty message_id rather than a flag, so it is naturally
+// idempotent and naturally retries: a post that fails leaves the id empty and
+// the next sync tries again.
+func (s *Server) postMissingCards(guildID string) (posted int, problems []string) {
+	events, err := s.store.ListEvents(guildID, "", 500)
+	if err != nil {
+		return 0, []string{"list events: " + err.Error()}
+	}
+	for _, ev := range events {
+		if ev.Origin != OriginDiscord || ev.MessageID != "" {
+			continue
+		}
+		// Nothing is posted for an event that is over. A card for last month's
+		// event appearing on the board today reads as an announcement.
+		if IsArchived(ev.Status) {
+			continue
+		}
+		if _, err := s.PostSignupMessage(ev.ID); err != nil {
+			problems = append(problems, fmt.Sprintf("post card for %q: %v", ev.Name, err))
+			continue
+		}
+		log.Printf("[discord-signup] posted a signup card for imported event %d (%q)", ev.ID, ev.Name)
+		posted++
+	}
+	return posted, problems
+}
+
+// SyncAllGuilds pulls native events from every server the bot is in.
+//
+// The guild list comes from Discord rather than from configuration, so adding
+// the bot to another server is all it takes — there is no list here to forget
+// to update, and no guild id written into a cron command.
+func (s *Server) SyncAllGuilds() (*SyncResult, error) {
+	if s.discord == nil {
+		return nil, errors.New("no discord client configured")
+	}
+	guilds, err := s.discord.ListBotGuilds()
+	if err != nil {
+		return nil, fmt.Errorf("list bot guilds: %w", err)
+	}
+	total := &SyncResult{}
+	for _, g := range guilds {
+		result, err := s.SyncScheduledEvents(g.ID, s.boardChannelID)
+		if err != nil {
+			total.Problems = append(total.Problems, g.Name+": "+err.Error())
+			continue
+		}
+		total.Imported += result.Imported
+		total.Updated += result.Updated
+		total.Unchanged += result.Unchanged
+		total.Posted += result.Posted
+		total.Problems = append(total.Problems, result.Problems...)
+	}
+	return total, nil
 }
 
 func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID string) (changed, imported bool, err error) {
