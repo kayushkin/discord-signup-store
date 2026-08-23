@@ -263,6 +263,10 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		s.handleEditButton(w, in, eventID)
 	case "create":
 		s.handleCreateButton(w, in)
+	case "details":
+		if ev := mustEvent(s, eventID, w); ev != nil {
+			s.replyTableDetails(w, ev)
+		}
 	default:
 		s.replyEphemeral(w, "Unknown signup action.")
 	}
@@ -397,6 +401,11 @@ func EditCustomID(eventID int64) string {
 // EditModalCustomID builds the custom_id for the form that button opens.
 func EditModalCustomID(eventID int64) string {
 	return fmt.Sprintf("%s:edit-modal:%d", customIDPrefix, eventID)
+}
+
+// DetailsCustomID builds the custom_id for a table row's Details button.
+func DetailsCustomID(eventID int64) string {
+	return fmt.Sprintf("%s:details:%d", customIDPrefix, eventID)
 }
 
 // CreateCustomID is the button on the how-to message. It carries event id 0,
@@ -575,7 +584,7 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 	// own event list and fires Discord's start notification. Best effort: the
 	// roster and its card already exist and are the real thing, so a failure
 	// here is reported rather than allowed to undo them.
-	go s.refreshEventTableQuietly(ev.GuildID)
+	go s.refreshTableRowQuietly(ev)
 
 	published := true
 	if _, err := s.PublishToDiscord(ev.ID, s.BoardChannelID()); err != nil {
@@ -691,4 +700,15 @@ func truncate(s string, max int) string {
 		return s
 	}
 	return string(runes[:max-1]) + "…"
+}
+
+// mustEvent loads an event for a button press, answering the interaction and
+// returning nil when it is gone.
+func mustEvent(s *Server, eventID int64, w http.ResponseWriter) *Event {
+	ev, err := s.store.GetEvent(eventID)
+	if err != nil {
+		s.replyEphemeral(w, "That event no longer exists.")
+		return nil
+	}
+	return ev
 }

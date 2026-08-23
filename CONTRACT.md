@@ -104,26 +104,35 @@ each of them. Lowering it promotes nobody and removes nobody.
 
 ## The consolidated table
 
-One message per guild, listing every live event, edited in place rather than
-reposted so it keeps its position in the channel.
+**One Discord message per event**, each a single compact line with that event's
+buttons, plus a header message above them.
 
-Its shape is dictated by Discord's component ceilings, not by preference: a
-message holds **five action rows**, and a select menu takes a whole row and
-holds **25 options**. A Join button per row would top out around twelve events
-and line up with nothing, so the table itself is text in a code block — the only
-way to get a fixed-width font — and four select menus act as columns over it:
+That shape is forced, not chosen. A message carries **five action rows** and a
+button row holds **five buttons**, so the whole table in one message tops out
+around twelve events and leaves the buttons in a block that lines up with
+nothing. Split across messages, every row gets its own five-button row, the
+buttons sit beside the event they act on, and there is no ceiling on how many
+events fit.
 
-| Row | |
+The buttons are the **same custom_ids the full card uses** — a row and a card
+are two views of one event, and separate ids would mean two handlers to keep in
+step. Only `signup:details:{id}` is new, because a description does not fit on a
+line and belongs in an ephemeral reply.
+
+A closed event keeps Details and Edit and loses Join and Leave.
+
+| | |
 |---|---|
-| `signup:table-join:0` | Join. Open events only; a full one says so in its option. |
-| `signup:table-leave:0` | Leave. |
-| `signup:table-details:0` | Description and roster, ephemerally. |
-| `signup:table-edit:0` | Opens the edit modal. Same permission check as the card. |
-| `signup:table-refresh:0` | Redraw. |
+| A signup | rewrites that one row, in place, so it keeps its position |
+| An event finishing | deletes its row and updates the header |
+| `signup:table-rebuild:0` | deletes every message and reposts in date order |
 
-The event id travels in the select's chosen **value**, not the custom_id,
-because one menu covers every event. Past 25 events the surplus is named in the
-text and said to be unselectable rather than silently dropped.
+**Discord will not reorder messages.** Rows sit in the order they were posted,
+so a new event that starts sooner than existing ones lands at the bottom.
+Rebuild is the only way to sort, which is why it is a button somebody presses
+rather than something that happens on its own — it deletes and reposts
+everything, and answers before it starts because it will not finish inside
+Discord's three-second interaction window.
 
 ## Conventions
 

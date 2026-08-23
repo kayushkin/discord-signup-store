@@ -2,214 +2,220 @@ package discordsignup
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 )
 
-func tableEvents(n int) []Event {
-	out := make([]Event, n)
-	base := time.Now().Add(24 * time.Hour).Unix()
-	for i := range out {
-		out[i] = Event{
-			ID: int64(i + 1), GuildID: "g1", Name: fmt.Sprintf("Event %d", i+1),
-			Status: StatusOpen, StartsAt: base + int64(i)*3600,
-			Capacity: 4, AttendingCount: 1, Timezone: "UTC",
+// TestEveryRowFitsDiscordsButtonCeiling is the constraint that forced one
+// message per event. A message holds five action rows and a row holds five
+// buttons; putting the whole table in one message caps it around twelve events
+// and leaves the buttons in a block that lines up with nothing.
+func TestEveryRowFitsDiscordsButtonCeiling(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Board games", Status: StatusOpen, Capacity: 8,
+		AttendingCount: 3, StartsAt: time.Now().Unix()}
+	rows, _ := RenderTableRow(ev)["components"].([]any)
+	if len(rows) != 1 {
+		t.Fatalf("%d action rows on one event's row, want 1", len(rows))
+	}
+	buttons := rows[0].(map[string]any)["components"].([]any)
+	if len(buttons) > 5 {
+		t.Fatalf("%d buttons in a row, want at most 5", len(buttons))
+	}
+	var ids []string
+	for _, b := range buttons {
+		ids = append(ids, b.(map[string]any)["custom_id"].(string))
+	}
+	// The same ids the full card uses, so one handler serves both views.
+	want := []string{JoinCustomID(1), LeaveCustomID(1), DetailsCustomID(1), EditCustomID(1)}
+	if len(ids) != len(want) {
+		t.Fatalf("buttons = %v, want %v", ids, want)
+	}
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Errorf("button %d = %q, want %q", i, ids[i], want[i])
 		}
-	}
-	return out
-}
-
-// TestTableFitsDiscordsComponentCeilings is the constraint that decided the
-// whole design. A message carries five action rows; a select takes a whole one
-// and holds 25 options. Break either and Discord rejects the message outright.
-func TestTableFitsDiscordsComponentCeilings(t *testing.T) {
-	payload := RenderEventTable(tableEvents(40))
-	rows, _ := payload["components"].([]any)
-	if len(rows) > 5 {
-		t.Fatalf("%d action rows, want at most 5", len(rows))
-	}
-	for _, r := range rows {
-		row := r.(map[string]any)
-		components := row["components"].([]any)
-		if len(components) != 1 {
-			t.Errorf("a row holds %d components; a select must be alone in its row",
-				len(components))
-		}
-		c := components[0].(map[string]any)
-		if opts, ok := c["options"].([]any); ok && len(opts) > maxSelectOptions {
-			t.Errorf("a menu holds %d options, want at most %d", len(opts), maxSelectOptions)
-		}
-	}
-	content := payload["content"].(string)
-	if len(content) > discordMessageContentLimit {
-		t.Errorf("content is %d bytes, over Discord's %d", len(content), discordMessageContentLimit)
-	}
-	// Forty events do not fit in a 25-option menu, and the ones left out are
-	// said out loud rather than silently dropped.
-	if !strings.Contains(content, "Showing the first 25 of 40") {
-		t.Error("the table did not say that it was showing only part of the list")
 	}
 }
 
-// TestEmptyTableHasNoMenus covers a real 400: Discord rejects a select menu
-// with zero options, so a menu with nothing to offer must be left out.
-func TestEmptyTableHasNoMenus(t *testing.T) {
-	payload := RenderEventTable(nil)
-	rows, _ := payload["components"].([]any)
-	if len(rows) != 0 {
-		t.Errorf("an empty table has %d component rows, want 0", len(rows))
+// TestClosedEventsLoseJoinAndLeave keeps a stale button off a row that cannot
+// take a signup, while leaving Details and Edit, which still make sense.
+func TestClosedEventsLoseJoinAndLeave(t *testing.T) {
+	ev := &Event{ID: 4, Name: "Shut", Status: StatusClosed, Capacity: 8}
+	buttons := RenderTableRow(ev)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	var ids []string
+	for _, b := range buttons {
+		ids = append(ids, b.(map[string]any)["custom_id"].(string))
 	}
-	if !strings.Contains(payload["content"].(string), "Nothing coming up") {
-		t.Error("an empty table should say so")
-	}
-}
-
-// TestClosedEventsCannotBeJoinedFromTheTable keeps the menu honest: an event
-// that is not taking signups must not appear in the Join menu, even though it
-// is still listed and still has details worth reading.
-func TestClosedEventsCannotBeJoinedFromTheTable(t *testing.T) {
-	events := tableEvents(3)
-	events[1].Status = StatusClosed
-
-	payload := RenderEventTable(events)
-	menus := menuValues(payload)
-	for _, value := range menus[tableJoinSelectID] {
-		if value == "2" {
-			t.Error("a closed event is offered in the Join menu")
-		}
-	}
-	// It stays in Details and Edit, because a closed event is still one people
-	// ask about and organisers still adjust.
-	var inDetails bool
-	for _, value := range menus[tableDetailsSelectID] {
-		if value == "2" {
-			inDetails = true
-		}
-	}
-	if !inDetails {
-		t.Error("a closed event vanished from the Details menu")
-	}
-}
-
-// TestFullEventsSaySoInTheJoinMenu means nobody picks a full event expecting a
-// place — the option's own description warns first.
-func TestFullEventsSaySoInTheJoinMenu(t *testing.T) {
-	events := tableEvents(2)
-	events[0].AttendingCount = events[0].Capacity
-
-	payload := RenderEventTable(events)
-	for _, r := range payload["components"].([]any) {
-		c := r.(map[string]any)["components"].([]any)[0].(map[string]any)
-		if c["custom_id"] != tableJoinSelectID {
-			continue
-		}
-		first := c["options"].([]any)[0].(map[string]any)
-		desc, _ := first["description"].(string)
-		if !strings.Contains(desc, "waitlist") {
-			t.Errorf("a full event's option says %q, want a waitlist warning", desc)
-		}
-		return
-	}
-	t.Fatal("no join menu found")
-}
-
-// TestLongNamesDoNotBreakTheColumns covers padding by runes rather than bytes.
-// An emoji is one rune and several bytes, so padding by bytes leaves the column
-// short by exactly the difference — which is how a fixed-width table stops
-// being one.
-func TestLongNamesDoNotBreakTheColumns(t *testing.T) {
-	events := tableEvents(3)
-	events[0].Name = "🎲 Board games 🎲"
-	events[1].Name = "Short"
-
-	content := RenderEventTable(events)["content"].(string)
-	parts := strings.Split(content, "```")
-	if len(parts) < 2 {
-		t.Fatal("no code block; the columns would not line up")
-	}
-	lines := strings.Split(strings.TrimSpace(parts[1]), "\n")
-	// Header, rule, then one line per event. Every one must be the same width
-	// in RUNES, which is what a monospace font actually lays out.
-	width := len([]rune(lines[0]))
-	for i, line := range lines[2:] {
-		got := len([]rune(strings.TrimRight(line, " ")))
-		if got > width {
-			t.Errorf("row %d is %d runes wide, header is %d — the columns have drifted",
-				i, got, width)
-		}
-	}
-
-	// And every option label stays inside Discord's per-option cap.
-	for _, r := range RenderEventTable(events)["components"].([]any) {
-		c := r.(map[string]any)["components"].([]any)[0].(map[string]any)
-		opts, ok := c["options"].([]any)
-		if !ok {
-			continue
-		}
-		for _, opt := range opts {
-			label := opt.(map[string]any)["label"].(string)
-			if len([]rune(label)) > selectOptionLabelLimit {
-				t.Errorf("option label is %d runes, over Discord's %d",
-					len([]rune(label)), selectOptionLabelLimit)
+	for _, unwanted := range []string{JoinCustomID(4), LeaveCustomID(4)} {
+		for _, got := range ids {
+			if got == unwanted {
+				t.Errorf("a closed event still offers %q", unwanted)
 			}
 		}
 	}
+	if len(ids) != 2 {
+		t.Errorf("buttons = %v, want just Details and Edit", ids)
+	}
 }
 
-// menuValues collects the selectable event ids per menu, skipping rows that
-// hold a button rather than a select — those carry no options at all.
-func menuValues(payload map[string]any) map[string][]string {
-	out := map[string][]string{}
-	rows, _ := payload["components"].([]any)
-	for _, r := range rows {
-		c := r.(map[string]any)["components"].([]any)[0].(map[string]any)
-		opts, ok := c["options"].([]any)
-		if !ok {
-			continue
-		}
-		id, _ := c["custom_id"].(string)
-		for _, o := range opts {
-			out[id] = append(out[id], o.(map[string]any)["value"].(string))
+// TestRowLineIsCompact is the whole point of the table: one line, not a card.
+func TestRowLineIsCompact(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Board games", Status: StatusOpen, Capacity: 8,
+		AttendingCount: 3, WaitlistCount: 2, StartsAt: 1788067881, Location: "The pub"}
+	content := RenderTableRow(ev)["content"].(string)
+	if strings.Count(content, "\n") != 0 {
+		t.Errorf("the row spans %d lines, want 1:\n%s", strings.Count(content, "\n")+1, content)
+	}
+	for _, want := range []string{"3/8", "Board games", "<t:1788067881:f>", "The pub", "2 waiting"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("row = %q, want it to contain %q", content, want)
 		}
 	}
-	return out
+	// The time is Discord's own markup so it renders in each reader's zone,
+	// rather than a fixed string in the server's.
+	if strings.Contains(content, "2026-") {
+		t.Error("the row hard-codes a formatted date instead of letting Discord localise it")
+	}
 }
 
-// TestTableIsEditedNotReposted keeps it where people scrolled to.
-func TestTableIsEditedNotReposted(t *testing.T) {
+// TestUncappedRowsShowInfinity so a row without a limit still reads as a count.
+func TestUncappedRowsShowInfinity(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Open house", Status: StatusOpen, AttendingCount: 12}
+	content := RenderTableRow(ev)["content"].(string)
+	if !strings.Contains(content, "12/∞") {
+		t.Errorf("row = %q, want an uncapped count", content)
+	}
+}
+
+// TestRowsAreEditedNotReposted keeps each row where it is. A signup rewrites
+// one message; anything else would walk the whole table down the channel.
+func TestRowsAreEditedNotReposted(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-
 	if err := store.SetGuildTable("g1", "table-channel"); err != nil {
 		t.Fatalf("set table: %v", err)
 	}
-	if _, err := store.CreateEvent(Event{
+	ev, err := store.CreateEvent(Event{
 		GuildID: "g1", ChannelID: "board", Name: "One",
 		StartsAt: time.Now().Add(time.Hour).Unix(),
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	for i := 0; i < 3; i++ {
-		if err := srv.RefreshEventTable("g1"); err != nil {
+	for i := 0; i < 4; i++ {
+		if err := srv.RefreshTableRow(ev); err != nil {
 			t.Fatalf("refresh %d: %v", i, err)
 		}
 	}
-	var posts, edits int
+	var rowPosts, rowEdits int
 	for _, c := range fake.recorded() {
-		switch c.Method {
-		case "POST":
-			posts++
-		case "PATCH":
-			edits++
+		switch {
+		case c.Method == http.MethodPost && strings.HasSuffix(c.Path, "/messages"):
+			rowPosts++
+		case c.Method == http.MethodPatch:
+			rowEdits++
 		}
 	}
-	if posts != 1 {
-		t.Errorf("posted %d times, want 1 — the table must be edited in place", posts)
+	// One post for the row, one for the header the first time; three edits.
+	if rowPosts != 2 {
+		t.Errorf("posted %d messages, want 2 (the row and the header, once each)", rowPosts)
 	}
-	if edits != 2 {
-		t.Errorf("edited %d times, want 2", edits)
+	if rowEdits != 3 {
+		t.Errorf("edited %d times, want 3", rowEdits)
+	}
+}
+
+// TestFinishedEventsLeaveTheTable stops the board filling with things that have
+// already happened.
+func TestFinishedEventsLeaveTheTable(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+	if err := store.SetGuildTable("g1", "table-channel"); err != nil {
+		t.Fatalf("set table: %v", err)
+	}
+	past := time.Now().Add(-10 * time.Hour).Unix()
+	ev, err := store.CreateEvent(Event{
+		GuildID: "g1", ChannelID: "board", Name: "Over",
+		StartsAt: past, EndsAt: past + 3600,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := srv.RefreshTableRow(ev); err != nil {
+		t.Fatalf("draw row: %v", err)
+	}
+	rowMessage, err := store.TableRowMessageID(ev.ID)
+	if err != nil || rowMessage == "" {
+		t.Fatalf("no row recorded: %v", err)
+	}
+
+	if _, err := srv.CompleteFinishedEvents(); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if left, _ := store.TableRowMessageID(ev.ID); left != "" {
+		t.Errorf("the row is still recorded as %q after the event finished", left)
+	}
+	var deletedRow bool
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodDelete && strings.Contains(c.Path, rowMessage) {
+			deletedRow = true
+		}
+	}
+	if !deletedRow {
+		t.Error("the row message was not deleted from the table channel")
+	}
+}
+
+// TestRebuildRepostsInDateOrder covers the one thing Discord will not do:
+// messages sit in the order they were posted and cannot be moved, so sorting
+// means deleting and reposting.
+func TestRebuildRepostsInDateOrder(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	if err := store.SetGuildTable("g1", "table-channel"); err != nil {
+		t.Fatalf("set table: %v", err)
+	}
+	base := time.Now().Add(24 * time.Hour).Unix()
+	// Created out of order on purpose.
+	for _, offset := range []int64{3, 1, 2} {
+		if _, err := store.CreateEvent(Event{
+			GuildID: "g1", ChannelID: "board",
+			Name: fmt.Sprintf("Event +%d", offset), StartsAt: base + offset*3600,
+		}); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+	}
+	if err := srv.RebuildEventTable("g1"); err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+
+	var order []string
+	for _, c := range fake.recorded() {
+		if c.Method != http.MethodPost || !strings.HasSuffix(c.Path, "/messages") {
+			continue
+		}
+		content, _ := c.Body["content"].(string)
+		for _, offset := range []string{"+1", "+2", "+3"} {
+			if strings.Contains(content, "Event "+offset) {
+				order = append(order, offset)
+			}
+		}
+	}
+	want := []string{"+1", "+2", "+3"}
+	if len(order) != len(want) {
+		t.Fatalf("posted %v, want %v", order, want)
+	}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Errorf("posted %v, want soonest first %v", order, want)
+			break
+		}
 	}
 }

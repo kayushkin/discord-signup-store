@@ -151,7 +151,9 @@ func (s *Server) handleSetGuildTable(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	if err := s.RefreshEventTable(guildID); err != nil {
+	// Drawn from scratch, because pointing the table at a channel means there
+	// is nothing in it yet.
+	if err := s.RebuildEventTable(guildID); err != nil {
 		writeStoreError(w, err)
 		return
 	}
@@ -163,9 +165,11 @@ func (s *Server) handleSetGuildTable(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, table)
 }
 
-// handleRefreshGuildTable redraws it.
+// handleRefreshGuildTable deletes every row and reposts them in date order.
+// Named rebuild rather than refresh because that is what it does — individual
+// rows refresh themselves on every change without anyone asking.
 func (s *Server) handleRefreshGuildTable(w http.ResponseWriter, r *http.Request) {
-	if err := s.RefreshEventTable(r.PathValue("guildID")); err != nil {
+	if err := s.RebuildEventTable(r.PathValue("guildID")); err != nil {
 		writeStoreError(w, err)
 		return
 	}

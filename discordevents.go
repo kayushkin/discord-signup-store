@@ -172,9 +172,14 @@ func (s *Server) SyncScheduledEvents(guildID, boardChannelID string) (*SyncResul
 	posted, problems := s.postMissingCards(guildID)
 	result.Posted = posted
 	result.Problems = append(result.Problems, problems...)
-	// Imported and edited events both change what the table should say.
-	if result.Imported > 0 || result.Updated > 0 || result.Posted > 0 {
-		s.refreshEventTableQuietly(guildID)
+	// Imported and edited events both change what the table should say. Each
+	// gets its own row rather than the whole table being redrawn.
+	if result.Imported > 0 || result.Updated > 0 {
+		if live, err := s.liveEventsFor(guildID); err == nil {
+			for i := range live {
+				s.refreshTableRowQuietly(&live[i])
+			}
+		}
 	}
 	return result, nil
 }
@@ -590,9 +595,11 @@ func (s *Server) CompleteFinishedEvents() ([]int64, error) {
 		if err := s.moveCardToPastEvents(id); err != nil {
 			log.Printf("[discord-signup] move event %d to past events: %v", id, err)
 		}
-		// It has left the live list, so the table has to stop showing it.
+		// It has left the live list, so its row comes out of the table.
 		if ev, err := s.store.GetEvent(id); err == nil {
-			s.refreshEventTableQuietly(ev.GuildID)
+			if err := s.RemoveTableRow(ev); err != nil {
+				log.Printf("[discord-signup] remove table row for %d: %v", id, err)
+			}
 		}
 	}
 	return finished, nil
