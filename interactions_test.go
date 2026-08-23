@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // signedRequest builds a request signed the way Discord signs one: over the
@@ -220,11 +221,20 @@ func TestVerifierRejectsMalformedPublicKeys(t *testing.T) {
 // events: a decimal string, because the bit field is wider than a JSON number.
 const permissionsWithManageEvents = "8589934592" // 1 << 33
 
-// TestCapacityButtonOpensAModalForSomeoneWhoMayEditIt walks the whole round
-// trip through the signed HTTP handler: click, form, submit, new limit.
-func TestCapacityButtonOpensAModalForSomeoneWhoMayEditIt(t *testing.T) {
+// TestEditButtonOpensAPrefilledFormAndSaves walks the whole round trip through
+// the signed HTTP handler: click, form, submit, changed event.
+func TestEditButtonOpensAPrefilledFormAndSaves(t *testing.T) {
 	srv, priv, store := testServer(t)
-	ev := testEvent(t, store, 1)
+	srv.SetDefaultTimezone("America/Los_Angeles")
+
+	start := time.Date(2026, 9, 5, 19, 0, 0, 0, time.UTC).Unix()
+	ev, err := store.CreateEvent(Event{
+		GuildID: "g1", ChannelID: "c1", Name: "Playtest", Capacity: 1,
+		StartsAt: start, Location: "The shed", Timezone: "America/Los_Angeles",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
 	for _, u := range []string{"alice", "bob", "carol"} {
 		if _, err := store.Join(ev.ID, u, u, JoinedViaButton); err != nil {
 			t.Fatalf("join %s: %v", u, err)
@@ -244,52 +254,68 @@ func TestCapacityButtonOpensAModalForSomeoneWhoMayEditIt(t *testing.T) {
 		return out
 	}
 
-	// 1. Press the Limit button with Manage Events.
 	reply := send(fmt.Sprintf(`{
 		"type": 3, "guild_id": "g1", "channel_id": "c1",
 		"data": {"custom_id": %q},
 		"member": {"permissions": %q, "user": {"id": "boss", "username": "boss"}}
-	}`, CapacityCustomID(ev.ID), permissionsWithManageEvents))
+	}`, EditCustomID(ev.ID), permissionsWithManageEvents))
 
 	if int(reply["type"].(float64)) != callbackTypeModal {
 		t.Fatalf("type = %v, want %d (a modal)", reply["type"], callbackTypeModal)
 	}
 	data := reply["data"].(map[string]any)
-	if len(data["title"].(string)) > 45 {
-		t.Error("modal title is over Discord's 45-character limit; the interaction would be rejected")
+	if len([]rune(data["title"].(string))) > 45 {
+		t.Error("modal title is over Discord's 45-character limit")
 	}
-	field := data["components"].([]any)[0].(map[string]any)["components"].([]any)[0].(map[string]any)
-	if int(field["type"].(float64)) != componentTypeTextInput {
-		t.Error("the modal does not contain a text input")
+	rows := data["components"].([]any)
+	if len(rows) != 5 {
+		t.Fatalf("modal has %d fields, want 5 (Discord's maximum)", len(rows))
 	}
-	// Prefilled with the current limit, so changing 20 to 25 is two keystrokes.
-	if field["value"].(string) != "1" {
-		t.Errorf("field prefilled with %q, want the current limit \"1\"", field["value"])
+	prefilled := map[string]string{}
+	for _, r := range rows {
+		f := r.(map[string]any)["components"].([]any)[0].(map[string]any)
+		prefilled[f["custom_id"].(string)] = f["value"].(string)
+	}
+	// Every field opens with what is already there, so a small change is a
+	// small edit rather than retyping the event.
+	for field, want := range map[string]string{
+		fieldName: "Playtest", fieldCapacity: "1", fieldLocation: "The shed",
+		fieldStartsAt: "2026-09-05 12:00", // 19:00 UTC in Los Angeles
+	} {
+		if prefilled[field] != want {
+			t.Errorf("%s prefilled with %q, want %q", field, prefilled[field], want)
+		}
 	}
 
-	// 2. Submit 3.
 	reply = send(fmt.Sprintf(`{
 		"type": 5, "guild_id": "g1", "channel_id": "c1",
 		"data": {"custom_id": %q, "components": [
-			{"components": [{"custom_id": "capacity", "value": "3"}]}
+			{"components": [{"custom_id": "name", "value": "Playtest night"}]},
+			{"components": [{"custom_id": "starts", "value": "2026-09-06 18:30"}]},
+			{"components": [{"custom_id": "ends", "value": "2026-09-06 21:00"}]},
+			{"components": [{"custom_id": "capacity", "value": "3"}]},
+			{"components": [{"custom_id": "location", "value": "The big shed"}]}
 		]},
 		"member": {"permissions": %q, "user": {"id": "boss", "username": "boss"}}
-	}`, CapacityModalCustomID(ev.ID), permissionsWithManageEvents))
+	}`, EditModalCustomID(ev.ID), permissionsWithManageEvents))
 
 	content := reply["data"].(map[string]any)["content"].(string)
-	if !strings.Contains(content, "3") {
-		t.Errorf("reply = %q, want it to state the new limit", content)
-	}
-	if !strings.Contains(content, "waitlist") {
-		t.Errorf("reply = %q, want it to mention who came off the waitlist", content)
+	for _, want := range []string{"Playtest night", "3", "waitlist"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("reply = %q, want it to mention %q", content, want)
+		}
 	}
 
 	got, err := store.GetEvent(ev.ID)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if got.Capacity != 3 {
-		t.Errorf("capacity = %d, want 3", got.Capacity)
+	if got.Name != "Playtest night" || got.Capacity != 3 || got.Location != "The big shed" {
+		t.Errorf("event = %q / cap %d / %q, want the edited values",
+			got.Name, got.Capacity, got.Location)
+	}
+	if got.EndsAt == 0 || got.EndsAt <= got.StartsAt {
+		t.Error("the end time was not saved")
 	}
 	if got.AttendingCount != 3 || got.WaitlistCount != 0 {
 		t.Errorf("%d attending / %d waiting, want 3 / 0 — raising the limit should have "+
@@ -297,20 +323,27 @@ func TestCapacityButtonOpensAModalForSomeoneWhoMayEditIt(t *testing.T) {
 	}
 }
 
-// TestSomeoneWithoutManageEventsCannotChangeTheLimit covers the fact that the
-// button is on a public message. Discord cannot hide a component from some
-// readers, so the check has to be on the press.
-func TestSomeoneWithoutManageEventsCannotChangeTheLimit(t *testing.T) {
+// TestSomeoneWithoutManageEventsCannotEdit covers the button being on a public
+// message. Discord cannot hide a component from some readers, so the check has
+// to be on the press — and on the submit, which is a separate request.
+func TestSomeoneWithoutManageEventsCannotEdit(t *testing.T) {
 	srv, priv, store := testServer(t)
-	ev := testEvent(t, store, 2)
+	srv.SetDefaultTimezone("UTC")
+	ev, err := store.CreateEvent(Event{
+		GuildID: "g1", ChannelID: "c1", Name: "Playtest", Capacity: 2,
+		StartsAt: time.Date(2026, 9, 5, 19, 0, 0, 0, time.UTC).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
 
-	press := func(customID, permissions string) string {
+	press := func(permissions string) string {
 		rec := httptest.NewRecorder()
 		srv.HandleInteraction(rec, signedRequest(t, priv, "1700000000", fmt.Sprintf(`{
 			"type": 3, "guild_id": "g1", "channel_id": "c1",
 			"data": {"custom_id": %q},
 			"member": {"permissions": %q, "user": {"id": "rando", "username": "rando"}}
-		}`, customID, permissions)))
+		}`, EditCustomID(ev.ID), permissions)))
 		var out map[string]any
 		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -320,33 +353,118 @@ func TestSomeoneWithoutManageEventsCannotChangeTheLimit(t *testing.T) {
 		}
 		return out["data"].(map[string]any)["content"].(string)
 	}
-
-	// No permissions at all.
-	if got := press(CapacityCustomID(ev.ID), "0"); got == "MODAL OPENED" {
-		t.Error("someone with no permissions was offered the limit form")
+	if got := press("0"); got == "MODAL OPENED" {
+		t.Error("someone with no permissions was offered the edit form")
 	}
-	// SEND_MESSAGES only — plausible for an ordinary member, and not enough.
-	if got := press(CapacityCustomID(ev.ID), "2048"); got == "MODAL OPENED" {
-		t.Error("an ordinary member was offered the limit form")
+	if got := press("2048"); got == "MODAL OPENED" { // SEND_MESSAGES only
+		t.Error("an ordinary member was offered the edit form")
 	}
 
-	// And submitting the form directly, without ever opening it, is refused
-	// too. The click and the submit are separate requests; nothing stops the
-	// second being sent on its own.
+	// Forging the submit without ever opening the form must not work either.
 	rec := httptest.NewRecorder()
 	srv.HandleInteraction(rec, signedRequest(t, priv, "1700000000", fmt.Sprintf(`{
 		"type": 5, "guild_id": "g1", "channel_id": "c1",
 		"data": {"custom_id": %q, "components": [
+			{"components": [{"custom_id": "name", "value": "Hijacked"}]},
+			{"components": [{"custom_id": "starts", "value": "2026-09-05 19:00"}]},
 			{"components": [{"custom_id": "capacity", "value": "9999"}]}
 		]},
 		"member": {"permissions": "2048", "user": {"id": "rando", "username": "rando"}}
-	}`, CapacityModalCustomID(ev.ID))))
+	}`, EditModalCustomID(ev.ID))))
 
 	got, err := store.GetEvent(ev.ID)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if got.Capacity != 2 {
-		t.Errorf("capacity = %d, want 2 — a direct modal submit bypassed the check", got.Capacity)
+	if got.Name != "Playtest" || got.Capacity != 2 {
+		t.Errorf("a forged modal submit changed the event to %q / cap %d", got.Name, got.Capacity)
+	}
+}
+
+// TestCreateButtonMakesAnEventAndPostsItsCard covers the how-to channel button.
+func TestCreateButtonMakesAnEventAndPostsItsCard(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("keys: %v", err)
+	}
+	verifier, err := NewInteractionVerifier(hex.EncodeToString(pub))
+	if err != nil {
+		t.Fatalf("verifier: %v", err)
+	}
+	srv := NewServer(store, verifier, fake.client())
+	srv.EnableWeb(nil, "board-channel")
+	srv.SetDefaultTimezone("America/Los_Angeles")
+
+	rec := httptest.NewRecorder()
+	srv.HandleInteraction(rec, signedRequest(t, priv, "1700000000", fmt.Sprintf(`{
+		"type": 5, "guild_id": "g1", "channel_id": "howto-channel",
+		"data": {"custom_id": %q, "components": [
+			{"components": [{"custom_id": "name", "value": "Board game night"}]},
+			{"components": [{"custom_id": "starts", "value": "2026-09-05 19:00"}]},
+			{"components": [{"custom_id": "ends", "value": ""}]},
+			{"components": [{"custom_id": "capacity", "value": "8"}]},
+			{"components": [{"custom_id": "location", "value": "The pub"}]}
+		]},
+		"member": {"permissions": %q, "user": {"id": "boss", "username": "boss"}}
+	}`, CreateModalCustomID(), permissionsWithManageEvents)))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	events, err := store.ListEvents("g1", "", 10)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("created %d events, want 1", len(events))
+	}
+	created := events[0]
+	if created.Name != "Board game night" || created.Capacity != 8 || created.Location != "The pub" {
+		t.Errorf("event = %q / cap %d / %q", created.Name, created.Capacity, created.Location)
+	}
+	// The creator is recorded by id, which is what lets them edit it later
+	// without server-wide Manage Events.
+	if created.CreatedBy != "boss" {
+		t.Errorf("created_by = %q, want \"boss\"", created.CreatedBy)
+	}
+	// The card goes to the board, not to the channel the button was pressed in.
+	if created.MessageID == "" {
+		t.Error("no signup card was posted")
+	}
+	var posts []string
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPost && strings.HasSuffix(c.Path, "/messages") {
+			posts = append(posts, c.Path)
+		}
+	}
+	if len(posts) != 1 || posts[0] != "/channels/board-channel/messages" {
+		t.Errorf("card posted to %v, want the board channel", posts)
+	}
+}
+
+// TestCreatingNeedsPermission stops the how-to button being an open door.
+func TestCreatingNeedsPermission(t *testing.T) {
+	srv, priv, store := testServer(t)
+	srv.SetDefaultTimezone("UTC")
+
+	rec := httptest.NewRecorder()
+	srv.HandleInteraction(rec, signedRequest(t, priv, "1700000000", fmt.Sprintf(`{
+		"type": 5, "guild_id": "g1", "channel_id": "howto",
+		"data": {"custom_id": %q, "components": [
+			{"components": [{"custom_id": "name", "value": "Sneaky"}]},
+			{"components": [{"custom_id": "starts", "value": "2026-09-05 19:00"}]},
+			{"components": [{"custom_id": "capacity", "value": "5"}]}
+		]},
+		"member": {"permissions": "2048", "user": {"id": "rando", "username": "rando"}}
+	}`, CreateModalCustomID())))
+
+	events, err := store.ListEvents("g1", "", 10)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(events) != 0 {
+		t.Errorf("an ordinary member created %d events", len(events))
 	}
 }

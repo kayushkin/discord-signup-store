@@ -128,8 +128,8 @@ func signupComponents(eventID int64) []any {
 				map[string]any{
 					"type":      componentTypeButton,
 					"style":     buttonStyleSecondary,
-					"label":     "Limit",
-					"custom_id": CapacityCustomID(eventID),
+					"label":     "Edit",
+					"custom_id": EditCustomID(eventID),
 				},
 			},
 		},
@@ -297,4 +297,87 @@ func (s *Server) notifyPromoted(ev *Event, promoted *Signup) {
 		log.Printf("[discord-signup] fallback mention user=%s event=%d: %v",
 			promoted.DiscordUserID, ev.ID, err)
 	}
+}
+
+// RenderHowToMessage is the standing post in the event-creation channel: what
+// the buttons do, and the button that starts one.
+//
+// Written as a page rather than a caption because it is the only place the two
+// counts get explained. People will otherwise compare Discord's Interested
+// number with the roster, find they disagree, and reasonably assume something
+// is broken.
+func RenderHowToMessage(boardChannelID, timezone string) map[string]any {
+	var b strings.Builder
+	b.WriteString("## Making an event\n")
+	b.WriteString("Press **Create an event** below. A form opens with five boxes:\n\n")
+	b.WriteString("**Name** · **Starts** · **Ends** · **Places** · **Location**\n\n")
+	fmt.Fprintf(&b, "Times are typed as `2026-09-05 19:00` and read in **%s**.\n", timezone)
+	b.WriteString("**Places** is how many people fit — put `0` for no limit.\n\n")
+
+	fmt.Fprintf(&b, "The event then appears in <#%s> with **Join** and **Leave** buttons.\n\n", boardChannelID)
+
+	b.WriteString("## What the buttons do\n")
+	b.WriteString("**Join** takes a place. If the event is full you go on the waitlist " +
+		"instead, and you are told your number. When someone drops out the person who has " +
+		"waited longest moves up automatically and gets a message.\n\n")
+	b.WriteString("**Leave** gives your place up. It goes to whoever is next in line.\n\n")
+	b.WriteString("**Edit** changes the event. Only the person who made it, or someone with " +
+		"Manage Events, can use it — everyone else gets a polite no.\n\n")
+
+	b.WriteString("## Discord's own events\n")
+	b.WriteString("An event made through Discord's normal event feature is picked up " +
+		"automatically and gets a card here too. Pressing **Interested** on one signs you up " +
+		"exactly like Join does.\n\n")
+	b.WriteString("⚠️ The two numbers will not match, and they cannot be made to. Discord " +
+		"counts everyone who asked to be notified; the card counts everyone who has a place. " +
+		"Discord has no way to cap its own list or to remove anyone from it, which is why " +
+		"the card exists. **The card is the real roster.**\n\n")
+
+	b.WriteString("Everything else — description, repeating events, roles — is on the web page, " +
+		"because a Discord form holds five boxes and no more.")
+
+	return map[string]any{
+		"content":          b.String(),
+		"allowed_mentions": map[string]any{"parse": []string{}},
+		"components": []any{
+			map[string]any{
+				"type": componentTypeActionRow,
+				"components": []any{
+					map[string]any{
+						"type":      componentTypeButton,
+						"style":     buttonStylePrimary,
+						"label":     "Create an event",
+						"custom_id": CreateCustomID(),
+					},
+				},
+			},
+		},
+	}
+}
+
+// PostHowToMessage puts the standing how-to in a channel and pins it.
+//
+// Pinned because it is the one message in that channel and it must stay
+// reachable; a pin failure is logged rather than fatal, since an unpinned
+// how-to in an otherwise empty channel is still the first thing anyone sees.
+func (s *Server) PostHowToMessage(channelID string) (string, error) {
+	if s.discord == nil {
+		return "", errors.New("no discord client configured")
+	}
+	messageID, err := s.discord.CreateMessage(channelID,
+		RenderHowToMessage(s.BoardChannelID(), s.DefaultTimezone()))
+	if err != nil {
+		return "", fmt.Errorf("post how-to: %w", err)
+	}
+	if err := s.discord.PinMessage(channelID, messageID); err != nil {
+		// Almost always a 403 for want of PIN_MESSAGES. Discord split that out
+		// of MANAGE_MESSAGES into its own permission (bit 51), so a bot invited
+		// before the split — or with an invite link that predates it — can
+		// delete messages and still not pin one. Logged rather than fatal: an
+		// unpinned how-to in an otherwise empty channel is still the first
+		// thing anyone reads.
+		log.Printf("[discord-signup] could not pin the how-to (needs PIN_MESSAGES, "+
+			"which is separate from MANAGE_MESSAGES): %v", err)
+	}
+	return messageID, nil
 }

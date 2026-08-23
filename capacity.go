@@ -185,3 +185,51 @@ func (s *Server) SetCapacity(eventID int64, capacity int, actor string) (*Event,
 	}
 	return after, promoted, nil
 }
+
+// ApplyEventForm saves an edit from the Discord form and settles what follows.
+//
+// One path for the whole form rather than a method per field: the promotion
+// only depends on capacity, but the card has to be rewritten whatever changed,
+// and having two functions that each rewrite it is how one of them stops.
+func (s *Server) ApplyEventForm(before *Event, values *EventFormResult, zone, actor string) (*Event, []Signup, error) {
+	patch := EventPatch{
+		Name:     &values.Name,
+		StartsAt: &values.StartsAt,
+		EndsAt:   &values.EndsAt,
+		Capacity: &values.Capacity,
+		Location: &values.Location,
+	}
+	// Only stamp the zone when the event has none. Overwriting a zone chosen on
+	// the web page with the deployment default would silently move every time
+	// on the event by the offset between them.
+	if before.Timezone == "" {
+		patch.Timezone = &zone
+	}
+	if _, err := s.store.UpdateEvent(before.ID, patch); err != nil {
+		return nil, nil, err
+	}
+
+	var promoted []Signup
+	if values.Capacity == 0 || values.Capacity > before.Capacity {
+		var err error
+		promoted, err = s.store.PromoteToFillCapacity(before.ID)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	after, err := s.store.GetEvent(before.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	log.Printf("[discord-signup] event %d edited by %s; %d promoted", before.ID, actor, len(promoted))
+
+	changes := make([]stateChange, 0, len(promoted))
+	for _, sg := range promoted {
+		changes = append(changes, stateChange{UserID: sg.DiscordUserID, State: StateAttending})
+	}
+	go s.syncAfterChange(after, changes)
+	for i := range promoted {
+		go s.notifyPromoted(after, &promoted[i])
+	}
+	return after, promoted, nil
+}

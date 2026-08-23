@@ -92,6 +92,10 @@ operation.
 - **No gateway connection.** This is a pure HTTP-interactions app, so there is
   no persistent WebSocket, no privileged intents, and no always-on requirement
   beyond serving the endpoint.
+- **`PIN_MESSAGES`** (bit 51) to pin the how-to. Discord split this out of
+  `MANAGE_MESSAGES`, so a bot that can delete other people's messages can still
+  be refused a pin — a 403 that reads like a mistake until you know. Everything
+  works without it; the how-to just sits unpinned.
 - **`MANAGE_ROLES`**, only if you use the role sync. The bot's own highest role
   must sit **above** `Attending` and `Waitlisted` in Server Settings → Roles.
   Get the hierarchy wrong and every role call returns 403 while the permission

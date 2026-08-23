@@ -29,6 +29,11 @@ type Server struct {
 	// which roles the bot holds, which is what decides what it can grant.
 	botID     string
 	botIDOnce sync.Once
+	// defaultTimezone is the IANA zone a time typed into a Discord form is read
+	// in. One per deployment rather than per event, because a modal holds five
+	// fields and a timezone picker is not worth one of them. Printed on the
+	// form's own label so nobody has to guess which zone they are typing in.
+	defaultTimezone string
 	// boardChannelID is the channel signup cards are posted to. Imported
 	// Discord events land here rather than in their own channel, which for a
 	// voice event is the room people talk in and where a card would be unread.
@@ -42,6 +47,19 @@ type Server struct {
 func (s *Server) EnableWeb(oauth *OAuthConfig, boardChannelID string) {
 	s.oauth = oauth
 	s.boardChannelID = boardChannelID
+}
+
+// SetDefaultTimezone names the zone Discord forms are read in.
+func (s *Server) SetDefaultTimezone(zone string) { s.defaultTimezone = zone }
+
+// DefaultTimezone reports it, falling back to UTC only when nothing is
+// configured — which the service logs loudly at boot, because a time read in
+// the wrong zone is wrong in a way nobody notices until the day itself.
+func (s *Server) DefaultTimezone() string {
+	if s.defaultTimezone == "" {
+		return "UTC"
+	}
+	return s.defaultTimezone
 }
 
 // BoardChannelID reports where signup cards are posted.
@@ -84,6 +102,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/events/{id}/history", s.handleHistory)
 	mux.HandleFunc("POST /api/guilds/{guildID}/sync", s.handleSyncGuild)
 	mux.HandleFunc("POST /api/sync", s.handleSyncAllGuilds)
+	mux.HandleFunc("POST /api/channels/{channelID}/how-to", s.handlePostHowTo)
 	mux.HandleFunc("POST /api/events/complete-finished", s.handleCompleteFinished)
 
 	// Browser surface — session-gated.
@@ -101,6 +120,16 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/post-message", s.handleWebPostMessage)
 	mux.HandleFunc("POST /events/{id}/publish", s.handleWebPublish)
 	mux.HandleFunc("POST /sync", s.handleWebSync)
+}
+
+// handlePostHowTo puts the standing how-to and its Create button in a channel.
+func (s *Server) handlePostHowTo(w http.ResponseWriter, r *http.Request) {
+	messageID, err := s.PostHowToMessage(r.PathValue("channelID"))
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"message_id": messageID})
 }
 
 // handleSyncAllGuilds pulls native events from every server the bot is in and

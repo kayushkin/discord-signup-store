@@ -193,7 +193,7 @@ func TestCapacityButtonIsOnTheCard(t *testing.T) {
 		id, _ := m["custom_id"].(string)
 		ids = append(ids, id)
 	}
-	want := []string{JoinCustomID(7), LeaveCustomID(7), CapacityCustomID(7)}
+	want := []string{JoinCustomID(7), LeaveCustomID(7), EditCustomID(7)}
 	if len(ids) != len(want) {
 		t.Fatalf("buttons = %v, want %v", ids, want)
 	}

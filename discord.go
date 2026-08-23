@@ -427,3 +427,36 @@ func (c *DiscordClient) GuildMemberDisplayName(guildID, userID string) (string, 
 	}
 	return member.User.Username, nil
 }
+
+// PinMessage pins a message.
+//
+// Needs PIN_MESSAGES (1<<51), NOT MANAGE_MESSAGES. Discord split the two, so a
+// bot that can delete other people's messages can still be refused a pin — a
+// 403 that reads like a mistake until you know.
+//
+// Uses the current pins route. The older /channels/{id}/pins/{id} is deprecated
+// and refuses this identically, so switching back would not help.
+func (c *DiscordClient) PinMessage(channelID, messageID string) error {
+	_, err := c.do(http.MethodPut, "/channels/"+channelID+"/messages/pins/"+messageID, nil)
+	return err
+}
+
+// CreateGuildChannel makes a text channel. Needs MANAGE_CHANNELS.
+func (c *DiscordClient) CreateGuildChannel(guildID string, payload any) (*Channel, error) {
+	raw, err := c.do(http.MethodPost, "/guilds/"+guildID+"/channels", payload)
+	if err != nil {
+		return nil, err
+	}
+	var out Channel
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("decode created channel: %w", err)
+	}
+	return &out, nil
+}
+
+// Channel is the little of a Discord channel this service reads.
+type Channel struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Type int    `json:"type"`
+}

@@ -78,13 +78,20 @@ Closed sets, defined in `vocabulary.go` and validated on write.
 |---|---|---|
 | Join | `signup:join:{id}` | anyone |
 | Leave | `signup:leave:{id}` | anyone |
-| Limit | `signup:capacity:{id}` | `MANAGE_EVENTS`, `ADMINISTRATOR`, or the event's creator |
+| Edit | `signup:edit:{id}` | `MANAGE_EVENTS`, `ADMINISTRATOR`, or the event's creator |
+| Create an event | `signup:create:0` | `CREATE_EVENTS`, `MANAGE_EVENTS` or `ADMINISTRATOR` |
 
-**Limit** opens a modal (`signup:capacity-modal:{id}`) with one text field
-prefilled with the current value — a modal is the only place Discord allows a
-free text field, so a button that opens one is the only way to type a number
-without leaving Discord. Permission is checked on the press *and* on the submit,
-because they are separate requests and nothing stops the second arriving alone.
+**Edit** and **Create an event** open the same five-field modal — Name, Starts,
+Ends, Places, Location — prefilled when editing and empty when creating. Five is
+Discord's hard ceiling on a modal, so description, recurrence and roles live on
+the web page instead. Times are typed as `2026-09-05 19:00` and read in the zone
+set by `DISCORD_DEFAULT_TIMEZONE`, which the form's own label prints.
+
+`signup:capacity:{id}` is still accepted, because cards posted before the button
+was widened are sitting in channels and their button must keep working.
+
+Permission is checked on the press *and* on the submit, because they are
+separate requests and nothing stops the second arriving alone.
 
 Raising a limit promotes people off the waitlist in arrival order and messages
 each of them. Lowering it promotes nobody and removes nobody.

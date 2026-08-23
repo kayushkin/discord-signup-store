@@ -44,6 +44,9 @@ Environment=DISCORD_OAUTH_CREDENTIAL_ACCOUNT=oauth-client
 # Where signup cards are posted, including ones imported from Discord. A voice
 # event's own channel is the room people talk in, where a card goes unread.
 Environment=DISCORD_BOARD_CHANNEL_ID=
+# The zone a time typed into a Discord form is read in. An IANA name, never a
+# UTC offset. Unset means UTC, and the service says so loudly at boot.
+Environment=DISCORD_DEFAULT_TIMEZONE=
 
 Environment=HOME=/home/YOUR_USER
 

@@ -60,6 +60,19 @@ func main() {
 
 	srvAPI := discordsignup.NewServer(store, verifier, discord)
 
+	// The zone a time typed into a Discord form is read in. One per deployment
+	// because a modal holds five fields and a timezone picker is not worth one
+	// of them; the form's own label prints it so nobody has to guess.
+	if zone := os.Getenv("DISCORD_DEFAULT_TIMEZONE"); zone != "" {
+		if _, err := time.LoadLocation(zone); err != nil {
+			log.Fatalf("DISCORD_DEFAULT_TIMEZONE=%q is not an IANA zone name: %v", zone, err)
+		}
+		srvAPI.SetDefaultTimezone(zone)
+	} else {
+		log.Print("DISCORD_DEFAULT_TIMEZONE is not set — times typed into Discord forms will " +
+			"be read as UTC, which is almost certainly not what anyone means")
+	}
+
 	// The browser surface is optional. Without a redirect URL the login routes
 	// answer 501 and everything else — buttons, rosters, the API — still works.
 	if redirect := os.Getenv("DISCORD_OAUTH_REDIRECT_URL"); redirect != "" {

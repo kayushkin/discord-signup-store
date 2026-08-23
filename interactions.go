@@ -244,8 +244,13 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		s.handleJoin(w, in, eventID, userID, displayName)
 	case "leave":
 		s.handleLeave(w, in, eventID, userID)
-	case "capacity":
-		s.handleCapacityButton(w, in, eventID)
+	case "edit", "capacity":
+		// "capacity" is the old id. Cards posted before the button was widened
+		// are still sitting in channels, and their button must keep working
+		// rather than answering "not one of mine" forever.
+		s.handleEditButton(w, in, eventID)
+	case "create":
+		s.handleCreateButton(w, in)
 	default:
 		s.replyEphemeral(w, "Unknown signup action.")
 	}
@@ -372,96 +377,271 @@ func (s *Server) replyEphemeral(w http.ResponseWriter, content string) {
 	})
 }
 
-// capacityFieldID names the text input inside the capacity modal.
-const capacityFieldID = "capacity"
+// EditCustomID builds the custom_id for an event's edit button.
+func EditCustomID(eventID int64) string {
+	return fmt.Sprintf("%s:edit:%d", customIDPrefix, eventID)
+}
 
-// handleCapacityButton answers a click on the limit button with a modal.
+// EditModalCustomID builds the custom_id for the form that button opens.
+func EditModalCustomID(eventID int64) string {
+	return fmt.Sprintf("%s:edit-modal:%d", customIDPrefix, eventID)
+}
+
+// CreateCustomID is the button on the how-to message. It carries event id 0,
+// because there is no event yet — the id slot is kept so one parser handles
+// every custom_id this service issues.
+func CreateCustomID() string {
+	return fmt.Sprintf("%s:create:0", customIDPrefix)
+}
+
+// CreateModalCustomID is the form that button opens.
+func CreateModalCustomID() string {
+	return fmt.Sprintf("%s:create-modal:0", customIDPrefix)
+}
+
+// permissionCreateEvents is Discord's own CREATE_EVENTS bit. Someone who may
+// create a native event may create one here; the two are the same act.
+const permissionCreateEvents = 1 << 44
+
+func (i *Interaction) canCreateEvents() bool {
+	bits, err := strconv.ParseUint(i.Member.Permissions, 10, 64)
+	if err != nil {
+		return false
+	}
+	return bits&permissionAdministrator != 0 ||
+		bits&permissionManageEvents != 0 ||
+		bits&permissionCreateEvents != 0
+}
+
+// mayEdit reports whether the person clicking may change this event, and
+// explains why not when they may not.
+func (s *Server) mayEdit(in *Interaction, ev *Event) (bool, string) {
+	userID, _ := in.actor()
+	if in.canManageEvents() || (ev.CreatedBy != "" && ev.CreatedBy == userID) {
+		return true, ""
+	}
+	return false, "Only someone with Manage Events, or whoever created this event, can edit it."
+}
+
+// handleEditButton opens the edit form.
 //
-// The button is on a message everyone can see, because Discord has no way to
-// show a component to some readers and not others. So the permission check
-// happens here, on the click, and someone without it gets a private no rather
-// than a form that fails on submit.
-func (s *Server) handleCapacityButton(w http.ResponseWriter, in *Interaction, eventID int64) {
+// The button is on a message everyone can see, because Discord cannot show a
+// component to some readers and not others. So the check happens on the press
+// and an unauthorised click costs one private no, rather than a form that fails
+// after it has been filled in.
+func (s *Server) handleEditButton(w http.ResponseWriter, in *Interaction, eventID int64) {
 	ev, err := s.store.GetEvent(eventID)
 	if err != nil {
 		s.replyEphemeral(w, "That signup list no longer exists.")
 		return
 	}
-	userID, _ := in.actor()
-	if !in.canManageEvents() && ev.CreatedBy != userID {
-		s.replyEphemeral(w, "Only someone with Manage Events, or whoever created this event, "+
-			"can change the limit.")
+	if ok, why := s.mayEdit(in, ev); !ok {
+		s.replyEphemeral(w, why)
 		return
 	}
-
-	current := strconv.Itoa(ev.Capacity)
+	zone := ev.Timezone
+	if zone == "" {
+		zone = s.DefaultTimezone()
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"type": callbackTypeModal,
-		"data": map[string]any{
-			"custom_id": CapacityModalCustomID(eventID),
-			// Discord caps a modal title at 45 characters and rejects the whole
-			// interaction if it is longer, so the event name is trimmed to fit
-			// rather than sent whole and refused.
-			"title": truncate("Limit for "+ev.Name, 45),
-			"components": []any{
-				map[string]any{
-					"type": componentTypeActionRow,
-					"components": []any{
-						map[string]any{
-							"type":        componentTypeTextInput,
-							"custom_id":   capacityFieldID,
-							"label":       "How many places? 0 means no limit",
-							"style":       textInputStyleShort,
-							"value":       current,
-							"min_length":  1,
-							"max_length":  6,
-							"required":    true,
-							"placeholder": "20",
-						},
-					},
-				},
-			},
-		},
+		"data": buildEventModal(EditModalCustomID(eventID), "Edit "+ev.Name, ev, zone),
 	})
 }
 
-// handleModalSubmit takes the typed value.
+// handleCreateButton opens the same form, empty.
+func (s *Server) handleCreateButton(w http.ResponseWriter, in *Interaction) {
+	if !in.canCreateEvents() {
+		s.replyEphemeral(w, "You need Create Events or Manage Events in this server "+
+			"to make an event.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"type": callbackTypeModal,
+		"data": buildEventModal(CreateModalCustomID(), "New event", nil, s.DefaultTimezone()),
+	})
+}
+
+// handleModalSubmit takes the typed values from either form.
 func (s *Server) handleModalSubmit(w http.ResponseWriter, in *Interaction) {
 	action, eventID, ok := parseCustomID(in.Data.CustomID)
-	if !ok || action != "capacity-modal" {
+	if !ok {
 		s.replyEphemeral(w, "That form is not one of mine.")
 		return
 	}
+	form := EventForm{
+		Name:     in.fieldValue(fieldName),
+		StartsAt: in.fieldValue(fieldStartsAt),
+		EndsAt:   in.fieldValue(fieldEndsAt),
+		Capacity: in.fieldValue(fieldCapacity),
+		Location: in.fieldValue(fieldLocation),
+	}
+	switch action {
+	case "edit-modal", "capacity-modal":
+		s.applyEditForm(w, in, eventID, form)
+	case "create-modal":
+		s.applyCreateForm(w, in, form)
+	default:
+		s.replyEphemeral(w, "That form is not one of mine.")
+	}
+}
+
+// applyEditForm saves an edit and reports what followed from it.
+func (s *Server) applyEditForm(w http.ResponseWriter, in *Interaction, eventID int64, form EventForm) {
 	ev, err := s.store.GetEvent(eventID)
 	if err != nil {
 		s.replyEphemeral(w, "That signup list no longer exists.")
 		return
 	}
+	// Checked again here, not only on the press that opened the form. The two
+	// are separate requests and nothing stops the second arriving on its own.
+	if ok, why := s.mayEdit(in, ev); !ok {
+		s.replyEphemeral(w, why)
+		return
+	}
+	zone := ev.Timezone
+	if zone == "" {
+		zone = s.DefaultTimezone()
+	}
+	values, err := form.Validate(zone)
+	if err != nil {
+		s.replyEphemeral(w, plainError(err))
+		return
+	}
+
 	userID, _ := in.actor()
-	// Checked again on submit, not only on the click that opened the form. The
-	// two are separate requests and nothing stops the second being sent on its
-	// own.
-	if !in.canManageEvents() && ev.CreatedBy != userID {
-		s.replyEphemeral(w, "Only someone with Manage Events, or whoever created this event, "+
-			"can change the limit.")
+	updated, promoted, err := s.ApplyEventForm(ev, values, zone, "discord:"+userID)
+	if err != nil {
+		log.Printf("[discord-signup] edit event=%d: %v", eventID, err)
+		s.replyEphemeral(w, "Something went wrong. Nothing was changed.")
 		return
+	}
+	s.replyEphemeral(w, describeEdit(ev, updated, promoted, zone))
+}
+
+// applyCreateForm makes a new event and puts its card on the board.
+func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form EventForm) {
+	if !in.canCreateEvents() {
+		s.replyEphemeral(w, "You need Create Events or Manage Events in this server "+
+			"to make an event.")
+		return
+	}
+	zone := s.DefaultTimezone()
+	values, err := form.Validate(zone)
+	if err != nil {
+		s.replyEphemeral(w, plainError(err))
+		return
+	}
+	userID, _ := in.actor()
+	ev, err := s.store.CreateEvent(Event{
+		GuildID:   in.GuildID,
+		ChannelID: s.BoardChannelID(),
+		Name:      values.Name,
+		Capacity:  values.Capacity,
+		StartsAt:  values.StartsAt,
+		EndsAt:    values.EndsAt,
+		Location:  values.Location,
+		Timezone:  zone,
+		Origin:    OriginLocal,
+		CreatedBy: userID,
+	})
+	if err != nil {
+		log.Printf("[discord-signup] create from discord: %v", err)
+		s.replyEphemeral(w, plainError(err))
+		return
+	}
+	if _, err := s.PostSignupMessage(ev.ID); err != nil {
+		// The event exists; only the card failed. Say so rather than implying
+		// nothing happened, or they will create it a second time.
+		log.Printf("[discord-signup] post card for new event %d: %v", ev.ID, err)
+		s.replyEphemeral(w, fmt.Sprintf("**%s** was created, but its signup card could not "+
+			"be posted to <#%s>. Nothing is lost — the next sync will try again.",
+			ev.Name, s.BoardChannelID()))
+		return
+	}
+	s.replyEphemeral(w, fmt.Sprintf("**%s** is up in <#%s>.\n%s\n\nAnyone can press Join. "+
+		"Press Edit on the card to change any of this.",
+		ev.Name, s.BoardChannelID(), describeEventLine(ev, values.Capacity)))
+}
+
+func describeEventLine(ev *Event, capacity int) string {
+	line := fmt.Sprintf("🗓️ <t:%d:F>", ev.StartsAt)
+	if ev.Location != "" {
+		line += " · " + ev.Location
+	}
+	if capacity > 0 {
+		line += fmt.Sprintf(" · %d places", capacity)
+	} else {
+		line += " · no limit"
+	}
+	return line
+}
+
+// describeEdit says what changed, field by field, and what followed from it.
+//
+// A bare "Saved." would hide the two consequences people are most surprised by:
+// raising a limit admits a queue in one go, and lowering it below the roster
+// removes nobody.
+func describeEdit(before, after *Event, promoted []Signup, zone string) string {
+	var changes []string
+	if before.Name != after.Name {
+		changes = append(changes, fmt.Sprintf("name → **%s**", after.Name))
+	}
+	if before.StartsAt != after.StartsAt {
+		changes = append(changes, fmt.Sprintf("starts → <t:%d:F>", after.StartsAt))
+	}
+	if before.EndsAt != after.EndsAt {
+		if after.EndsAt == 0 {
+			changes = append(changes, "end time removed")
+		} else {
+			changes = append(changes, fmt.Sprintf("ends → <t:%d:F>", after.EndsAt))
+		}
+	}
+	if before.Capacity != after.Capacity {
+		if after.Capacity == 0 {
+			changes = append(changes, "limit removed")
+		} else {
+			changes = append(changes, fmt.Sprintf("limit → **%d** places", after.Capacity))
+		}
+	}
+	if before.Location != after.Location {
+		if after.Location == "" {
+			changes = append(changes, "location removed")
+		} else {
+			changes = append(changes, "location → "+after.Location)
+		}
 	}
 
-	capacity, err := ParseCapacity(in.fieldValue(capacityFieldID))
-	if err != nil {
-		// The message names what was wrong with what they typed, because the
-		// modal is gone by now and they have to retype it from memory.
-		s.replyEphemeral(w, strings.TrimPrefix(err.Error(), "invalid event: "))
-		return
+	var b strings.Builder
+	if len(changes) == 0 {
+		b.WriteString("Nothing changed.")
+	} else {
+		b.WriteString("Saved: " + strings.Join(changes, ", ") + ".")
 	}
+	switch len(promoted) {
+	case 0:
+	case 1:
+		fmt.Fprintf(&b, "\n<@%s> came off the waitlist and has been messaged.",
+			promoted[0].DiscordUserID)
+	default:
+		fmt.Fprintf(&b, "\n%d people came off the waitlist and have been messaged.", len(promoted))
+	}
+	if after.Capacity > 0 && after.AttendingCount > after.Capacity {
+		fmt.Fprintf(&b, "\n\n%d people are already in, over the new limit. Nobody was removed — "+
+			"they were told they had a place. The limit applies to the next person to sign up.",
+			after.AttendingCount)
+	}
+	b.WriteString("\n\nDescription, recurrence and roles are on the web page — a Discord form " +
+		"holds five fields and no more.")
+	return b.String()
+}
 
-	updated, promoted, err := s.SetCapacity(eventID, capacity, "discord:"+userID)
-	if err != nil {
-		log.Printf("[discord-signup] set capacity event=%d: %v", eventID, err)
-		s.replyEphemeral(w, "Something went wrong. The limit was not changed.")
-		return
-	}
-	s.replyEphemeral(w, describeCapacityChange(ev, updated, promoted))
+// plainError strips the internal error wrapper so the person reads the reason
+// rather than the plumbing.
+func plainError(err error) string {
+	msg := err.Error()
+	msg = strings.ReplaceAll(msg, "invalid event: ", "")
+	return strings.ToUpper(msg[:1]) + msg[1:]
 }
 
 // fieldValue pulls one typed field out of a modal submission.
@@ -476,58 +656,12 @@ func (i *Interaction) fieldValue(customID string) string {
 	return ""
 }
 
-// describeCapacityChange says what the new number did, not just what it is.
-//
-// The consequence is the part worth reporting: raising a limit can admit a
-// queue of people in one go, and lowering it below the current roster does not
-// remove anyone — both are surprising if you only see the number.
-func describeCapacityChange(before, after *Event, promoted []Signup) string {
-	var b strings.Builder
-	switch {
-	case after.Capacity == 0:
-		b.WriteString("Limit removed — **" + after.Name + "** now takes anyone.")
-	case before.Capacity == after.Capacity:
-		fmt.Fprintf(&b, "Limit unchanged at **%d**.", after.Capacity)
-	default:
-		fmt.Fprintf(&b, "Limit set to **%d** places.", after.Capacity)
-	}
-
-	switch len(promoted) {
-	case 0:
-	case 1:
-		fmt.Fprintf(&b, "\n<@%s> came off the waitlist and has been messaged.",
-			promoted[0].DiscordUserID)
-	default:
-		fmt.Fprintf(&b, "\n%d people came off the waitlist and have been messaged.", len(promoted))
-	}
-
-	if after.Capacity > 0 && after.AttendingCount > after.Capacity {
-		fmt.Fprintf(&b, "\n\n%d people are already in, which is over the new limit. "+
-			"Nobody has been removed — they were told they had a place. The limit applies "+
-			"to the next person to sign up.", after.AttendingCount)
-	} else if after.Capacity > 0 {
-		fmt.Fprintf(&b, "\n\nNow %d/%d taken", after.AttendingCount, after.Capacity)
-		if after.WaitlistCount > 0 {
-			fmt.Fprintf(&b, ", %d still waiting", after.WaitlistCount)
-		}
-		b.WriteString(".")
-	}
-	return b.String()
-}
-
+// truncate trims to a rune-safe length. Discord counts characters, not bytes,
+// and cutting mid-rune would send invalid UTF-8 and be rejected outright.
 func truncate(s string, max int) string {
-	if len(s) <= max {
+	runes := []rune(s)
+	if len(runes) <= max {
 		return s
 	}
-	return s[:max-1] + "…"
-}
-
-// CapacityCustomID builds the custom_id for an event's limit button.
-func CapacityCustomID(eventID int64) string {
-	return fmt.Sprintf("%s:capacity:%d", customIDPrefix, eventID)
-}
-
-// CapacityModalCustomID builds the custom_id for the form that button opens.
-func CapacityModalCustomID(eventID int64) string {
-	return fmt.Sprintf("%s:capacity-modal:%d", customIDPrefix, eventID)
+	return string(runes[:max-1]) + "…"
 }
