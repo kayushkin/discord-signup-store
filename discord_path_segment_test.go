@@ -257,3 +257,53 @@ func jsonString(s string) string {
 	}
 	return string(append(out, '"'))
 }
+
+// TestAdoptForumEscapesEveryChannelItAddresses covers the one path build that
+// is not on a DiscordClient method at all: AdoptForum reaches past the client's
+// own API and calls do() directly to re-read a forum's available_tags before
+// PATCHing them. Nothing else drives it, so without this test that site sits
+// outside the table above — the scorer's restore-the-bug-forum-3 arm survived
+// until this was added, which is how the hole was found rather than assumed.
+//
+// It asserts the whole request sequence rather than "the escaped line appears
+// somewhere". AdoptForum addresses the same channel five times over three call
+// sites, so a membership check is satisfied by any one of them and would read
+// green with the raw read still unescaped.
+func TestAdoptForumEscapesEveryChannelItAddresses(t *testing.T) {
+	for _, probe := range pathProbeIDs {
+		t.Run(probe.name, func(t *testing.T) {
+			var lines []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				lines = append(lines, r.Method+" "+r.RequestURI)
+				w.Header().Set("Content-Type", "application/json")
+				// A forum with none of the managed tags, so AdoptForum takes
+				// the branch that reads the channel back raw.
+				_, _ = w.Write([]byte(`{"type":15,"available_tags":[]}`))
+			}))
+			t.Cleanup(srv.Close)
+
+			server := NewServer(testStore(t), nil,
+				NewDiscordClient(srv.URL, func() (string, error) { return "tok", nil }))
+			_, _ = server.AdoptForum(fixedID, probe.id)
+
+			at := "/channels/" + url.PathEscape(probe.id)
+			want := []string{
+				"GET " + at,   // ForumChannelTags
+				"GET " + at,   // the raw read-back this test exists for
+				"PATCH " + at, // ModifyThread, adding the managed tags
+				"GET " + at,   // ForumChannelTags again, for the new tag ids
+				"PATCH " + at, // ModifyThread, setting the default reaction
+			}
+			if len(lines) != len(want) {
+				t.Fatalf("channel %q addressed %d times, want %d: %q",
+					probe.id, len(lines), len(want), lines)
+			}
+			for i := range want {
+				if lines[i] != want[i] {
+					t.Errorf("channel %q: request %d was %q, want %q",
+						probe.id, i, lines[i], want[i])
+				}
+			}
+		})
+	}
+}
