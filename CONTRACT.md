@@ -105,18 +105,23 @@ each of them. Lowering it promotes nobody and removes nobody.
 
 ## The consolidated table
 
-**Six events per message**, each one line of text plus a row of
+**Five events per message**, each one line of text plus a row of
 **Join · Leave · Details · Edit**, wrapped in a Components V2 container. Past
-six it spills onto another message.
+five it spills onto another message.
 
-The line is exactly `{slots} · {title} · {description} · {time}`, in **one**
-text component. No heading, no event count, no note about sorting — the rows
-already say all of it, and each component spent on chrome is one not spent on an
-event.
+The line is exactly `{slots} · {title} · {location} · {time}`, in **one** text
+component, with a divider between events. No heading, no event count, no note
+about sorting — the rows already say all of it.
 
-Six is measured, not inferred: an event costs a text block, an action row and
-four buttons, and Discord allows 40 components in a message. Seven is
-`COMPONENT_MAX_TOTAL_COMPONENTS_EXCEEDED`. The five-action-row limit that caps
+The time is `8/29 4pm`, formatted in the **event's own zone** rather than
+Discord's `<t:…>` markup. That markup localises per reader — the right default
+everywhere else — but expands to "August 29, 2026 4:00 PM" with no short form
+on offer, and a table row is for glancing. Details still carries the localised
+time. An uncapped event shows **no count at all**: a bare number next to
+nothing read as nothing.
+
+Five per page now that dividers cost a component each: container + 5×6 + 4
+separators = 35 of the measured 40-component budget; six would need 42. The five-action-row limit that caps
 an ordinary message does **not** apply under Components V2 — the total budget
 replaces it, which is what makes six rows of buttons in one message possible.
 

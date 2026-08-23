@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 )
 
 // The consolidated table is one Discord message per event, each holding one
@@ -264,15 +265,17 @@ const (
 	// field — every word lives in a component.
 	messageFlagComponentsV2 = 1 << 15
 
-	// eventsPerPage is how many events fit in one message. Measured against the
-	// live API rather than inferred: each event costs a text block, an action
-	// row and four buttons, and Discord allows 40 components in a message. Six
-	// fit; seven is COMPONENT_MAX_TOTAL_COMPONENTS_EXCEEDED.
+	componentTypeSeparator = 14
+
+	// eventsPerPage is how many events fit in one message under the measured
+	// 40-component budget. Each event costs a text block, an action row and
+	// four buttons (6), and each gap between events costs a separator: the
+	// container + 5×6 + 4 separators = 35, while six events would need 42.
 	//
 	// The five-action-row limit that caps an ordinary message does NOT apply
 	// here — Components V2 replaces it with the total budget, which is what
-	// makes six rows of buttons in one message possible at all.
-	eventsPerPage = 6
+	// makes five rows of buttons in one message possible at all.
+	eventsPerPage = 5
 )
 
 const tableRebuildButtonID = customIDPrefix + ":table-rebuild:0"
@@ -293,6 +296,11 @@ func RenderTablePage(events []Event, page, totalPages int) map[string]any {
 
 	for i := range events {
 		ev := &events[i]
+		if i > 0 {
+			body = append(body, map[string]any{
+				"type": componentTypeSeparator, "divider": true, "spacing": 1,
+			})
+		}
 		body = append(body, textBlock(eventLine(ev)))
 		body = append(body, map[string]any{
 			"type": componentTypeActionRow, "components": eventButtons(ev),
@@ -318,29 +326,48 @@ func textBlock(content string) map[string]any {
 
 // eventLine is the whole of an event, in one text component:
 //
-//	{slots} {title} {description} {time}
+//	{slots} {title} {location} {time}
 //
-// One component, not four. Each one counts against the 40 a message gets, so
-// splitting this into a title block, a description block and a time block would
-// cut a page from six events to two — the layout would read the same and hold a
-// third as much.
+// One component, not four — each counts against the 40 a message gets, and a
+// per-field split would read identically while holding half as much.
+//
+// An uncapped event shows no count at all. A bare "1" read as nothing — is it a
+// count, a limit, a rank? — and the whole line exists to be glanced at.
 func eventLine(ev *Event) string {
-	slots := fmt.Sprintf("%d/%d", ev.AttendingCount, ev.Capacity)
-	if ev.Capacity == 0 {
-		slots = fmt.Sprintf("%d", ev.AttendingCount)
+	var parts []string
+	if ev.Capacity > 0 {
+		parts = append(parts, fmt.Sprintf("`%d/%d`", ev.AttendingCount, ev.Capacity))
 	}
-
-	parts := []string{fmt.Sprintf("`%s`", slots), fmt.Sprintf("**%s**", ev.Name)}
-	if ev.Description != "" {
-		// Newlines flattened and the text cut short: it shares a line with
-		// everything else, and Details holds the whole of it.
-		parts = append(parts, trimTo(strings.Join(strings.Fields(ev.Description), " "), 90))
+	parts = append(parts, fmt.Sprintf("**%s**", ev.Name))
+	if ev.Location != "" {
+		parts = append(parts, ev.Location)
 	}
 	if ev.StartsAt > 0 {
-		// Discord's own markup, so the time lands in each reader's timezone.
-		parts = append(parts, fmt.Sprintf("<t:%d:f>", ev.StartsAt))
+		parts = append(parts, compactWhen(ev))
 	}
 	return strings.Join(parts, "  ·  ")
+}
+
+// compactWhen renders "8/29 4pm" — formatted here, deliberately NOT Discord's
+// <t:…> markup. That markup localises per reader, which is the right default
+// everywhere else, but it expands to "August 29, 2026 4:00 PM" and there is no
+// short form Discord offers that is not still a mouthful. A table row is for
+// glancing, so it trades the per-reader timezone for eight characters; the
+// event's zone is whatever it was scheduled in, and Details still carries the
+// localised form for anyone who needs certainty.
+func compactWhen(ev *Event) string {
+	zone := ev.Timezone
+	if zone == "" {
+		zone = "UTC"
+	}
+	loc, err := time.LoadLocation(zone)
+	if err != nil {
+		loc = time.UTC
+	}
+	t := time.Unix(ev.StartsAt, 0).In(loc)
+	clock := strings.ToLower(t.Format("3:04pm"))
+	clock = strings.Replace(clock, ":00", "", 1)
+	return fmt.Sprintf("%d/%d %s", int(t.Month()), t.Day(), clock)
 }
 
 func eventButtons(ev *Event) []any {

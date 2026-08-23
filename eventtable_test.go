@@ -125,8 +125,8 @@ func TestPaginationSpillsPastSixAndNumbersContinuously(t *testing.T) {
 	if len(pages) != 3 {
 		t.Fatalf("%d pages for 14 events, want 3", len(pages))
 	}
-	if len(pages[0]) != 6 || len(pages[1]) != 6 || len(pages[2]) != 2 {
-		t.Errorf("page sizes %d/%d/%d, want 6/6/2",
+	if len(pages[0]) != 5 || len(pages[1]) != 5 || len(pages[2]) != 4 {
+		t.Errorf("page sizes %d/%d/%d, want 5/5/4",
 			len(pages[0]), len(pages[1]), len(pages[2]))
 	}
 	// No page carries a heading, including the first.
@@ -178,8 +178,8 @@ func TestTableIsEditedInPlaceAndShrinks(t *testing.T) {
 		}
 	}
 
-	// Dropping below seven events must delete the surplus page.
-	for _, id := range ids[6:] {
+	// Dropping below six events must delete the surplus page.
+	for _, id := range ids[5:] {
 		if err := store.DeleteEvent(id); err != nil {
 			t.Fatalf("delete: %v", err)
 		}
@@ -188,7 +188,7 @@ func TestTableIsEditedInPlaceAndShrinks(t *testing.T) {
 		t.Fatalf("third draw: %v", err)
 	}
 	if pages, _ := store.TablePages("g1"); len(pages) != 1 {
-		t.Errorf("%d pages for 6 events, want 1", len(pages))
+		t.Errorf("%d pages for 5 events, want 1", len(pages))
 	}
 }
 
@@ -296,27 +296,74 @@ func TestWaitlistIsNumberedByPlaceNotPosition(t *testing.T) {
 	}
 }
 
-// TestEventLineIsSlotsTitleDescriptionTime pins the format, in that order and
-// in one component.
-func TestEventLineIsSlotsTitleDescriptionTime(t *testing.T) {
+// TestEventLineIsSlotsTitleLocationTime pins the format, in that order and in
+// one component, with the date compact rather than Discord-localised.
+func TestEventLineIsSlotsTitleLocationTime(t *testing.T) {
+	// 2026-08-29 16:00 in Los Angeles.
+	when := time.Date(2026, 8, 29, 16, 0, 0, 0, mustZone(t, "America/Los_Angeles")).Unix()
 	ev := &Event{ID: 1, Name: "Board games", Capacity: 8, AttendingCount: 3,
-		Description: "Bring\ndice   and snacks.", StartsAt: 1788067881, Status: StatusOpen}
-	line := eventLine(ev)
+		Location: "The pub", Timezone: "America/Los_Angeles",
+		StartsAt: when, Status: StatusOpen}
 
-	want := "`3/8`  ·  **Board games**  ·  Bring dice and snacks.  ·  <t:1788067881:f>"
-	if line != want {
-		t.Errorf("eventLine =\n  %q\nwant\n  %q", line, want)
-	}
-	// Newlines flattened: a second line would look like a separate element and
-	// break the alignment of everything under it.
-	if strings.Contains(line, "\n") {
-		t.Errorf("the line spans more than one line: %q", line)
+	want := "`3/8`  ·  **Board games**  ·  The pub  ·  8/29 4pm"
+	if got := eventLine(ev); got != want {
+		t.Errorf("eventLine =\n  %q\nwant\n  %q", got, want)
 	}
 }
 
-func TestEventLineWithoutDescriptionOrTime(t *testing.T) {
+func mustZone(t *testing.T, name string) *time.Location {
+	t.Helper()
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		t.Fatalf("load zone: %v", err)
+	}
+	return loc
+}
+
+// TestUncappedEventsShowNoCount pins the fix for the bare "1". A count with no
+// limit next to it read as nothing — is it a count, a limit, a rank? — so an
+// uncapped event shows no number at all.
+func TestUncappedEventsShowNoCount(t *testing.T) {
 	bare := eventLine(&Event{ID: 1, Name: "Just a name", Capacity: 0, AttendingCount: 7})
-	if bare != "`7`  ·  **Just a name**" {
-		t.Errorf("eventLine = %q", bare)
+	if bare != "**Just a name**" {
+		t.Errorf("eventLine = %q, want just the name", bare)
+	}
+}
+
+// TestCompactWhenKeepsMinutesOnlyWhenTheyMatter: "4pm" not "4:00pm", but a
+// half-hour start keeps its minutes.
+func TestCompactWhenKeepsMinutesOnlyWhenTheyMatter(t *testing.T) {
+	zone := mustZone(t, "America/Los_Angeles")
+	onHour := &Event{StartsAt: time.Date(2026, 8, 29, 16, 0, 0, 0, zone).Unix(),
+		Timezone: "America/Los_Angeles"}
+	if got := compactWhen(onHour); got != "8/29 4pm" {
+		t.Errorf("compactWhen = %q, want %q", got, "8/29 4pm")
+	}
+	halfPast := &Event{StartsAt: time.Date(2026, 8, 29, 16, 30, 0, 0, zone).Unix(),
+		Timezone: "America/Los_Angeles"}
+	if got := compactWhen(halfPast); got != "8/29 4:30pm" {
+		t.Errorf("compactWhen = %q, want %q", got, "8/29 4:30pm")
+	}
+}
+
+// TestSeparatorsSitBetweenEventsNotAround pins the divider placement: four
+// separators for five events, none leading or trailing.
+func TestSeparatorsSitBetweenEventsNotAround(t *testing.T) {
+	body := RenderTablePage(tableEvents(5), 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	var kinds []int
+	for _, c := range body {
+		kinds = append(kinds, int(c.(map[string]any)["type"].(int)))
+	}
+	separators := 0
+	for _, k := range kinds {
+		if k == componentTypeSeparator {
+			separators++
+		}
+	}
+	if separators != 4 {
+		t.Errorf("%d separators for 5 events, want 4 (between, not around)", separators)
+	}
+	if kinds[0] == componentTypeSeparator || kinds[len(kinds)-1] == componentTypeSeparator {
+		t.Error("a separator leads or trails the page")
 	}
 }
