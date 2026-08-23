@@ -283,7 +283,7 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 			ChannelID:               channelID,
 			DiscordScheduledEventID: r.ID,
 			Name:                    r.Name,
-			Description:             r.Description,
+			Description:             stripSignupPointer(r.Description),
 			// Discord had no cap, so the imported event starts uncapped. Adding
 			// one is a decision a person makes on the web page; inventing a
 			// number here would silently waitlist people who were already in.
@@ -317,8 +317,8 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 	if existing.Name != r.Name {
 		patch.Name = &r.Name
 	}
-	if existing.Description != r.Description {
-		patch.Description = &r.Description
+	if incoming := stripSignupPointer(r.Description); existing.Description != incoming {
+		patch.Description = &incoming
 	}
 	if existing.StartsAt != startsAt {
 		patch.StartsAt = &startsAt
@@ -477,12 +477,30 @@ func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event,
 	return s.store.UpdateEvent(eventID, EventPatch{DiscordScheduledEventID: &created.ID})
 }
 
+// signupPointerMarker begins the line this service appends to a native event's
+// description. It is matched on import to strip the line off again.
+//
+// Without that, the text round-trips: we append the pointer when publishing,
+// the sync reads the whole description back as ours, and the next publish
+// appends the pointer to a description that already ends in one. It grows by a
+// paragraph every edit, forever, until Discord refuses the event for length.
+const signupPointerMarker = "\n\n— Signups are in <#"
+
+// stripSignupPointer removes this service's own footer from a description read
+// back from Discord, so what is stored is what a person actually wrote.
+func stripSignupPointer(description string) string {
+	if i := strings.Index(description, signupPointerMarker); i >= 0 {
+		return strings.TrimRight(description[:i], "\n ")
+	}
+	return description
+}
+
 // signupPointer is the line appended to a native event's description telling
 // people where the real roster is. Says the number too, because "signups are
 // elsewhere" is much less convincing than "20 places, 3 left".
 func signupPointer(ev *Event, boardChannelID string) string {
 	var b strings.Builder
-	b.WriteString("\n\n— Signups are in <#" + boardChannelID + ">")
+	b.WriteString(signupPointerMarker + boardChannelID + ">")
 	if ev.Capacity > 0 {
 		fmt.Fprintf(&b, " (%s", pluralise(ev.Capacity, "place"))
 		if left := ev.Capacity - ev.AttendingCount; left > 0 {

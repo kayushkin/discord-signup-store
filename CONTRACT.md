@@ -116,8 +116,15 @@ events fit.
 
 The buttons are the **same custom_ids the full card uses** — a row and a card
 are two views of one event, and separate ids would mean two handlers to keep in
-step. Only `signup:details:{id}` is new, because a description does not fit on a
-line and belongs in an ephemeral reply.
+step. Only `signup:details:{id}` is new. It opens a **modal** rather than posting an
+ephemeral message, so reading an event's details is a dismissible overlay that
+leaves the channel alone.
+
+⚠️ Discord has **no read-only text input**. A modal holds nothing but inputs, so
+the panels are inputs with their values prefilled and the labels say
+"(read-only)". Submitting is answered with a note that nothing changed. The
+roster is listed by display name, not `<@id>` — a modal renders neither
+markdown nor mentions, so a mention would show as a raw snowflake.
 
 A closed event keeps Details and Edit and loses Join and Leave.
 

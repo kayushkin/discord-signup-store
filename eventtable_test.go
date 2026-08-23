@@ -219,3 +219,93 @@ func TestRebuildRepostsInDateOrder(t *testing.T) {
 		}
 	}
 }
+
+// TestDetailsModalFitsDiscordsLimits covers the ceilings that reject the whole
+// interaction rather than degrading: five components, a 45-character title, and
+// 4000 characters per value.
+func TestDetailsModalFitsDiscordsLimits(t *testing.T) {
+	ev := &Event{
+		ID: 1, GuildID: "g1", Name: strings.Repeat("A very long event name ", 5),
+		Description: strings.Repeat("word ", 2000), Capacity: 3, AttendingCount: 2,
+		WaitlistCount: 2, StartsAt: 1788067881, Location: "The pub",
+		Timezone: "America/Los_Angeles", DiscordScheduledEventID: "native-1",
+		DiscordInterestedCount: 9,
+	}
+	roster := []Signup{
+		{DiscordUserID: "1", DisplayName: "Alice", State: StateAttending, Position: 1},
+		{DiscordUserID: "2", DisplayName: "Bob", State: StateAttending, Position: 2},
+		{DiscordUserID: "3", DisplayName: "Carol", State: StateWaitlisted, Position: 3, WaitlistPlace: 1},
+		{DiscordUserID: "4", DisplayName: "Dan", State: StateWaitlisted, Position: 4, WaitlistPlace: 2},
+	}
+	modal := buildDetailsModal(ev, roster)
+
+	if len([]rune(modal["title"].(string))) > 45 {
+		t.Errorf("title is %d runes, over Discord's 45", len([]rune(modal["title"].(string))))
+	}
+	rows := modal["components"].([]any)
+	if len(rows) == 0 {
+		t.Fatal("a modal with no components is rejected outright")
+	}
+	if len(rows) > 5 {
+		t.Fatalf("%d components, want at most 5", len(rows))
+	}
+	for _, r := range rows {
+		f := r.(map[string]any)["components"].([]any)[0].(map[string]any)
+		if len([]rune(f["label"].(string))) > 45 {
+			t.Errorf("label %q is over 45 runes", f["label"])
+		}
+		if len([]rune(f["value"].(string))) > detailsFieldLimit {
+			t.Errorf("a value is %d runes, over Discord's %d",
+				len([]rune(f["value"].(string))), detailsFieldLimit)
+		}
+	}
+}
+
+// TestDetailsModalListsNamesNotMentions covers the one thing a modal will not
+// render. A <@id> mention shows as a raw snowflake in angle brackets there, so
+// the roster has to be display names — which is what the backfill is for.
+func TestDetailsModalListsNamesNotMentions(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
+	roster := []Signup{{DiscordUserID: "110122051179687936", DisplayName: "Slava",
+		State: StateAttending, Position: 1}}
+
+	for _, r := range buildDetailsModal(ev, roster)["components"].([]any) {
+		f := r.(map[string]any)["components"].([]any)[0].(map[string]any)
+		value := f["value"].(string)
+		if strings.Contains(value, "<@") {
+			t.Errorf("field %q contains a mention, which a modal shows as a raw id: %q",
+				f["custom_id"], value)
+		}
+		if f["custom_id"] == "details-going" && !strings.Contains(value, "Slava") {
+			t.Errorf("the Going list is %q, want the display name", value)
+		}
+	}
+}
+
+// TestDetailsModalOmitsAnEmptyWaitlist keeps a permanently blank box out, since
+// one reads as a broken field rather than an empty list.
+func TestDetailsModalOmitsAnEmptyWaitlist(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
+	for _, r := range buildDetailsModal(ev, nil)["components"].([]any) {
+		f := r.(map[string]any)["components"].([]any)[0].(map[string]any)
+		if f["custom_id"] == "details-waitlist" {
+			t.Error("an empty waitlist still got a box")
+		}
+	}
+}
+
+// TestWaitlistIsNumberedByPlaceNotPosition means the modal shows "1." for the
+// next person up, not their arrival number, which is an internal id nobody
+// outside this package has any use for.
+func TestWaitlistIsNumberedByPlaceNotPosition(t *testing.T) {
+	got := rosterNames([]Signup{
+		{DisplayName: "Carol", State: StateWaitlisted, Position: 17, WaitlistPlace: 1},
+		{DisplayName: "Dan", State: StateWaitlisted, Position: 22, WaitlistPlace: 2},
+	})
+	if !strings.HasPrefix(got, "1. Carol") {
+		t.Errorf("waitlist = %q, want it numbered by place", got)
+	}
+	if strings.Contains(got, "17") {
+		t.Errorf("waitlist = %q, leaking the internal arrival position", got)
+	}
+}

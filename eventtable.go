@@ -407,53 +407,130 @@ func (s *Server) handleTableAction(w http.ResponseWriter, in *Interaction, actio
 	}()
 }
 
-// replyTableDetails is what the Details button answers with: the description
-// and the roster, which is everything that would not fit on the line.
-func (s *Server) replyTableDetails(w http.ResponseWriter, ev *Event) {
+// detailsFieldLimit is Discord's cap on a text input's value. Anything longer
+// is rejected on the whole modal, so each panel is trimmed to fit.
+const detailsFieldLimit = 4000
+
+// buildDetailsModal shows an event's description and roster in a popup.
+//
+// A modal is the only overlay Discord offers an app. It holds nothing but text
+// inputs, so the panels below are inputs with their values prefilled — and
+// there is NO read-only flag, which is the honest cost of this: the boxes look
+// editable and are not. The labels say so, and submitting is answered with a
+// note that nothing changed rather than being silently swallowed.
+//
+// An ephemeral message is the idiomatic way to show this and needs none of the
+// above. The modal wins on being a dismissible overlay that leaves the channel
+// alone, which is what was asked for.
+func buildDetailsModal(ev *Event, roster []Signup) map[string]any {
+	row := func(field map[string]any) map[string]any {
+		return map[string]any{"type": componentTypeActionRow, "components": []any{field}}
+	}
+	rows := []any{}
+
+	// Always present, so the modal can never have zero components — which
+	// Discord rejects outright.
+	var when strings.Builder
+	if ev.StartsAt > 0 {
+		zone := ev.Timezone
+		if zone == "" {
+			zone = "UTC"
+		}
+		// Spelled out rather than Discord's <t:…> markup, which renders as
+		// literal text inside a modal instead of localising. The zone is named
+		// so the reader can do the conversion Discord will not do here.
+		fmt.Fprintf(&when, "%s (%s)", FormatEventTime(ev.StartsAt, zone), zone)
+	} else {
+		when.WriteString("No date set")
+	}
+	if ev.Location != "" {
+		when.WriteString("  ·  " + ev.Location)
+	}
+	rows = append(rows, row(modalTextInput("details-when", "When and where (read-only)",
+		trimTo(when.String(), detailsFieldLimit), "", textInputStyleShort, false, detailsFieldLimit)))
+
+	if ev.Description != "" {
+		rows = append(rows, row(modalTextInput("details-description", "Description (read-only)",
+			trimTo(ev.Description, detailsFieldLimit), "", textInputStyleParagraph, false,
+			detailsFieldLimit)))
+	}
+
+	attending, waiting := splitRoster(roster)
+	goingLabel := fmt.Sprintf("Going — %d", len(attending))
+	if ev.Capacity > 0 {
+		goingLabel = fmt.Sprintf("Going — %d of %d", len(attending), ev.Capacity)
+	}
+	rows = append(rows, row(modalTextInput("details-going", truncate(goingLabel, 45),
+		trimTo(rosterNames(attending), detailsFieldLimit), "Nobody yet",
+		textInputStyleParagraph, false, detailsFieldLimit)))
+
+	// Only when there is one. A permanently empty box reads as a broken field.
+	if len(waiting) > 0 {
+		rows = append(rows, row(modalTextInput("details-waitlist",
+			truncate(fmt.Sprintf("Waitlist — %d, in order", len(waiting)), 45),
+			trimTo(rosterNames(waiting), detailsFieldLimit), "",
+			textInputStyleParagraph, false, detailsFieldLimit)))
+	}
+
+	if ev.DiscordScheduledEventID != "" && len(rows) < 5 {
+		rows = append(rows, row(modalTextInput("details-discord", "Discord's own event (read-only)",
+			fmt.Sprintf("%d interested there — a different number from the roster above, "+
+				"and always will be. Discord counts people who asked to be notified.",
+				ev.DiscordInterestedCount), "", textInputStyleParagraph, false, detailsFieldLimit)))
+	}
+
+	return map[string]any{
+		"custom_id":  DetailsModalCustomID(ev.ID),
+		"title":      truncate(ev.Name, 45),
+		"components": rows,
+	}
+}
+
+// rosterNames lists people one per line, by display name.
+//
+// Names rather than <@id> mentions: a modal renders neither markdown nor
+// mentions, so a mention would show as a raw snowflake in angle brackets. This
+// is the one surface where the backfilled display names are load-bearing.
+func rosterNames(signups []Signup) string {
+	if len(signups) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, sg := range signups {
+		name := sg.DisplayName
+		if name == "" {
+			name = sg.DiscordUserID
+		}
+		if sg.State == StateWaitlisted {
+			fmt.Fprintf(&b, "%d. %s\n", sg.WaitlistPlace, name)
+			continue
+		}
+		fmt.Fprintf(&b, "%d. %s\n", i+1, name)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func trimTo(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max-1]) + "…"
+}
+
+// handleDetailsButton opens the details modal.
+func (s *Server) handleDetailsButton(w http.ResponseWriter, eventID int64) {
+	ev, err := s.store.GetEvent(eventID)
+	if err != nil {
+		s.replyEphemeral(w, "That event no longer exists.")
+		return
+	}
 	roster, err := s.store.Roster(ev.ID, false)
 	if err != nil {
 		log.Printf("[discord-signup] roster for details of %d: %v", ev.ID, err)
 	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "## %s\n", ev.Name)
-	if ev.Description != "" {
-		b.WriteString(ev.Description + "\n")
-	}
-	if ev.StartsAt > 0 {
-		fmt.Fprintf(&b, "\n🗓️ <t:%d:F>", ev.StartsAt)
-	}
-	if ev.Location != "" {
-		b.WriteString(" · " + ev.Location)
-	}
-	b.WriteString("\n")
-	if ev.Capacity > 0 {
-		fmt.Fprintf(&b, "\n**%d/%d taken**", ev.AttendingCount, ev.Capacity)
-	} else {
-		fmt.Fprintf(&b, "\n**%d signed up** — no limit", ev.AttendingCount)
-	}
-	if ev.WaitlistCount > 0 {
-		fmt.Fprintf(&b, " · %d waiting", ev.WaitlistCount)
-	}
-	b.WriteString("\n")
-
-	attending, waiting := splitRoster(roster)
-	if len(attending) > 0 {
-		b.WriteString("\n**Going**\n")
-		writeMentions(&b, attending)
-	}
-	if len(waiting) > 0 {
-		b.WriteString("\n**Waitlist**\n")
-		writeMentions(&b, waiting)
-	}
-	if ev.DiscordScheduledEventID != "" {
-		fmt.Fprintf(&b, "\n[Discord's own event](%s) shows %d interested — a different "+
-			"number, and always will be. This list is the roster.",
-			DiscordEventURL(ev.GuildID, ev.DiscordScheduledEventID), ev.DiscordInterestedCount)
-	}
-
-	content := b.String()
-	if len(content) > discordMessageContentLimit {
-		content = content[:discordMessageContentLimit-1] + "…"
-	}
-	s.replyEphemeral(w, content)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"type": callbackTypeModal,
+		"data": buildDetailsModal(ev, roster),
+	})
 }

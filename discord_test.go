@@ -505,3 +505,43 @@ func TestPluralise(t *testing.T) {
 		}
 	}
 }
+
+// TestTheSignupPointerDoesNotRoundTrip covers an accumulating corruption.
+//
+// This service appends a line to a native event's description saying where the
+// real roster is. The sync then reads that description back as the event's own.
+// Without stripping it, the next publish appends the pointer to a description
+// that already ends in one, and it grows by a paragraph on every edit until
+// Discord refuses the event for length.
+func TestTheSignupPointerDoesNotRoundTrip(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Games", Capacity: 8, AttendingCount: 2}
+	written := "Bring dice."
+
+	// One trip out and back.
+	published := written + signupPointer(ev, "board-channel")
+	got := stripSignupPointer(published)
+	if got != written {
+		t.Fatalf("after one round trip the description is %q, want %q", got, written)
+	}
+
+	// Ten more. The failure mode is growth, so the test has to iterate.
+	current := written
+	for i := 0; i < 10; i++ {
+		current = stripSignupPointer(current + signupPointer(ev, "board-channel"))
+	}
+	if current != written {
+		t.Errorf("after eleven round trips the description is %q (%d chars), want %q",
+			current, len(current), written)
+	}
+}
+
+func TestStripSignupPointerLeavesOtherTextAlone(t *testing.T) {
+	for _, description := range []string{
+		"", "Bring dice.", "Signups are in the channel",
+		"Multi\nline\ndescription", "— an em dash that is not ours",
+	} {
+		if got := stripSignupPointer(description); got != description {
+			t.Errorf("stripSignupPointer(%q) = %q, want it untouched", description, got)
+		}
+	}
+}

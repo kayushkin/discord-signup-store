@@ -264,9 +264,7 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 	case "create":
 		s.handleCreateButton(w, in)
 	case "details":
-		if ev := mustEvent(s, eventID, w); ev != nil {
-			s.replyTableDetails(w, ev)
-		}
+		s.handleDetailsButton(w, eventID)
 	default:
 		s.replyEphemeral(w, "Unknown signup action.")
 	}
@@ -403,6 +401,13 @@ func EditModalCustomID(eventID int64) string {
 	return fmt.Sprintf("%s:edit-modal:%d", customIDPrefix, eventID)
 }
 
+// DetailsModalCustomID builds the custom_id for the details modal. Its submit
+// changes nothing — Discord has no read-only text input, so the only way to
+// show text in an overlay is to prefill editable boxes and refuse the save.
+func DetailsModalCustomID(eventID int64) string {
+	return fmt.Sprintf("%s:details-modal:%d", customIDPrefix, eventID)
+}
+
 // DetailsCustomID builds the custom_id for a table row's Details button.
 func DetailsCustomID(eventID int64) string {
 	return fmt.Sprintf("%s:details:%d", customIDPrefix, eventID)
@@ -502,6 +507,11 @@ func (s *Server) handleModalSubmit(w http.ResponseWriter, in *Interaction) {
 		s.applyEditForm(w, in, eventID, form)
 	case "create-modal":
 		s.applyCreateForm(w, in, form)
+	case "details-modal":
+		// Discord requires an answer to every submit. Saying nothing changed is
+		// the honest one: the boxes were a way to display text, not collect it.
+		s.replyEphemeral(w, "That was just the details — nothing was changed. "+
+			"Use **Edit** on the row to change the event.")
 	default:
 		s.replyEphemeral(w, "That form is not one of mine.")
 	}
@@ -700,15 +710,4 @@ func truncate(s string, max int) string {
 		return s
 	}
 	return string(runes[:max-1]) + "…"
-}
-
-// mustEvent loads an event for a button press, answering the interaction and
-// returning nil when it is gone.
-func mustEvent(s *Server, eventID int64, w http.ResponseWriter) *Event {
-	ev, err := s.store.GetEvent(eventID)
-	if err != nil {
-		s.replyEphemeral(w, "That event no longer exists.")
-		return nil
-	}
-	return ev
 }
