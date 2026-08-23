@@ -134,7 +134,41 @@ option in the menu. Measured against the live API, not inferred:
 out. Separators go before the menu because they are lines and the menu is the
 only way to read a description and roster.
 
-## Conventions## Conventions
+## The native event's title
+
+When a linked event has a capacity, its Discord title carries a badge:
+`[3/8] Board game night`. Pushed on every roster change, since the count is
+stale the moment somebody joins. No badge on an uncapped event — `[7/∞]` is
+noise.
+
+⚠️ **The badge is never stored.** The importer strips it off any name read back
+from Discord, exactly as it strips the signup pointer off a description.
+Without that, pushing `[3/8] Games` and reading it back makes the stored name
+`[3/8] Games`, and the next push produces `[4/8] [3/8] Games` — in a field
+capped at 100 characters, so it breaks within twenty signups. Pinned by a test
+that round-trips twenty times.
+
+The name is trimmed to fit, never the badge: `[3/8] Board game ni` still says
+what the badge is for.
+
+## Conventions## The native event's title
+
+When a linked event has a capacity, its Discord title carries a badge:
+`[3/8] Board game night`. Pushed on every roster change, since the count is
+stale the moment somebody joins. No badge on an uncapped event — `[7/∞]` is
+noise.
+
+⚠️ **The badge is never stored.** The importer strips it off any name read back
+from Discord, exactly as it strips the signup pointer off a description.
+Without that, pushing `[3/8] Games` and reading it back makes the stored name
+`[3/8] Games`, and the next push produces `[4/8] [3/8] Games` — in a field
+capped at 100 characters, so it breaks within twenty signups. Pinned by a test
+that round-trips twenty times.
+
+The name is trimmed to fit, never the badge: `[3/8] Board game ni` still says
+what the badge is for.
+
+## Conventions
 
 - **Capacity `0` means unlimited**, matching Discord's own convention for
   channel `user_limit` and invite `max_uses`. It does not mean "unset".

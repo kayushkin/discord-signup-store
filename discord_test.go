@@ -474,8 +474,10 @@ func TestEditingPushesThroughToTheNativeEvent(t *testing.T) {
 	if patched == nil {
 		t.Fatal("the native event was not updated")
 	}
-	if patched["name"].(string) != "After" {
-		t.Errorf("name = %v, want \"After\"", patched["name"])
+	// The badge is part of what gets pushed now, and the stored name stays
+	// clean — that separation is what stops the title compounding.
+	if patched["name"].(string) != "[0/4] After" {
+		t.Errorf("name = %v, want the badge plus the name", patched["name"])
 	}
 	meta := patched["entity_metadata"].(map[string]any)
 	if meta["location"].(string) != "The new place" {
@@ -543,5 +545,110 @@ func TestStripSignupPointerLeavesOtherTextAlone(t *testing.T) {
 		if got := stripSignupPointer(description); got != description {
 			t.Errorf("stripSignupPointer(%q) = %q, want it untouched", description, got)
 		}
+	}
+}
+
+// TestTheCapacityBadgeDoesNotRoundTrip is the same failure the description
+// pointer had, in a field capped at 100 characters — so it breaks sooner.
+//
+// We push "[3/8] Games" as the native event's name; the importer reads that
+// name back as the event's own; the next push prefixes it again. Without
+// stripping, the title grows a badge per signup until Discord refuses it.
+func TestTheCapacityBadgeDoesNotRoundTrip(t *testing.T) {
+	ev := &Event{Name: "Board game night", Capacity: 8, AttendingCount: 3}
+
+	if got := nativeEventName(ev); got != "[3/8] Board game night" {
+		t.Fatalf("nativeEventName = %q", got)
+	}
+	// Twenty signups, each pushing a new badge and each read back by a sync.
+	current := ev.Name
+	for i := 0; i < 20; i++ {
+		ev.AttendingCount = i % 9
+		pushed := capacityPrefix(ev) + current
+		current = stripCapacityPrefix(pushed)
+	}
+	if current != "Board game night" {
+		t.Errorf("after twenty round trips the name is %q (%d chars), want %q",
+			current, len(current), "Board game night")
+	}
+}
+
+func TestCapacityBadgeOnlyAppearsWhenThereIsALimit(t *testing.T) {
+	uncapped := &Event{Name: "Open house", Capacity: 0, AttendingCount: 12}
+	if got := nativeEventName(uncapped); got != "Open house" {
+		t.Errorf("nativeEventName = %q, want no badge on an uncapped event", got)
+	}
+	full := &Event{Name: "Full one", Capacity: 4, AttendingCount: 4}
+	if got := nativeEventName(full); got != "[4/4] Full one" {
+		t.Errorf("nativeEventName = %q", got)
+	}
+}
+
+// TestTheBadgeSurvivesALongName covers Discord's 100-character cap. The name is
+// trimmed, never the badge — a title cut to "[3/8] Board game ni" still says
+// what the badge is for, one cut the other way does not.
+func TestTheBadgeSurvivesALongName(t *testing.T) {
+	ev := &Event{Name: strings.Repeat("long name ", 20), Capacity: 8, AttendingCount: 3}
+	got := nativeEventName(ev)
+	if len([]rune(got)) > discordEventNameLimit {
+		t.Errorf("name is %d runes, over Discord's %d", len([]rune(got)), discordEventNameLimit)
+	}
+	if !strings.HasPrefix(got, "[3/8] ") {
+		t.Errorf("name = %q, want the badge kept at the front", got)
+	}
+}
+
+// TestStripCapacityPrefixLeavesRealNamesAlone keeps the pattern from eating
+// something a person actually typed.
+func TestStripCapacityPrefixLeavesRealNamesAlone(t *testing.T) {
+	for _, name := range []string{
+		"Board game night", "3/8 people", "[draft] Planning", "[3 of 8] Games",
+		"Games [3/8]", "[a/b] Games", "",
+	} {
+		if got := stripCapacityPrefix(name); got != name {
+			t.Errorf("stripCapacityPrefix(%q) = %q, want it untouched", name, got)
+		}
+	}
+	// And it does remove the real thing, including odd spacing.
+	for _, badged := range []string{"[3/8] Games", "[12/100]  Games", "[0/1]\tGames"} {
+		if got := stripCapacityPrefix(badged); got != "Games" {
+			t.Errorf("stripCapacityPrefix(%q) = %q, want %q", badged, got, "Games")
+		}
+	}
+}
+
+// TestTheTitleIsPushedOnEveryRosterChange covers the reason this needs pushing
+// at all: the count in the title is stale the moment somebody joins.
+func TestTheTitleIsPushedOnEveryRosterChange(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+
+	ev, err := store.CreateEvent(Event{
+		GuildID: "g1", ChannelID: "board", Name: "Games", Capacity: 3,
+		StartsAt:                time.Now().Add(48 * time.Hour).Unix(),
+		DiscordScheduledEventID: "native-5",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := store.Join(ev.ID, "alice", "Alice", JoinedViaButton); err != nil {
+		t.Fatalf("join: %v", err)
+	}
+	after, err := store.GetEvent(ev.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	srv.syncAfterChange(after, nil)
+
+	var pushed string
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPatch && c.Path == "/guilds/g1/scheduled-events/native-5" {
+			pushed, _ = c.Body["name"].(string)
+		}
+	}
+	if pushed != "[1/3] Games" {
+		t.Errorf("pushed name = %q, want the badge to reflect the new count", pushed)
 	}
 }

@@ -231,6 +231,13 @@ func (s *Server) syncAfterChange(ev *Event, changes []stateChange) {
 	// that updates a card and forgets the row. One message, not the whole
 	// table: this runs on every signup.
 	s.refreshEventPanelQuietly(ev.GuildID)
+	// The native event's title carries the count, so it goes stale on every
+	// signup. Pushed through the same function an edit uses rather than a
+	// second, lighter one: two paths that both write the native event would
+	// eventually disagree about what they write.
+	if err := s.PushEditToDiscord(ev); err != nil {
+		log.Printf("[discord-signup] push title for event %d: %v", ev.ID, err)
+	}
 }
 
 // applyRoles makes one person's roles match one state.

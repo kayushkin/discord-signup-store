@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -278,7 +279,7 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 			GuildID:                 r.GuildID,
 			ChannelID:               channelID,
 			DiscordScheduledEventID: r.ID,
-			Name:                    r.Name,
+			Name:                    stripCapacityPrefix(r.Name),
 			Description:             stripSignupPointer(r.Description),
 			// Discord had no cap, so the imported event starts uncapped. Adding
 			// one is a decision a person makes on the web page; inventing a
@@ -310,8 +311,8 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 	// and must survive a sync — overwriting them here would reset the cap to
 	// unlimited every few minutes.
 	patch := EventPatch{}
-	if existing.Name != r.Name {
-		patch.Name = &r.Name
+	if incoming := stripCapacityPrefix(r.Name); existing.Name != incoming {
+		patch.Name = &incoming
 	}
 	if incoming := stripSignupPointer(r.Description); existing.Description != incoming {
 		patch.Description = &incoming
@@ -455,7 +456,7 @@ func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event,
 	}
 	payload := map[string]any{
 		"guild_id":             ev.GuildID,
-		"name":                 ev.Name,
+		"name":                 nativeEventName(ev),
 		"description":          ev.Description + signupPointer(ev, boardChannelID),
 		"scheduled_start_time": time.Unix(ev.StartsAt, 0).UTC().Format(time.RFC3339),
 		"scheduled_end_time":   time.Unix(endsAt, 0).UTC().Format(time.RFC3339),
@@ -471,6 +472,49 @@ func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event,
 	// is the window in which the gateway can see an event we own but cannot
 	// recognise, which is why syncOneScheduledEvent checks the creator.
 	return s.store.UpdateEvent(eventID, EventPatch{DiscordScheduledEventID: &created.ID})
+}
+
+// capacityPrefixPattern matches the badge this service puts at the front of a
+// native event's name, and nothing else.
+//
+// Anchored, and specific about the digits, because it is used to REMOVE the
+// badge from a name read back from Discord. Miss it and the name round-trips:
+// we push "[3/8] Games", the importer stores that as the name, and the next
+// push produces "[4/8] [3/8] Games" — the same accumulating corruption the
+// description pointer had, in a field capped at 100 characters, so it breaks
+// sooner and louder.
+var capacityPrefixPattern = regexp.MustCompile(`^\[\d+/\d+\]\s+`)
+
+// discordEventNameLimit is Discord's cap on a scheduled event name.
+const discordEventNameLimit = 100
+
+// capacityPrefix is the "[3/8] " badge, or empty when the event has no limit.
+//
+// Only when there is a capacity: "[7/∞]" would be noise, and an event without a
+// limit has no number worth putting in a title.
+func capacityPrefix(ev *Event) string {
+	if ev.Capacity <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("[%d/%d] ", ev.AttendingCount, ev.Capacity)
+}
+
+// stripCapacityPrefix removes this service's own badge from a name read back
+// from Discord, so what is stored is the name a person actually gave it.
+func stripCapacityPrefix(name string) string {
+	return capacityPrefixPattern.ReplaceAllString(name, "")
+}
+
+// nativeEventName is the name to send Discord: the badge, then as much of the
+// real name as fits.
+//
+// The name is trimmed rather than the whole string, so the badge always
+// survives — a title truncated to "[3/8] Board game ni" is still readable,
+// whereas one truncated the other way loses the number the badge exists for.
+func nativeEventName(ev *Event) string {
+	prefix := capacityPrefix(ev)
+	room := discordEventNameLimit - len([]rune(prefix))
+	return prefix + truncate(ev.Name, room)
 }
 
 // signupPointerMarker begins the line this service appends to a native event's
@@ -637,7 +681,7 @@ func (s *Server) PushEditToDiscord(ev *Event) error {
 		location = "See the signup card"
 	}
 	payload := map[string]any{
-		"name":                 ev.Name,
+		"name":                 nativeEventName(ev),
 		"description":          ev.Description + signupPointer(ev, s.boardChannelID),
 		"scheduled_start_time": time.Unix(ev.StartsAt, 0).UTC().Format(time.RFC3339),
 		"scheduled_end_time":   time.Unix(endsAt, 0).UTC().Format(time.RFC3339),
