@@ -47,6 +47,9 @@ Environment=DISCORD_BOARD_CHANNEL_ID=
 # The zone a time typed into a Discord form is read in. An IANA name, never a
 # UTC offset. Unset means UTC, and the service says so loudly at boot.
 Environment=DISCORD_DEFAULT_TIMEZONE=
+# Where finished cards move to. Leave empty and they stay on the board, which
+# is a legitimate way to run it — the archive is tidiness, not correctness.
+Environment=DISCORD_PAST_CHANNEL_ID=
 
 Environment=HOME=/home/YOUR_USER
 

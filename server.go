@@ -34,6 +34,10 @@ type Server struct {
 	// fields and a timezone picker is not worth one of them. Printed on the
 	// form's own label so nobody has to guess which zone they are typing in.
 	defaultTimezone string
+	// pastChannelID is where a card goes once its event is over. Empty means
+	// finished cards stay on the board, which is a legitimate way to run it —
+	// the archive is a tidiness feature, not a correctness one.
+	pastChannelID string
 	// boardChannelID is the channel signup cards are posted to. Imported
 	// Discord events land here rather than in their own channel, which for a
 	// voice event is the room people talk in and where a card would be unread.
@@ -48,6 +52,12 @@ func (s *Server) EnableWeb(oauth *OAuthConfig, boardChannelID string) {
 	s.oauth = oauth
 	s.boardChannelID = boardChannelID
 }
+
+// SetPastChannelID names the channel finished cards move to.
+func (s *Server) SetPastChannelID(channelID string) { s.pastChannelID = channelID }
+
+// PastChannelID reports it.
+func (s *Server) PastChannelID() string { return s.pastChannelID }
 
 // SetDefaultTimezone names the zone Discord forms are read in.
 func (s *Server) SetDefaultTimezone(zone string) { s.defaultTimezone = zone }

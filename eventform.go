@@ -12,9 +12,9 @@ import (
 //
 // What deliberately did NOT fit, and why that is survivable:
 //
-//	description — long-form, and for an imported event Discord's own event
-//	              editor already owns it
-//	timezone    — one per deployment, set in the unit, printed in the how-to
+//	end time    — set on the web page. Most events do not need one, and the
+//	              archive sweep assumes a run time when it is absent
+//	timezone    — one per deployment, set in the unit, printed on the label
 //	recurrence  — an RRULE typed by hand is how you get BYDAY=3TU when you
 //	              meant BYDAY=TU;BYSETPOS=3
 //	roles       — a role picker is a list, not a text field
@@ -22,11 +22,11 @@ import (
 // All four live on the web page, which has real controls for them. A modal that
 // silently dropped a sixth field would be worse than one that says where it is.
 const (
-	fieldName     = "name"
-	fieldStartsAt = "starts"
-	fieldEndsAt   = "ends"
-	fieldCapacity = "capacity"
-	fieldLocation = "location"
+	fieldName        = "name"
+	fieldStartsAt    = "starts"
+	fieldCapacity    = "capacity"
+	fieldLocation    = "location"
+	fieldDescription = "description"
 )
 
 // eventTimeLayouts are the shapes a typed date is accepted in.
@@ -88,21 +88,26 @@ func FormatEventTime(unix int64, zone string) string {
 }
 
 // EventForm is the five typed values, before validation.
+//
+// There is deliberately no EndsAt. The Discord form does not carry one, and a
+// zero-valued field here would be indistinguishable from "the person cleared
+// it" — which is exactly how editing from Discord would silently wipe an end
+// time somebody set on the web page.
 type EventForm struct {
-	Name     string
-	StartsAt string
-	EndsAt   string
-	Capacity string
-	Location string
+	Name        string
+	StartsAt    string
+	Capacity    string
+	Location    string
+	Description string
 }
 
 // EventFormResult is the form after validation, ready to store.
 type EventFormResult struct {
-	Name     string
-	StartsAt int64
-	EndsAt   int64
-	Capacity int
-	Location string
+	Name        string
+	StartsAt    int64
+	Capacity    int
+	Location    string
+	Description string
 }
 
 // Validate turns typed text into values, reporting the FIRST thing wrong in
@@ -128,20 +133,21 @@ func (f EventForm) Validate(zone string) (*EventFormResult, error) {
 		return nil, fmt.Errorf("%w: a start time is required — without one the event cannot "+
 			"be published to Discord", ErrInvalidEvent)
 	}
-	endsAt, err := ParseEventTime(f.EndsAt, zone)
-	if err != nil {
-		return nil, fmt.Errorf("end time: %w", err)
-	}
-	if endsAt != 0 && endsAt < startsAt {
-		return nil, fmt.Errorf("%w: the end time is before the start time", ErrInvalidEvent)
-	}
 	capacity, err := ParseCapacity(f.Capacity)
 	if err != nil {
 		return nil, err
 	}
+	description := strings.TrimSpace(f.Description)
+	// Discord caps its own scheduled event description at 1000, and a local
+	// event can be published as one. Refusing here beats being refused by
+	// Discord later, when the text is no longer on screen to shorten.
+	if len(description) > 1000 {
+		return nil, fmt.Errorf("%w: the description is %d characters; Discord allows 1000",
+			ErrInvalidEvent, len(description))
+	}
 	return &EventFormResult{
-		Name: name, StartsAt: startsAt, EndsAt: endsAt,
-		Capacity: capacity, Location: strings.TrimSpace(f.Location),
+		Name: name, StartsAt: startsAt, Capacity: capacity,
+		Location: strings.TrimSpace(f.Location), Description: description,
 	}, nil
 }
 
@@ -165,7 +171,7 @@ func modalTextInput(customID, label, value, placeholder string, style int, requi
 // buildEventModal assembles the form. ev is nil when creating, in which case
 // every field opens empty except the ones with a sensible starting point.
 func buildEventModal(customID, title string, ev *Event, zone string) map[string]any {
-	var name, starts, ends, capacity, location string
+	var name, starts, capacity, location, description string
 	if ev != nil {
 		eventZone := ev.Timezone
 		if eventZone == "" {
@@ -173,9 +179,9 @@ func buildEventModal(customID, title string, ev *Event, zone string) map[string]
 		}
 		name = ev.Name
 		starts = FormatEventTime(ev.StartsAt, eventZone)
-		ends = FormatEventTime(ev.EndsAt, eventZone)
 		capacity = fmt.Sprintf("%d", ev.Capacity)
 		location = ev.Location
+		description = ev.Description
 	} else {
 		capacity = "0"
 	}
@@ -193,12 +199,13 @@ func buildEventModal(customID, title string, ev *Event, zone string) map[string]
 				textInputStyleShort, true, 100)),
 			row(modalTextInput(fieldStartsAt, "Starts — "+zone, starts, "2026-09-05 19:00",
 				textInputStyleShort, true, 40)),
-			row(modalTextInput(fieldEndsAt, "Ends (leave blank if open-ended)", ends,
-				"2026-09-05 21:00", textInputStyleShort, false, 40)),
-			row(modalTextInput(fieldCapacity, "Places — 0 means no limit", capacity, "20",
+			row(modalTextInput(fieldCapacity, "Max attendees — 0 for no limit", capacity, "20",
 				textInputStyleShort, true, 6)),
 			row(modalTextInput(fieldLocation, "Location", location, "Where it happens",
 				textInputStyleShort, false, 100)),
+			row(modalTextInput(fieldDescription, "Description", description,
+				"What it is, what to bring, anything else",
+				textInputStyleParagraph, false, 1000)),
 		},
 	}
 }

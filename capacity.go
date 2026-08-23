@@ -192,12 +192,16 @@ func (s *Server) SetCapacity(eventID int64, capacity int, actor string) (*Event,
 // only depends on capacity, but the card has to be rewritten whatever changed,
 // and having two functions that each rewrite it is how one of them stops.
 func (s *Server) ApplyEventForm(before *Event, values *EventFormResult, zone, actor string) (*Event, []Signup, error) {
+	// EndsAt is deliberately absent. The Discord form carries no end time, so
+	// including it here would send zero every time and wipe an end somebody set
+	// on the web page. A field the form does not collect is a field this must
+	// not touch.
 	patch := EventPatch{
-		Name:     &values.Name,
-		StartsAt: &values.StartsAt,
-		EndsAt:   &values.EndsAt,
-		Capacity: &values.Capacity,
-		Location: &values.Location,
+		Name:        &values.Name,
+		StartsAt:    &values.StartsAt,
+		Capacity:    &values.Capacity,
+		Location:    &values.Location,
+		Description: &values.Description,
 	}
 	// Only stamp the zone when the event has none. Overwriting a zone chosen on
 	// the web page with the deployment default would silently move every time
@@ -232,4 +236,54 @@ func (s *Server) ApplyEventForm(before *Event, values *EventFormResult, zone, ac
 		go s.notifyPromoted(after, &promoted[i])
 	}
 	return after, promoted, nil
+}
+
+// moveCardToPastEvents takes a finished event's card off the board and puts a
+// final one in the past-events channel.
+//
+// Discord cannot move a message between channels, so this is a post followed by
+// a delete — in that order, deliberately. If the post fails, the original card
+// stays where it is and nothing is lost; doing it the other way round would
+// delete the only copy and then discover the new channel is unreachable.
+//
+// message_id and channel_id are repointed at the new card rather than a second
+// pair of columns being added, because they mean "where this event's card is"
+// and after this that is the past-events channel. A finished card carries no
+// buttons, so nothing resolves a click through it any more.
+func (s *Server) moveCardToPastEvents(eventID int64) error {
+	if s.discord == nil || s.pastChannelID == "" {
+		return nil
+	}
+	ev, err := s.store.GetEvent(eventID)
+	if err != nil {
+		return err
+	}
+	if ev.ChannelID == s.pastChannelID {
+		return nil // already moved
+	}
+	roster, err := s.store.Roster(eventID, false)
+	if err != nil {
+		return err
+	}
+
+	newMessageID, err := s.discord.CreateMessage(s.pastChannelID, RenderSignupMessage(ev, roster))
+	if err != nil {
+		return fmt.Errorf("post to past events: %w", err)
+	}
+	// Only now is the original expendable. A failure here leaves a duplicate
+	// rather than a hole, which is the better of the two.
+	if ev.MessageID != "" {
+		if err := s.discord.DeleteMessage(ev.ChannelID, ev.MessageID); err != nil {
+			log.Printf("[discord-signup] could not remove event %d's card from the board: %v",
+				eventID, err)
+		}
+	}
+	past := s.pastChannelID
+	if _, err := s.store.UpdateEvent(eventID, EventPatch{
+		MessageID: &newMessageID, ChannelID: &past,
+	}); err != nil {
+		return fmt.Errorf("repoint card: %w", err)
+	}
+	log.Printf("[discord-signup] event %d finished; card moved to past events", eventID)
+	return nil
 }

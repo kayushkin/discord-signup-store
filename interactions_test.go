@@ -230,7 +230,8 @@ func TestEditButtonOpensAPrefilledFormAndSaves(t *testing.T) {
 	start := time.Date(2026, 9, 5, 19, 0, 0, 0, time.UTC).Unix()
 	ev, err := store.CreateEvent(Event{
 		GuildID: "g1", ChannelID: "c1", Name: "Playtest", Capacity: 1,
-		StartsAt: start, Location: "The shed", Timezone: "America/Los_Angeles",
+		StartsAt: start, EndsAt: start + 7200, Location: "The shed",
+		Description: "Bring dice.", Timezone: "America/Los_Angeles",
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -271,6 +272,12 @@ func TestEditButtonOpensAPrefilledFormAndSaves(t *testing.T) {
 	if len(rows) != 5 {
 		t.Fatalf("modal has %d fields, want 5 (Discord's maximum)", len(rows))
 	}
+	for _, r := range rows {
+		f := r.(map[string]any)["components"].([]any)[0].(map[string]any)
+		if f["custom_id"].(string) == "ends" {
+			t.Error("the form still carries an end time field")
+		}
+	}
 	prefilled := map[string]string{}
 	for _, r := range rows {
 		f := r.(map[string]any)["components"].([]any)[0].(map[string]any)
@@ -280,7 +287,8 @@ func TestEditButtonOpensAPrefilledFormAndSaves(t *testing.T) {
 	// small edit rather than retyping the event.
 	for field, want := range map[string]string{
 		fieldName: "Playtest", fieldCapacity: "1", fieldLocation: "The shed",
-		fieldStartsAt: "2026-09-05 12:00", // 19:00 UTC in Los Angeles
+		fieldDescription: "Bring dice.",
+		fieldStartsAt:    "2026-09-05 12:00", // 19:00 UTC in Los Angeles
 	} {
 		if prefilled[field] != want {
 			t.Errorf("%s prefilled with %q, want %q", field, prefilled[field], want)
@@ -292,9 +300,9 @@ func TestEditButtonOpensAPrefilledFormAndSaves(t *testing.T) {
 		"data": {"custom_id": %q, "components": [
 			{"components": [{"custom_id": "name", "value": "Playtest night"}]},
 			{"components": [{"custom_id": "starts", "value": "2026-09-06 18:30"}]},
-			{"components": [{"custom_id": "ends", "value": "2026-09-06 21:00"}]},
 			{"components": [{"custom_id": "capacity", "value": "3"}]},
-			{"components": [{"custom_id": "location", "value": "The big shed"}]}
+			{"components": [{"custom_id": "location", "value": "The big shed"}]},
+			{"components": [{"custom_id": "description", "value": "Bring dice and snacks."}]}
 		]},
 		"member": {"permissions": %q, "user": {"id": "boss", "username": "boss"}}
 	}`, EditModalCustomID(ev.ID), permissionsWithManageEvents))
@@ -314,8 +322,15 @@ func TestEditButtonOpensAPrefilledFormAndSaves(t *testing.T) {
 		t.Errorf("event = %q / cap %d / %q, want the edited values",
 			got.Name, got.Capacity, got.Location)
 	}
-	if got.EndsAt == 0 || got.EndsAt <= got.StartsAt {
-		t.Error("the end time was not saved")
+	if got.Description != "Bring dice and snacks." {
+		t.Errorf("description = %q, want the edited value", got.Description)
+	}
+	// The form has no end time field, so editing from Discord must leave the
+	// one set on the web page exactly where it was. Sending zero for a field
+	// the form never collected is how that gets silently wiped.
+	if got.EndsAt != start+7200 {
+		t.Errorf("ends_at = %d, want it untouched at %d — a field the Discord form does "+
+			"not collect must not be cleared by it", got.EndsAt, start+7200)
 	}
 	if got.AttendingCount != 3 || got.WaitlistCount != 0 {
 		t.Errorf("%d attending / %d waiting, want 3 / 0 — raising the limit should have "+
@@ -403,9 +418,9 @@ func TestCreateButtonMakesAnEventAndPostsItsCard(t *testing.T) {
 		"data": {"custom_id": %q, "components": [
 			{"components": [{"custom_id": "name", "value": "Board game night"}]},
 			{"components": [{"custom_id": "starts", "value": "2026-09-05 19:00"}]},
-			{"components": [{"custom_id": "ends", "value": ""}]},
 			{"components": [{"custom_id": "capacity", "value": "8"}]},
-			{"components": [{"custom_id": "location", "value": "The pub"}]}
+			{"components": [{"custom_id": "location", "value": "The pub"}]},
+			{"components": [{"custom_id": "description", "value": "Catan and beer."}]}
 		]},
 		"member": {"permissions": %q, "user": {"id": "boss", "username": "boss"}}
 	}`, CreateModalCustomID(), permissionsWithManageEvents)))
@@ -423,6 +438,9 @@ func TestCreateButtonMakesAnEventAndPostsItsCard(t *testing.T) {
 	created := events[0]
 	if created.Name != "Board game night" || created.Capacity != 8 || created.Location != "The pub" {
 		t.Errorf("event = %q / cap %d / %q", created.Name, created.Capacity, created.Location)
+	}
+	if created.Description != "Catan and beer." {
+		t.Errorf("description = %q", created.Description)
 	}
 	// The creator is recorded by id, which is what lets them edit it later
 	// without server-wide Manage Events.

@@ -528,6 +528,9 @@ func (s *Store) UpdateEvent(id int64, patch EventPatch) (*Event, error) {
 	if patch.MessageID != nil {
 		add("message_id", *patch.MessageID)
 	}
+	if patch.ChannelID != nil {
+		add("channel_id", *patch.ChannelID)
+	}
 	if patch.DiscordScheduledEventID != nil {
 		add("discord_scheduled_event_id", *patch.DiscordScheduledEventID)
 	}
@@ -587,11 +590,14 @@ func (s *Store) UpdateEvent(id int64, patch EventPatch) (*Event, error) {
 // "absent" and "set to the zero value" stay distinguishable — without that,
 // omitting capacity from a PATCH body would silently reset it to unlimited.
 type EventPatch struct {
-	Name                    *string `json:"name"`
-	Description             *string `json:"description"`
-	Capacity                *int    `json:"capacity"`
-	Status                  *string `json:"status"`
-	MessageID               *string `json:"message_id"`
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
+	Capacity    *int    `json:"capacity"`
+	Status      *string `json:"status"`
+	MessageID   *string `json:"message_id"`
+	// ChannelID moves with the card. It changes exactly once in an event's
+	// life, when the event finishes and its card is reposted to past events.
+	ChannelID               *string `json:"channel_id"`
 	DiscordScheduledEventID *string `json:"discord_scheduled_event_id"`
 	AttendingRoleID         *string `json:"attending_role_id"`
 	WaitlistRoleID          *string `json:"waitlist_role_id"`

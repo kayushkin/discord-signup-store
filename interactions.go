@@ -470,11 +470,11 @@ func (s *Server) handleModalSubmit(w http.ResponseWriter, in *Interaction) {
 		return
 	}
 	form := EventForm{
-		Name:     in.fieldValue(fieldName),
-		StartsAt: in.fieldValue(fieldStartsAt),
-		EndsAt:   in.fieldValue(fieldEndsAt),
-		Capacity: in.fieldValue(fieldCapacity),
-		Location: in.fieldValue(fieldLocation),
+		Name:        in.fieldValue(fieldName),
+		StartsAt:    in.fieldValue(fieldStartsAt),
+		Capacity:    in.fieldValue(fieldCapacity),
+		Location:    in.fieldValue(fieldLocation),
+		Description: in.fieldValue(fieldDescription),
 	}
 	switch action {
 	case "edit-modal", "capacity-modal":
@@ -534,16 +534,16 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 	}
 	userID, _ := in.actor()
 	ev, err := s.store.CreateEvent(Event{
-		GuildID:   in.GuildID,
-		ChannelID: s.BoardChannelID(),
-		Name:      values.Name,
-		Capacity:  values.Capacity,
-		StartsAt:  values.StartsAt,
-		EndsAt:    values.EndsAt,
-		Location:  values.Location,
-		Timezone:  zone,
-		Origin:    OriginLocal,
-		CreatedBy: userID,
+		GuildID:     in.GuildID,
+		ChannelID:   s.BoardChannelID(),
+		Name:        values.Name,
+		Description: values.Description,
+		Capacity:    values.Capacity,
+		StartsAt:    values.StartsAt,
+		Location:    values.Location,
+		Timezone:    zone,
+		Origin:      OriginLocal,
+		CreatedBy:   userID,
 	})
 	if err != nil {
 		log.Printf("[discord-signup] create from discord: %v", err)
@@ -590,12 +590,8 @@ func describeEdit(before, after *Event, promoted []Signup, zone string) string {
 	if before.StartsAt != after.StartsAt {
 		changes = append(changes, fmt.Sprintf("starts → <t:%d:F>", after.StartsAt))
 	}
-	if before.EndsAt != after.EndsAt {
-		if after.EndsAt == 0 {
-			changes = append(changes, "end time removed")
-		} else {
-			changes = append(changes, fmt.Sprintf("ends → <t:%d:F>", after.EndsAt))
-		}
+	if before.Description != after.Description {
+		changes = append(changes, "description updated")
 	}
 	if before.Capacity != after.Capacity {
 		if after.Capacity == 0 {

@@ -423,7 +423,10 @@ func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event,
 	// channel, and it is the only one Discord requires an end time for.
 	endsAt := ev.EndsAt
 	if endsAt == 0 {
-		endsAt = ev.StartsAt + 2*3600
+		// The same assumption the archive sweep makes. Two different guesses
+		// about how long an event runs would eventually disagree in a way
+		// nobody could explain.
+		endsAt = ev.StartsAt + assumedRunTimeWithoutEndTime
 	}
 	location := ev.Location
 	if location == "" {
@@ -554,8 +557,15 @@ func (s *Server) CompleteFinishedEvents() ([]int64, error) {
 		return nil, err
 	}
 	for _, id := range finished {
+		// Refresh first: the card that moves should already say the event has
+		// finished and have lost its buttons. Moving a stale card would put a
+		// live Join button in the past-events channel.
 		if err := s.RefreshSignupMessage(id); err != nil {
 			log.Printf("[discord-signup] refresh finished event %d: %v", id, err)
+			continue
+		}
+		if err := s.moveCardToPastEvents(id); err != nil {
+			log.Printf("[discord-signup] move event %d to past events: %v", id, err)
 		}
 	}
 	return finished, nil

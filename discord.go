@@ -460,3 +460,9 @@ type Channel struct {
 	Name string `json:"name"`
 	Type int    `json:"type"`
 }
+
+// DeleteMessage removes a message the bot posted.
+func (c *DiscordClient) DeleteMessage(channelID, messageID string) error {
+	_, err := c.do(http.MethodDelete, "/channels/"+channelID+"/messages/"+messageID, nil)
+	return err
+}

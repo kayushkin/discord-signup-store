@@ -17,6 +17,9 @@ const (
 	componentTypeTextInput = 4
 
 	textInputStyleShort = 1
+	// textInputStyleParagraph is the multi-line box. Discord offers exactly
+	// these two; there is no rich text and no markdown preview.
+	textInputStyleParagraph = 2
 
 	buttonStylePrimary   = 1
 	buttonStyleSecondary = 2

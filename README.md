@@ -47,10 +47,17 @@ interaction, which means:
   moves up and is told by DM — falling back to a channel mention if their DMs
   are closed, because a promotion nobody hears about is a place nobody takes.
 
-A third button, **Limit**, opens a modal with the current capacity prefilled.
-That round trip exists because Discord allows a free text field only inside a
-modal, never on a message — so changing a limit without leaving Discord means a
-button that opens a form. The button is visible to everyone, since Discord
+A third button, **Edit**, opens a modal with the event's values prefilled.
+Five boxes — Name, Starts, Max attendees, Location, Description — because five
+is Discord's hard ceiling on a modal. End time, recurrence and roles stayed on
+the web page, which has real controls for them. That round trip exists at all
+because Discord allows a free text field only inside a modal, never on a
+message.
+
+Once an event is over, its card is reposted to a past-events channel and the
+original removed from the board. Discord cannot move a message between
+channels, so it is a post then a delete, in that order: a failure leaves a
+duplicate rather than a hole. The button is visible to everyone, since Discord
 cannot hide a component from some readers, and the press is checked against
 `MANAGE_EVENTS` before the form appears.
 

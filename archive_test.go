@@ -1,6 +1,8 @@
 package discordsignup
 
 import (
+	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -259,5 +261,104 @@ func TestTheSweepNeverClosesAnUpcomingEventItself(t *testing.T) {
 	if got.Status != StatusOpen {
 		t.Errorf("status = %q, want %q — the sweep only ever completes, never closes",
 			got.Status, StatusOpen)
+	}
+}
+
+// TestFinishedCardMovesToPastEvents covers the tidy-up: Discord cannot move a
+// message between channels, so this is a post followed by a delete.
+func TestFinishedCardMovesToPastEvents(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+	srv.SetPastChannelID("past")
+
+	past := time.Now().Add(-10 * time.Hour).Unix()
+	ev, err := store.CreateEvent(Event{
+		GuildID: "g1", ChannelID: "board", MessageID: "card-on-board",
+		Name: "Done", StartsAt: past, EndsAt: past + 3600, Capacity: 4,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := store.Join(ev.ID, "alice", "Alice", JoinedViaButton); err != nil {
+		t.Fatalf("join: %v", err)
+	}
+
+	finished, err := srv.CompleteFinishedEvents()
+	if err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if len(finished) != 1 {
+		t.Fatalf("finished %d events, want 1", len(finished))
+	}
+
+	var posted, deleted []string
+	for _, c := range fake.recorded() {
+		switch {
+		case c.Method == http.MethodPost && strings.HasSuffix(c.Path, "/messages"):
+			posted = append(posted, c.Path)
+		case c.Method == http.MethodDelete:
+			deleted = append(deleted, c.Path)
+		}
+	}
+	if len(posted) != 1 || posted[0] != "/channels/past/messages" {
+		t.Errorf("posted to %v, want the past-events channel", posted)
+	}
+	if len(deleted) != 1 || deleted[0] != "/channels/board/messages/card-on-board" {
+		t.Errorf("deleted %v, want the original card off the board", deleted)
+	}
+
+	got, err := store.GetEvent(ev.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	// The columns mean "where this event's card is", so after the move they
+	// point at the new one. A stale pointer would make a later refresh edit a
+	// message that no longer exists.
+	if got.ChannelID != "past" || got.MessageID == "card-on-board" {
+		t.Errorf("card still recorded at %s/%s", got.ChannelID, got.MessageID)
+	}
+}
+
+// TestTheOriginalCardSurvivesAFailedMove pins the ordering. Post first, delete
+// second: the other way round deletes the only copy and then finds out the
+// destination is unreachable.
+func TestTheOriginalCardSurvivesAFailedMove(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+	srv.SetPastChannelID("past")
+	fake.on(http.MethodPost, "/channels/past/messages", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"code":50013,"message":"Missing Permissions"}`)
+	})
+
+	past := time.Now().Add(-10 * time.Hour).Unix()
+	ev, err := store.CreateEvent(Event{
+		GuildID: "g1", ChannelID: "board", MessageID: "card-on-board",
+		Name: "Done", StartsAt: past, EndsAt: past + 3600,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := srv.CompleteFinishedEvents(); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodDelete {
+			t.Fatalf("the original card was deleted after the move failed: %s", c.Path)
+		}
+	}
+	got, _ := store.GetEvent(ev.ID)
+	if got.ChannelID != "board" || got.MessageID != "card-on-board" {
+		t.Errorf("card moved to %s/%s despite the post failing", got.ChannelID, got.MessageID)
+	}
+	// The event is still archived in the store; only the tidying failed.
+	if got.Status != StatusCompleted {
+		t.Errorf("status = %q, want %q — a failed move must not block the archive",
+			got.Status, StatusCompleted)
 	}
 }

@@ -67,7 +67,10 @@ service's, and proxying any other route publishes roster editing to the world.
 Closed sets, defined in `vocabulary.go` and validated on write.
 
 - **signup state** — `attending`, `waitlisted`, `withdrawn`
-- **event status** — `open`, `closed`, `completed`, `cancelled`. `closed` means signups are shut on an event that has **not happened yet**; `completed` means it has. The web page collapses `completed` and `cancelled` into the archive and leaves `closed` in the live list.
+- **event status** — `open`, `closed`, `completed`, `cancelled`. When an event
+  becomes `completed`, its card is reposted to `DISCORD_PAST_CHANNEL_ID` and the
+  original deleted; `message_id` and `channel_id` follow it, because they mean
+  "where this event's card is". `closed` means signups are shut on an event that has **not happened yet**; `completed` means it has. The web page collapses `completed` and `cancelled` into the archive and leaves `closed` in the live list.
 - **transition action** — `joined`, `waitlisted`, `withdrew`, `promoted`, `rejoined`
 - **actor** — `user` (they pressed the button), `promotion` (this service moved
   them), or an operator name from the API's `?actor=`
@@ -82,7 +85,10 @@ Closed sets, defined in `vocabulary.go` and validated on write.
 | Create an event | `signup:create:0` | `CREATE_EVENTS`, `MANAGE_EVENTS` or `ADMINISTRATOR` |
 
 **Edit** and **Create an event** open the same five-field modal — Name, Starts,
-Ends, Places, Location — prefilled when editing and empty when creating. Five is
+Max attendees, Location, Description — prefilled when editing and empty when
+creating. There is no end-time field, and `ApplyEventForm` deliberately omits
+`EndsAt` from its patch: sending zero for a field the form never collected is
+how an end time set on the web page would get silently wiped. Five is
 Discord's hard ceiling on a modal, so description, recurrence and roles live on
 the web page instead. Times are typed as `2026-09-05 19:00` and read in the zone
 set by `DISCORD_DEFAULT_TIMEZONE`, which the form's own label prints.
