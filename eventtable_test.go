@@ -28,7 +28,7 @@ func tableEvents(n int) []Event {
 // in a message. Six fit; seven is COMPONENT_MAX_TOTAL_COMPONENTS_EXCEEDED.
 func TestAPageStaysInsideDiscordsComponentBudget(t *testing.T) {
 	for _, n := range []int{1, 3, eventsPerPage} {
-		payload := RenderTablePage(tableEvents(n), 1, n, 0, 1)
+		payload := RenderTablePage(tableEvents(n), 0, 1)
 		if got := countComponents(payload["components"].([]any)); got > 40 {
 			t.Errorf("%d events render %d components, over Discord's 40", n, got)
 		}
@@ -55,7 +55,7 @@ func countComponents(components []any) int {
 func TestOneTextBlockPerEvent(t *testing.T) {
 	events := tableEvents(3)
 	events[0].Description = "Bring dice."
-	body := RenderTablePage(events, 1, 3, 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderTablePage(events, 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
 
 	var textBlocks, actionRows int
 	for _, c := range body {
@@ -66,9 +66,9 @@ func TestOneTextBlockPerEvent(t *testing.T) {
 			actionRows++
 		}
 	}
-	// One heading plus one block per event.
-	if textBlocks != 4 {
-		t.Errorf("%d text blocks, want 4 (a heading and one per event)", textBlocks)
+	// One block per event and nothing else — no heading, no per-field split.
+	if textBlocks != 3 {
+		t.Errorf("%d text blocks, want one per event and no heading", textBlocks)
 	}
 	if actionRows != 3 {
 		t.Errorf("%d action rows, want one per event", actionRows)
@@ -78,7 +78,7 @@ func TestOneTextBlockPerEvent(t *testing.T) {
 // TestEveryEventCarriesAllFourButtons is what one message per event used to be
 // needed for, and no longer is.
 func TestEveryEventCarriesAllFourButtons(t *testing.T) {
-	body := RenderTablePage(tableEvents(1), 1, 1, 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderTablePage(tableEvents(1), 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
 	for _, c := range body {
 		m := c.(map[string]any)
 		if m["type"] != componentTypeActionRow {
@@ -106,7 +106,7 @@ func TestEveryEventCarriesAllFourButtons(t *testing.T) {
 func TestClosedEventsLoseJoinAndLeave(t *testing.T) {
 	events := tableEvents(1)
 	events[0].Status = StatusClosed
-	body := RenderTablePage(events, 1, 1, 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderTablePage(events, 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
 	for _, c := range body {
 		m := c.(map[string]any)
 		if m["type"] != componentTypeActionRow {
@@ -129,16 +129,14 @@ func TestPaginationSpillsPastSixAndNumbersContinuously(t *testing.T) {
 		t.Errorf("page sizes %d/%d/%d, want 6/6/2",
 			len(pages[0]), len(pages[1]), len(pages[2]))
 	}
-	// The second page continues the numbering rather than restarting.
-	second := RenderTablePage(pages[1], eventsPerPage+1, 14, 1, 3)
-	body := second["components"].([]any)[0].(map[string]any)["components"].([]any)
-	first := body[0].(map[string]any)["content"].(string)
-	if !strings.Contains(first, "` 7`") {
-		t.Errorf("second page starts with %q, want row 7", first)
-	}
-	// And only the first page carries the heading.
-	if strings.Contains(first, "## Events") {
-		t.Error("the heading is repeated on the second page")
+	// No page carries a heading, including the first.
+	for _, p := range []map[string]any{
+		RenderTablePage(pages[0], 0, 3), RenderTablePage(pages[1], 1, 3),
+	} {
+		body := p["components"].([]any)[0].(map[string]any)["components"].([]any)
+		if strings.Contains(body[0].(map[string]any)["content"].(string), "## Events") {
+			t.Error("a page carries a heading")
+		}
 	}
 }
 
@@ -295,5 +293,30 @@ func TestWaitlistIsNumberedByPlaceNotPosition(t *testing.T) {
 	}
 	if strings.Contains(got, "17") {
 		t.Errorf("waitlist = %q, leaking the internal arrival position", got)
+	}
+}
+
+// TestEventLineIsSlotsTitleDescriptionTime pins the format, in that order and
+// in one component.
+func TestEventLineIsSlotsTitleDescriptionTime(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Board games", Capacity: 8, AttendingCount: 3,
+		Description: "Bring\ndice   and snacks.", StartsAt: 1788067881, Status: StatusOpen}
+	line := eventLine(ev)
+
+	want := "`3/8`  ·  **Board games**  ·  Bring dice and snacks.  ·  <t:1788067881:f>"
+	if line != want {
+		t.Errorf("eventLine =\n  %q\nwant\n  %q", line, want)
+	}
+	// Newlines flattened: a second line would look like a separate element and
+	// break the alignment of everything under it.
+	if strings.Contains(line, "\n") {
+		t.Errorf("the line spans more than one line: %q", line)
+	}
+}
+
+func TestEventLineWithoutDescriptionOrTime(t *testing.T) {
+	bare := eventLine(&Event{ID: 1, Name: "Just a name", Capacity: 0, AttendingCount: 7})
+	if bare != "`7`  ·  **Just a name**" {
+		t.Errorf("eventLine = %q", bare)
 	}
 }

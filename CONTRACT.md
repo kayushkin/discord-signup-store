@@ -109,6 +109,11 @@ each of them. Lowering it promotes nobody and removes nobody.
 **Join · Leave · Details · Edit**, wrapped in a Components V2 container. Past
 six it spills onto another message.
 
+The line is exactly `{slots} · {title} · {description} · {time}`, in **one**
+text component. No heading, no event count, no note about sorting — the rows
+already say all of it, and each component spent on chrome is one not spent on an
+event.
+
 Six is measured, not inferred: an event costs a text block, an action row and
 four buttons, and Discord allows 40 components in a message. Seven is
 `COMPONENT_MAX_TOTAL_COMPONENTS_EXCEEDED`. The five-action-row limit that caps
@@ -117,7 +122,7 @@ replaces it, which is what makes six rows of buttons in one message possible.
 
 Everything about one event is **one** text block. Splitting it into title,
 description and time would cost three components each and cut the page from six
-events to two.
+events to two — identical to read, a third as much held.
 
 **The table sorts itself.** Every page is rewritten in place on each change, so
 events move *between* pages while the messages stay where they are. A page is

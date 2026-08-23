@@ -282,22 +282,18 @@ const tableRebuildButtonID = customIDPrefix + ":table-rebuild:0"
 //
 // firstIndex numbers the rows continuously across pages, so the second message
 // starts at 7 rather than beginning again at 1.
-func RenderTablePage(events []Event, firstIndex, totalEvents, page, totalPages int) map[string]any {
+func RenderTablePage(events []Event, page, totalPages int) map[string]any {
 	body := []any{}
-	if page == 0 {
-		var heading strings.Builder
-		heading.WriteString("## Events\n")
-		if totalEvents == 0 {
-			heading.WriteString("-# Nothing coming up.")
-		} else {
-			fmt.Fprintf(&heading, "-# %s, soonest first.", pluralise(totalEvents, "event"))
-		}
-		body = append(body, textBlock(heading.String()))
+	// No heading. The channel is called what it is, and a line saying how many
+	// events there are and how they are sorted is a component spent restating
+	// what the rows already show.
+	if len(events) == 0 && page == 0 {
+		body = append(body, textBlock("-# Nothing coming up."))
 	}
 
 	for i := range events {
 		ev := &events[i]
-		body = append(body, textBlock(eventLine(ev, firstIndex+i)))
+		body = append(body, textBlock(eventLine(ev)))
 		body = append(body, map[string]any{
 			"type": componentTypeActionRow, "components": eventButtons(ev),
 		})
@@ -320,42 +316,31 @@ func textBlock(content string) map[string]any {
 	return map[string]any{"type": componentTypeTextDisplay, "content": trimTo(content, textDisplayLimit)}
 }
 
-// eventLine is the whole of an event on one line: how full it is, what it is,
-// what it is about, and when.
+// eventLine is the whole of an event, in one text component:
 //
-// One text block per event rather than several, because each component counts
-// against the message budget and splitting this into three would cut the number
-// of events per message from six to two.
-func eventLine(ev *Event, index int) string {
-	var b strings.Builder
+//	{slots} {title} {description} {time}
+//
+// One component, not four. Each one counts against the 40 a message gets, so
+// splitting this into a title block, a description block and a time block would
+// cut a page from six events to two — the layout would read the same and hold a
+// third as much.
+func eventLine(ev *Event) string {
 	slots := fmt.Sprintf("%d/%d", ev.AttendingCount, ev.Capacity)
 	if ev.Capacity == 0 {
 		slots = fmt.Sprintf("%d", ev.AttendingCount)
 	}
-	fmt.Fprintf(&b, "`%2d`  `%-7s`  **%s**", index, slots, ev.Name)
-	if ev.StartsAt > 0 {
-		fmt.Fprintf(&b, "  ·  <t:%d:f>", ev.StartsAt)
-	}
-	if ev.Location != "" {
-		b.WriteString("  ·  " + ev.Location)
-	}
 
-	var notes []string
-	if ev.WaitlistCount > 0 {
-		notes = append(notes, pluralise(ev.WaitlistCount, "person")+" waiting")
-	}
-	if ev.Status != StatusOpen {
-		notes = append(notes, "signups "+ev.Status)
-	}
-	// The description is trimmed hard: it shares a line with everything else,
-	// and the Details button exists for the whole of it.
+	parts := []string{fmt.Sprintf("`%s`", slots), fmt.Sprintf("**%s**", ev.Name)}
 	if ev.Description != "" {
-		notes = append(notes, trimTo(strings.ReplaceAll(ev.Description, "\n", " "), 90))
+		// Newlines flattened and the text cut short: it shares a line with
+		// everything else, and Details holds the whole of it.
+		parts = append(parts, trimTo(strings.Join(strings.Fields(ev.Description), " "), 90))
 	}
-	if len(notes) > 0 {
-		b.WriteString("\n-# " + strings.Join(notes, "  ·  "))
+	if ev.StartsAt > 0 {
+		// Discord's own markup, so the time lands in each reader's timezone.
+		parts = append(parts, fmt.Sprintf("<t:%d:f>", ev.StartsAt))
 	}
-	return b.String()
+	return strings.Join(parts, "  ·  ")
 }
 
 func eventButtons(ev *Event) []any {
@@ -428,7 +413,7 @@ func (s *Server) RefreshEventTable(guildID string) error {
 	}
 
 	for i, chunk := range pages {
-		payload := RenderTablePage(chunk, i*eventsPerPage+1, len(events), i, len(pages))
+		payload := RenderTablePage(chunk, i, len(pages))
 		if messageID, ok := byPage[i]; ok {
 			if err := s.discord.EditMessage(table.ChannelID, messageID, payload); err != nil {
 				return fmt.Errorf("edit table page %d: %w", i, err)
