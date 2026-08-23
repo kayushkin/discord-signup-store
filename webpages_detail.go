@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -310,7 +311,7 @@ func (s *Server) handleWebSync(w http.ResponseWriter, r *http.Request) {
 	}
 	guilds, err := s.manageableGuilds(session)
 	if err != nil {
-		http.Redirect(w, r, "/?notice="+urlEscape("Could not sync: "+err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, "/?"+noticeQuery("Could not sync: "+err.Error()), http.StatusSeeOther)
 		return
 	}
 	total := SyncResult{}
@@ -331,16 +332,23 @@ func (s *Server) handleWebSync(w http.ResponseWriter, r *http.Request) {
 	if len(total.Problems) > 0 {
 		notice += " Problems: " + strings.Join(total.Problems, "; ")
 	}
-	http.Redirect(w, r, "/?notice="+urlEscape(notice), http.StatusSeeOther)
+	http.Redirect(w, r, "/?"+noticeQuery(notice), http.StatusSeeOther)
 }
 
 func (s *Server) redirectWithNotice(w http.ResponseWriter, r *http.Request, eventID int64, notice string) {
-	http.Redirect(w, r, fmt.Sprintf("/events/%d?notice=%s", eventID, urlEscape(notice)),
+	http.Redirect(w, r, fmt.Sprintf("/events/%d?%s", eventID, noticeQuery(notice)),
 		http.StatusSeeOther)
 }
 
-func urlEscape(s string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(s, " ", "%20"), "\n", " ")
+// noticeQuery renders a notice as a complete, correctly encoded query string.
+// The notice is not always ours: handleWebSync builds it from Discord guild
+// names and upstream error text, so it can hold any byte at all. Encoding it
+// with url.Values is what keeps the message the reader gets identical to the
+// message we sent — a hand-rolled replacement of the characters someone thought
+// of loses the notice to a percent sign, truncates it at a hash, and drops it
+// entirely at the "; " that joins two sync problems.
+func noticeQuery(notice string) string {
+	return url.Values{"notice": {notice}}.Encode()
 }
 
 func strPtr(s string) *string { return &s }
