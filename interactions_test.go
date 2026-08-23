@@ -215,3 +215,138 @@ func TestVerifierRejectsMalformedPublicKeys(t *testing.T) {
 		}
 	}
 }
+
+// permissionsWithManageEvents is what Discord sends for someone who may edit
+// events: a decimal string, because the bit field is wider than a JSON number.
+const permissionsWithManageEvents = "8589934592" // 1 << 33
+
+// TestCapacityButtonOpensAModalForSomeoneWhoMayEditIt walks the whole round
+// trip through the signed HTTP handler: click, form, submit, new limit.
+func TestCapacityButtonOpensAModalForSomeoneWhoMayEditIt(t *testing.T) {
+	srv, priv, store := testServer(t)
+	ev := testEvent(t, store, 1)
+	for _, u := range []string{"alice", "bob", "carol"} {
+		if _, err := store.Join(ev.ID, u, u, JoinedViaButton); err != nil {
+			t.Fatalf("join %s: %v", u, err)
+		}
+	}
+
+	send := func(body string) map[string]any {
+		rec := httptest.NewRecorder()
+		srv.HandleInteraction(rec, signedRequest(t, priv, "1700000000", body))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+		var out map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return out
+	}
+
+	// 1. Press the Limit button with Manage Events.
+	reply := send(fmt.Sprintf(`{
+		"type": 3, "guild_id": "g1", "channel_id": "c1",
+		"data": {"custom_id": %q},
+		"member": {"permissions": %q, "user": {"id": "boss", "username": "boss"}}
+	}`, CapacityCustomID(ev.ID), permissionsWithManageEvents))
+
+	if int(reply["type"].(float64)) != callbackTypeModal {
+		t.Fatalf("type = %v, want %d (a modal)", reply["type"], callbackTypeModal)
+	}
+	data := reply["data"].(map[string]any)
+	if len(data["title"].(string)) > 45 {
+		t.Error("modal title is over Discord's 45-character limit; the interaction would be rejected")
+	}
+	field := data["components"].([]any)[0].(map[string]any)["components"].([]any)[0].(map[string]any)
+	if int(field["type"].(float64)) != componentTypeTextInput {
+		t.Error("the modal does not contain a text input")
+	}
+	// Prefilled with the current limit, so changing 20 to 25 is two keystrokes.
+	if field["value"].(string) != "1" {
+		t.Errorf("field prefilled with %q, want the current limit \"1\"", field["value"])
+	}
+
+	// 2. Submit 3.
+	reply = send(fmt.Sprintf(`{
+		"type": 5, "guild_id": "g1", "channel_id": "c1",
+		"data": {"custom_id": %q, "components": [
+			{"components": [{"custom_id": "capacity", "value": "3"}]}
+		]},
+		"member": {"permissions": %q, "user": {"id": "boss", "username": "boss"}}
+	}`, CapacityModalCustomID(ev.ID), permissionsWithManageEvents))
+
+	content := reply["data"].(map[string]any)["content"].(string)
+	if !strings.Contains(content, "3") {
+		t.Errorf("reply = %q, want it to state the new limit", content)
+	}
+	if !strings.Contains(content, "waitlist") {
+		t.Errorf("reply = %q, want it to mention who came off the waitlist", content)
+	}
+
+	got, err := store.GetEvent(ev.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got.Capacity != 3 {
+		t.Errorf("capacity = %d, want 3", got.Capacity)
+	}
+	if got.AttendingCount != 3 || got.WaitlistCount != 0 {
+		t.Errorf("%d attending / %d waiting, want 3 / 0 — raising the limit should have "+
+			"admitted the queue", got.AttendingCount, got.WaitlistCount)
+	}
+}
+
+// TestSomeoneWithoutManageEventsCannotChangeTheLimit covers the fact that the
+// button is on a public message. Discord cannot hide a component from some
+// readers, so the check has to be on the press.
+func TestSomeoneWithoutManageEventsCannotChangeTheLimit(t *testing.T) {
+	srv, priv, store := testServer(t)
+	ev := testEvent(t, store, 2)
+
+	press := func(customID, permissions string) string {
+		rec := httptest.NewRecorder()
+		srv.HandleInteraction(rec, signedRequest(t, priv, "1700000000", fmt.Sprintf(`{
+			"type": 3, "guild_id": "g1", "channel_id": "c1",
+			"data": {"custom_id": %q},
+			"member": {"permissions": %q, "user": {"id": "rando", "username": "rando"}}
+		}`, customID, permissions)))
+		var out map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if int(out["type"].(float64)) == callbackTypeModal {
+			return "MODAL OPENED"
+		}
+		return out["data"].(map[string]any)["content"].(string)
+	}
+
+	// No permissions at all.
+	if got := press(CapacityCustomID(ev.ID), "0"); got == "MODAL OPENED" {
+		t.Error("someone with no permissions was offered the limit form")
+	}
+	// SEND_MESSAGES only — plausible for an ordinary member, and not enough.
+	if got := press(CapacityCustomID(ev.ID), "2048"); got == "MODAL OPENED" {
+		t.Error("an ordinary member was offered the limit form")
+	}
+
+	// And submitting the form directly, without ever opening it, is refused
+	// too. The click and the submit are separate requests; nothing stops the
+	// second being sent on its own.
+	rec := httptest.NewRecorder()
+	srv.HandleInteraction(rec, signedRequest(t, priv, "1700000000", fmt.Sprintf(`{
+		"type": 5, "guild_id": "g1", "channel_id": "c1",
+		"data": {"custom_id": %q, "components": [
+			{"components": [{"custom_id": "capacity", "value": "9999"}]}
+		]},
+		"member": {"permissions": "2048", "user": {"id": "rando", "username": "rando"}}
+	}`, CapacityModalCustomID(ev.ID))))
+
+	got, err := store.GetEvent(ev.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got.Capacity != 2 {
+		t.Errorf("capacity = %d, want 2 — a direct modal submit bypassed the check", got.Capacity)
+	}
+}

@@ -145,10 +145,35 @@ func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		s.webFormError(w, session, ev, err)
 		return
 	}
+
+	// Raising the limit here must do exactly what raising it from Discord does.
+	// Two surfaces onto the same rule, so the rule lives in one place and both
+	// call it rather than each growing its own version.
+	notice := "Saved."
+	if capacity == 0 || capacity > ev.Capacity {
+		promoted, err := s.store.PromoteToFillCapacity(ev.ID)
+		if err != nil {
+			log.Printf("[discord-signup] promote after web edit %d: %v", ev.ID, err)
+		}
+		if len(promoted) > 0 {
+			after, err := s.store.GetEvent(ev.ID)
+			if err == nil {
+				changes := make([]stateChange, 0, len(promoted))
+				for i := range promoted {
+					changes = append(changes, stateChange{
+						UserID: promoted[i].DiscordUserID, State: StateAttending})
+					go s.notifyPromoted(after, &promoted[i])
+				}
+				go s.syncAfterChange(after, changes)
+			}
+			notice = fmt.Sprintf("Saved. %d came off the waitlist and have been messaged.",
+				len(promoted))
+		}
+	}
 	if err := s.RefreshSignupMessage(ev.ID); err != nil {
 		log.Printf("[discord-signup] refresh after web edit %d: %v", ev.ID, err)
 	}
-	s.redirectWithNotice(w, r, ev.ID, "Saved.")
+	s.redirectWithNotice(w, r, ev.ID, notice)
 }
 
 func (s *Server) webFormError(w http.ResponseWriter, session *WebSession, ev *Event, err error) {

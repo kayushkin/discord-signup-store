@@ -11,6 +11,12 @@ import (
 const (
 	componentTypeActionRow = 1
 	componentTypeButton    = 2
+	// componentTypeTextInput is valid only inside a modal. Discord rejects it
+	// in a message, which is why a free text field cannot live on the card
+	// itself and needs the button-then-form round trip.
+	componentTypeTextInput = 4
+
+	textInputStyleShort = 1
 
 	buttonStylePrimary   = 1
 	buttonStyleSecondary = 2
@@ -115,6 +121,15 @@ func signupComponents(eventID int64) []any {
 					"style":     buttonStyleSecondary,
 					"label":     "Leave",
 					"custom_id": LeaveCustomID(eventID),
+				},
+				// Shown to everyone, because Discord cannot hide a component
+				// from some readers. The click checks Manage Events and answers
+				// privately, so an unauthorised press costs one ephemeral no.
+				map[string]any{
+					"type":      componentTypeButton,
+					"style":     buttonStyleSecondary,
+					"label":     "Limit",
+					"custom_id": CapacityCustomID(eventID),
 				},
 			},
 		},

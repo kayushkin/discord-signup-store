@@ -15,7 +15,7 @@ service's, and proxying any other route publishes roster editing to the world.
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/interactions` | Discord's Interactions Endpoint URL. Ed25519-verified; a bad or missing signature is **401**, which is what Discord requires before it will save the URL. Answers PING with PONG and button clicks with an ephemeral reply. |
+| POST | `/interactions` | Discord's Interactions Endpoint URL. Ed25519-verified; a bad or missing signature is **401**, which is what Discord requires before it will save the URL. Answers PING with PONG, button clicks with an ephemeral reply, and the **Limit** button with a modal. |
 
 ## Machine API (loopback only — never proxied)
 
@@ -70,6 +70,23 @@ Closed sets, defined in `vocabulary.go` and validated on write.
 - **transition action** — `joined`, `waitlisted`, `withdrew`, `promoted`, `rejoined`
 - **actor** — `user` (they pressed the button), `promotion` (this service moved
   them), or an operator name from the API's `?actor=`
+
+## Buttons on the signup card
+
+| Button | custom_id | Who |
+|---|---|---|
+| Join | `signup:join:{id}` | anyone |
+| Leave | `signup:leave:{id}` | anyone |
+| Limit | `signup:capacity:{id}` | `MANAGE_EVENTS`, `ADMINISTRATOR`, or the event's creator |
+
+**Limit** opens a modal (`signup:capacity-modal:{id}`) with one text field
+prefilled with the current value — a modal is the only place Discord allows a
+free text field, so a button that opens one is the only way to type a number
+without leaving Discord. Permission is checked on the press *and* on the submit,
+because they are separate requests and nothing stops the second arriving alone.
+
+Raising a limit promotes people off the waitlist in arrival order and messages
+each of them. Lowering it promotes nobody and removes nobody.
 
 ## Conventions
 

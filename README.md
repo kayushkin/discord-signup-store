@@ -47,6 +47,16 @@ interaction, which means:
   moves up and is told by DM — falling back to a channel mention if their DMs
   are closed, because a promotion nobody hears about is a place nobody takes.
 
+A third button, **Limit**, opens a modal with the current capacity prefilled.
+That round trip exists because Discord allows a free text field only inside a
+modal, never on a message — so changing a limit without leaving Discord means a
+button that opens a form. The button is visible to everyone, since Discord
+cannot hide a component from some readers, and the press is checked against
+`MANAGE_EVENTS` before the form appears.
+
+Raising a limit admits the queue: people come off the waitlist in arrival order
+and are messaged. Lowering it removes nobody.
+
 Optional `Attending` and `Waitlisted` roles are kept in sync as a *projection*
 of the roster. The database is the source of truth; the roles are written, never
 read back.

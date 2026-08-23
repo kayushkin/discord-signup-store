@@ -19,12 +19,17 @@ import (
 const (
 	interactionTypePing             = 1
 	interactionTypeMessageComponent = 3
+	interactionTypeModalSubmit      = 5
 )
 
 // Discord interaction callback types.
 const (
 	callbackTypePong                  = 1
 	callbackTypeChannelMessageWithSrc = 4
+	// callbackTypeModal opens a form. It is the ONLY way Discord offers a free
+	// text field: a message component cannot contain one, so anything a person
+	// has to type has to arrive through a modal.
+	callbackTypeModal = 9
 )
 
 // messageFlagEphemeral makes a reply visible only to the person who clicked.
@@ -54,6 +59,14 @@ type Interaction struct {
 
 	Data struct {
 		CustomID string `json:"custom_id"`
+		// Components is populated on a modal submit: one action row per field,
+		// each holding one text input carrying the typed value.
+		Components []struct {
+			Components []struct {
+				CustomID string `json:"custom_id"`
+				Value    string `json:"value"`
+			} `json:"components"`
+		} `json:"components"`
 	} `json:"data"`
 
 	Message struct {
@@ -65,7 +78,12 @@ type Interaction struct {
 	// a DM, and an empty id would be written to the roster as a real one.
 	Member struct {
 		Nick string `json:"nick"`
-		User struct {
+		// Permissions is what this user may do IN THIS CHANNEL, already
+		// computed by Discord including role inheritance and per-channel
+		// overwrites. Sent as a decimal string because the bit field exceeds
+		// what a JSON number holds exactly.
+		Permissions string `json:"permissions"`
+		User        struct {
 			ID          string `json:"id"`
 			Username    string `json:"username"`
 			GlobalName  string `json:"global_name"`
@@ -77,6 +95,21 @@ type Interaction struct {
 		Username   string `json:"username"`
 		GlobalName string `json:"global_name"`
 	} `json:"user"`
+}
+
+// canManageEvents reports whether the person who clicked may change an event.
+//
+// Read from the interaction rather than fetched: Discord has already computed
+// the answer for this channel, so trusting it costs no API call and cannot go
+// stale between the click and the check.
+func (i *Interaction) canManageEvents() bool {
+	bits, err := strconv.ParseUint(i.Member.Permissions, 10, 64)
+	if err != nil {
+		// An unreadable permission field means no permissions, never all of
+		// them. Failing open here would hand the capacity control to everyone.
+		return false
+	}
+	return bits&permissionAdministrator != 0 || bits&permissionManageEvents != 0
 }
 
 // actor returns the Discord user id behind an interaction, and the best
@@ -174,6 +207,8 @@ func (s *Server) HandleInteraction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"type": callbackTypePong})
 	case interactionTypeMessageComponent:
 		s.handleComponent(w, &in)
+	case interactionTypeModalSubmit:
+		s.handleModalSubmit(w, &in)
 	default:
 		// Not ours to answer, but a non-200 here makes Discord retry. Reply
 		// with a harmless ephemeral note instead of failing the delivery.
@@ -209,6 +244,8 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		s.handleJoin(w, in, eventID, userID, displayName)
 	case "leave":
 		s.handleLeave(w, in, eventID, userID)
+	case "capacity":
+		s.handleCapacityButton(w, in, eventID)
 	default:
 		s.replyEphemeral(w, "Unknown signup action.")
 	}
@@ -333,4 +370,164 @@ func (s *Server) replyEphemeral(w http.ResponseWriter, content string) {
 			"flags":   messageFlagEphemeral,
 		},
 	})
+}
+
+// capacityFieldID names the text input inside the capacity modal.
+const capacityFieldID = "capacity"
+
+// handleCapacityButton answers a click on the limit button with a modal.
+//
+// The button is on a message everyone can see, because Discord has no way to
+// show a component to some readers and not others. So the permission check
+// happens here, on the click, and someone without it gets a private no rather
+// than a form that fails on submit.
+func (s *Server) handleCapacityButton(w http.ResponseWriter, in *Interaction, eventID int64) {
+	ev, err := s.store.GetEvent(eventID)
+	if err != nil {
+		s.replyEphemeral(w, "That signup list no longer exists.")
+		return
+	}
+	userID, _ := in.actor()
+	if !in.canManageEvents() && ev.CreatedBy != userID {
+		s.replyEphemeral(w, "Only someone with Manage Events, or whoever created this event, "+
+			"can change the limit.")
+		return
+	}
+
+	current := strconv.Itoa(ev.Capacity)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"type": callbackTypeModal,
+		"data": map[string]any{
+			"custom_id": CapacityModalCustomID(eventID),
+			// Discord caps a modal title at 45 characters and rejects the whole
+			// interaction if it is longer, so the event name is trimmed to fit
+			// rather than sent whole and refused.
+			"title": truncate("Limit for "+ev.Name, 45),
+			"components": []any{
+				map[string]any{
+					"type": componentTypeActionRow,
+					"components": []any{
+						map[string]any{
+							"type":        componentTypeTextInput,
+							"custom_id":   capacityFieldID,
+							"label":       "How many places? 0 means no limit",
+							"style":       textInputStyleShort,
+							"value":       current,
+							"min_length":  1,
+							"max_length":  6,
+							"required":    true,
+							"placeholder": "20",
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
+// handleModalSubmit takes the typed value.
+func (s *Server) handleModalSubmit(w http.ResponseWriter, in *Interaction) {
+	action, eventID, ok := parseCustomID(in.Data.CustomID)
+	if !ok || action != "capacity-modal" {
+		s.replyEphemeral(w, "That form is not one of mine.")
+		return
+	}
+	ev, err := s.store.GetEvent(eventID)
+	if err != nil {
+		s.replyEphemeral(w, "That signup list no longer exists.")
+		return
+	}
+	userID, _ := in.actor()
+	// Checked again on submit, not only on the click that opened the form. The
+	// two are separate requests and nothing stops the second being sent on its
+	// own.
+	if !in.canManageEvents() && ev.CreatedBy != userID {
+		s.replyEphemeral(w, "Only someone with Manage Events, or whoever created this event, "+
+			"can change the limit.")
+		return
+	}
+
+	capacity, err := ParseCapacity(in.fieldValue(capacityFieldID))
+	if err != nil {
+		// The message names what was wrong with what they typed, because the
+		// modal is gone by now and they have to retype it from memory.
+		s.replyEphemeral(w, strings.TrimPrefix(err.Error(), "invalid event: "))
+		return
+	}
+
+	updated, promoted, err := s.SetCapacity(eventID, capacity, "discord:"+userID)
+	if err != nil {
+		log.Printf("[discord-signup] set capacity event=%d: %v", eventID, err)
+		s.replyEphemeral(w, "Something went wrong. The limit was not changed.")
+		return
+	}
+	s.replyEphemeral(w, describeCapacityChange(ev, updated, promoted))
+}
+
+// fieldValue pulls one typed field out of a modal submission.
+func (i *Interaction) fieldValue(customID string) string {
+	for _, row := range i.Data.Components {
+		for _, field := range row.Components {
+			if field.CustomID == customID {
+				return field.Value
+			}
+		}
+	}
+	return ""
+}
+
+// describeCapacityChange says what the new number did, not just what it is.
+//
+// The consequence is the part worth reporting: raising a limit can admit a
+// queue of people in one go, and lowering it below the current roster does not
+// remove anyone — both are surprising if you only see the number.
+func describeCapacityChange(before, after *Event, promoted []Signup) string {
+	var b strings.Builder
+	switch {
+	case after.Capacity == 0:
+		b.WriteString("Limit removed — **" + after.Name + "** now takes anyone.")
+	case before.Capacity == after.Capacity:
+		fmt.Fprintf(&b, "Limit unchanged at **%d**.", after.Capacity)
+	default:
+		fmt.Fprintf(&b, "Limit set to **%d** places.", after.Capacity)
+	}
+
+	switch len(promoted) {
+	case 0:
+	case 1:
+		fmt.Fprintf(&b, "\n<@%s> came off the waitlist and has been messaged.",
+			promoted[0].DiscordUserID)
+	default:
+		fmt.Fprintf(&b, "\n%d people came off the waitlist and have been messaged.", len(promoted))
+	}
+
+	if after.Capacity > 0 && after.AttendingCount > after.Capacity {
+		fmt.Fprintf(&b, "\n\n%d people are already in, which is over the new limit. "+
+			"Nobody has been removed — they were told they had a place. The limit applies "+
+			"to the next person to sign up.", after.AttendingCount)
+	} else if after.Capacity > 0 {
+		fmt.Fprintf(&b, "\n\nNow %d/%d taken", after.AttendingCount, after.Capacity)
+		if after.WaitlistCount > 0 {
+			fmt.Fprintf(&b, ", %d still waiting", after.WaitlistCount)
+		}
+		b.WriteString(".")
+	}
+	return b.String()
+}
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max-1] + "…"
+}
+
+// CapacityCustomID builds the custom_id for an event's limit button.
+func CapacityCustomID(eventID int64) string {
+	return fmt.Sprintf("%s:capacity:%d", customIDPrefix, eventID)
+}
+
+// CapacityModalCustomID builds the custom_id for the form that button opens.
+func CapacityModalCustomID(eventID int64) string {
+	return fmt.Sprintf("%s:capacity-modal:%d", customIDPrefix, eventID)
 }
