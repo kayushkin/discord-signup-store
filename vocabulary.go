@@ -146,16 +146,24 @@ const (
 	JoinedViaInterested = "interested"
 	// JoinedViaOperator is a person added through the web page or the API.
 	JoinedViaOperator = "operator"
+	// JoinedViaReaction is the ✅ on a forum post — clickable from the forum's
+	// list view without opening the post, which is the point of it.
+	JoinedViaReaction = "reaction"
 )
 
 var validJoinedVia = map[string]bool{
 	JoinedViaButton:     true,
 	JoinedViaInterested: true,
 	JoinedViaOperator:   true,
+	JoinedViaReaction:   true,
 }
 
 // ValidJoinedVia returns the accepted arrival routes, sorted.
 func ValidJoinedVia() []string { return sortedKeys(validJoinedVia) }
+
+// ActorReaction is the actor recorded when a change came from the ✅ reaction
+// on a forum post.
+const ActorReaction = "reaction"
 
 // ActorInterested is the actor recorded when a change came from Discord's own
 // Interested button rather than from this service's Join button. Kept distinct

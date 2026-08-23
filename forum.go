@@ -160,6 +160,13 @@ func (s *Server) AdoptForum(guildID, channelID string) (*GuildForum, error) {
 			return nil, err
 		}
 	}
+	// The list-view click target: default_reaction_emoji puts a ✅ button on
+	// every post in the forum's gallery, which is what makes joining a
+	// no-scroll act.
+	if err := s.discord.ModifyThread(channelID, map[string]any{
+		"default_reaction_emoji": map[string]any{"emoji_name": joinReactionEmoji}}); err != nil {
+		return nil, fmt.Errorf("set default reaction: %w", err)
+	}
 	forum := GuildForum{
 		GuildID: guildID, ChannelID: channelID,
 		TagOpen: tags["open"], TagFull: tags["full"],
@@ -243,6 +250,12 @@ func (s *Server) refreshForumPost(ev *Event) error {
 			return err
 		}
 		ev.ForumPostID = postID
+		// The seed. Once ADD_REACTIONS is denied on the channel, an existing
+		// reaction is the only one anyone can click, so this ✅ is what makes
+		// the join clickable at all.
+		if err := s.discord.CreateOwnReaction(postID, postID, joinReactionEmoji); err != nil {
+			log.Printf("[discord-signup] seed ✅ on post %s: %v", postID, err)
+		}
 		log.Printf("[discord-signup] opened forum post %s for event %d (%q)", postID, ev.ID, ev.Name)
 		return nil
 	}
@@ -265,4 +278,39 @@ func (s *Server) refreshForumPostQuietly(ev *Event) {
 	if err := s.refreshForumPost(ev); err != nil {
 		log.Printf("[discord-signup] refresh forum post for event %d: %v", ev.ID, err)
 	}
+}
+
+// joinReactionEmoji is the one reaction that means anything: seeded by the bot
+// on every post, surfaced by the forum's default_reaction_emoji as a click
+// target on the LIST view — so joining needs neither opening the post nor
+// scrolling past its discussion — and the only reaction anyone can add at all
+// once the channel denies ADD_REACTIONS, since a denied user can still click a
+// reaction that is already present.
+const joinReactionEmoji = "✅"
+
+// CreateOwnReaction adds the bot's reaction to a message. This is the seed: a
+// reaction that exists is clickable even by people denied ADD_REACTIONS.
+func (c *DiscordClient) CreateOwnReaction(channelID, messageID, emoji string) error {
+	_, err := c.do(http.MethodPut,
+		"/channels/"+channelID+"/messages/"+messageID+"/reactions/"+urlEscapeEmoji(emoji)+"/@me", nil)
+	return err
+}
+
+// RemoveUserReaction takes one person's reaction off, so the ✅ state keeps
+// matching the roster when they leave through a button instead. Needs
+// MANAGE_MESSAGES.
+func (c *DiscordClient) RemoveUserReaction(channelID, messageID, emoji, userID string) error {
+	_, err := c.do(http.MethodDelete,
+		"/channels/"+channelID+"/messages/"+messageID+"/reactions/"+urlEscapeEmoji(emoji)+"/"+userID, nil)
+	return err
+}
+
+func urlEscapeEmoji(emoji string) string {
+	// Unicode emoji go percent-encoded in the path; a custom emoji would be
+	// name:id, which this service does not use.
+	var b strings.Builder
+	for _, r := range []byte(emoji) {
+		fmt.Fprintf(&b, "%%%02X", r)
+	}
+	return b.String()
 }

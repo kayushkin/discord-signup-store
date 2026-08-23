@@ -258,6 +258,16 @@ func (s *Server) syncAfterChange(ev *Event, changes []stateChange) {
 		return
 	}
 	for _, change := range changes {
+		// Someone who left keeps their ✅ on the forum post otherwise, and a
+		// reaction that no longer means membership would teach everyone to
+		// distrust it. Removing it fires a gateway remove event, which lands on
+		// an already-withdrawn row and no-ops.
+		if change.State == StateWithdrawn && ev.ForumPostID != "" {
+			if err := s.discord.RemoveUserReaction(ev.ForumPostID, ev.ForumPostID,
+				joinReactionEmoji, change.UserID); err != nil {
+				log.Printf("[discord-signup] clear ✅ for %s on event %d: %v", change.UserID, ev.ID, err)
+			}
+		}
 		if err := s.applyRoles(ev, change); err != nil {
 			log.Printf("[discord-signup] role sync event=%d user=%s state=%s: %v",
 				ev.ID, change.UserID, change.State, err)

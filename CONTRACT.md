@@ -187,6 +187,26 @@ flips with the roster; the sweep tags `finished` and archives.
 thread — far harder than message edits. Under signup churn the title badge may
 lag; the card inside stays current.
 
+## The ✅ reaction
+
+React ✅ on a forum post to join; remove it to leave. The forum's
+`default_reaction_emoji` makes ✅ a click target on the **list view**, so
+joining needs neither opening the post nor scrolling past its discussion.
+
+The "only this emoji" restriction is permissions, not filtering: the channel
+denies `ADD_REACTIONS` to `@everyone`, and a denied user can still click a
+reaction that already exists — so the bot seeds ✅ on every post and that seed
+is the only reaction there is. The bot's own role carries a counter-allow,
+because a channel deny on `@everyone` binds the bot too (measured: the seeding
+403'd until the allow was added).
+
+Removing ✅ leaves **however the person joined**, matching the Interested rule.
+Leaving by any other door clears the person's ✅ (needs `MANAGE_MESSAGES`), so
+the reaction stays truthful; the bot's own removals echo back through the
+gateway, land on an already-withdrawn row, and no-op — that is what breaks the
+loop. A reaction carries no interaction token, so a waitlisted clicker is told
+by DM, with the card as fallback.
+
 ## Conventions## The native event's title
 
 When a linked event has a capacity, its Discord title carries a badge:
@@ -251,6 +271,26 @@ flips with the roster; the sweep tags `finished` and archives.
 ⚠️ Discord rate-limits **thread renames** to roughly two per ten minutes per
 thread — far harder than message edits. Under signup churn the title badge may
 lag; the card inside stays current.
+
+## The ✅ reaction
+
+React ✅ on a forum post to join; remove it to leave. The forum's
+`default_reaction_emoji` makes ✅ a click target on the **list view**, so
+joining needs neither opening the post nor scrolling past its discussion.
+
+The "only this emoji" restriction is permissions, not filtering: the channel
+denies `ADD_REACTIONS` to `@everyone`, and a denied user can still click a
+reaction that already exists — so the bot seeds ✅ on every post and that seed
+is the only reaction there is. The bot's own role carries a counter-allow,
+because a channel deny on `@everyone` binds the bot too (measured: the seeding
+403'd until the allow was added).
+
+Removing ✅ leaves **however the person joined**, matching the Interested rule.
+Leaving by any other door clears the person's ✅ (needs `MANAGE_MESSAGES`), so
+the reaction stays truthful; the bot's own removals echo back through the
+gateway, land on an already-withdrawn row, and no-op — that is what breaks the
+loop. A reaction carries no interaction token, so a waitlisted clicker is told
+by DM, with the card as fallback.
 
 ## Conventions
 

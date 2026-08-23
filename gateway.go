@@ -50,11 +50,16 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver) (*GatewayLis
 	// approval and no verification. Deliberately narrow: this connection has no
 	// business seeing messages, members or presences, and asking for intents it
 	// does not need would be asking for data it should not hold.
-	session.Identify.Intents = discordgo.IntentGuildScheduledEvents
+	// Scheduled events for the Interested bridge, reactions for the ✅ join on
+	// forum posts. Both standard intents — nothing privileged.
+	session.Identify.Intents = discordgo.IntentGuildScheduledEvents |
+		discordgo.IntentGuildMessageReactions
 
 	listener := &GatewayListener{session: session, server: server}
 	session.AddHandler(listener.onUserAdd)
 	session.AddHandler(listener.onUserRemove)
+	session.AddHandler(listener.onReactionAdd)
+	session.AddHandler(listener.onReactionRemove)
 	session.AddHandler(listener.onScheduledEventCreated)
 	session.AddHandler(listener.onScheduledEventChanged)
 	session.AddHandler(func(_ *discordgo.Session, r *discordgo.Ready) {
@@ -147,6 +152,85 @@ func (g *GatewayListener) onUserRemove(_ *discordgo.Session, e *discordgo.GuildS
 	fresh, err := g.server.store.GetEvent(ev.ID)
 	if err != nil {
 		log.Printf("[discord-signup] reload event %d: %v", ev.ID, err)
+		return
+	}
+	changes := []stateChange{{UserID: e.UserID, State: StateWithdrawn}}
+	if result.Promoted != nil {
+		changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
+		go g.server.notifyPromoted(fresh, result.Promoted)
+	}
+	g.server.syncAfterChange(fresh, changes)
+}
+
+// onReactionAdd joins whoever clicked ✅ on a forum post.
+//
+// The reaction is the low-effort door: clickable from the forum's list view
+// without opening the post, and — once the channel denies ADD_REACTIONS — the
+// only reaction that exists to click. Any other emoji, any other message, any
+// other clicker (including the bot seeding its own ✅) is ignored.
+func (g *GatewayListener) onReactionAdd(_ *discordgo.Session, e *discordgo.MessageReactionAdd) {
+	if e.Emoji.Name != joinReactionEmoji || e.UserID == g.server.applicationUserID() {
+		return
+	}
+	ev, err := g.server.store.EventByForumPostID(e.MessageID)
+	if err != nil {
+		return // a reaction somewhere that is not an event post
+	}
+	displayName := g.displayName(e.GuildID, e.UserID)
+	result, err := g.server.store.Join(ev.ID, e.UserID, displayName, JoinedViaReaction)
+	if err != nil {
+		if !errors.Is(err, ErrEventNotOpen) {
+			log.Printf("[discord-signup] reaction join event=%d user=%s: %v", ev.ID, e.UserID, err)
+		}
+		return
+	}
+	log.Printf("[discord-signup] reaction join: event=%d user=%s -> %s", ev.ID, e.UserID, result.Signup.State)
+	if result.AlreadySignedUp {
+		return
+	}
+	fresh, err := g.server.store.GetEvent(ev.ID)
+	if err != nil {
+		return
+	}
+	g.server.syncAfterChange(fresh, []stateChange{{UserID: e.UserID, State: result.Signup.State}})
+	// A reaction carries no interaction token, so a waitlisted clicker can only
+	// be told by DM — same shape as Interested, same fallback to reading the
+	// card.
+	if result.Signup.State == StateWaitlisted {
+		go func() {
+			body := fmt.Sprintf("**%s** is full, so your ✅ put you on the waitlist at number %d. "+
+				"If someone drops out you move up automatically and I will message you."+
+				"\n\nRemoving your ✅ takes you off.", fresh.Name, result.Signup.WaitlistPlace)
+			if err := g.server.discord.SendDirectMessage(e.UserID, body); err != nil &&
+				!errors.Is(err, ErrCannotMessageUser) {
+				log.Printf("[discord-signup] dm reaction waitlist user=%s: %v", e.UserID, err)
+			}
+		}()
+	}
+}
+
+// onReactionRemove is the other half: taking your ✅ off is leaving, however
+// you originally joined — the rule the Interested bridge already follows.
+//
+// The bot itself removes reactions to reconcile state after a button Leave;
+// those removals arrive here carrying the REACTION OWNER's id, land on someone
+// already withdrawn, and fall through Leave's not-found path as a no-op — which
+// is what breaks the loop.
+func (g *GatewayListener) onReactionRemove(_ *discordgo.Session, e *discordgo.MessageReactionRemove) {
+	if e.Emoji.Name != joinReactionEmoji || e.UserID == g.server.applicationUserID() {
+		return
+	}
+	ev, err := g.server.store.EventByForumPostID(e.MessageID)
+	if err != nil {
+		return
+	}
+	result, err := g.server.store.Leave(ev.ID, e.UserID, ActorReaction)
+	if err != nil {
+		return // not on the roster; nothing to undo
+	}
+	log.Printf("[discord-signup] reaction leave: event=%d user=%s", ev.ID, e.UserID)
+	fresh, err := g.server.store.GetEvent(ev.ID)
+	if err != nil {
 		return
 	}
 	changes := []stateChange{{UserID: e.UserID, State: StateWithdrawn}}

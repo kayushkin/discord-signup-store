@@ -1,6 +1,7 @@
 package discordsignup
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -158,5 +159,87 @@ func TestForumPostTitle(t *testing.T) {
 	uncapped := &Event{Name: "Open house", StartsAt: ev.StartsAt, Timezone: ev.Timezone}
 	if got := forumPostTitle(uncapped); got != "Open house — 8/29 4pm" {
 		t.Errorf("forumPostTitle = %q, want no badge without a limit", got)
+	}
+}
+
+// TestEventByForumPostIDJoinsOnTheStoredId: a reaction carries only the message
+// it landed on, and this lookup is how it becomes an event.
+func TestEventByForumPostIDJoinsOnTheStoredId(t *testing.T) {
+	store := testStore(t)
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Games",
+		StartsAt: time.Now().Add(time.Hour).Unix()})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	postID := "post-123"
+	if _, err := store.UpdateEvent(ev.ID, EventPatch{ForumPostID: &postID}); err != nil {
+		t.Fatalf("link: %v", err)
+	}
+	got, err := store.EventByForumPostID("post-123")
+	if err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	if got.ID != ev.ID {
+		t.Errorf("found event %d, want %d", got.ID, ev.ID)
+	}
+	if _, err := store.EventByForumPostID("no-such-post"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown post = %v, want ErrNotFound", err)
+	}
+}
+
+// TestNewForumPostsAreSeededWithTheJoinReaction: without the seed, a channel
+// that denies ADD_REACTIONS has nothing to click and the whole design is dead.
+func TestNewForumPostsAreSeededWithTheJoinReaction(t *testing.T) {
+	fake, store, srv := forumFake(t)
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Games",
+		Capacity: 4, StartsAt: time.Now().Add(24 * time.Hour).Unix()})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := srv.refreshForumPost(ev); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	var seeded bool
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPut && strings.Contains(c.Path, "/reactions/") &&
+			strings.HasSuffix(c.Path, "/@me") {
+			seeded = true
+		}
+	}
+	if !seeded {
+		t.Error("the post was not seeded with the bot's own ✅")
+	}
+}
+
+// TestLeavingByButtonClearsTheReaction keeps the ✅ truthful: a reaction that no
+// longer means membership would teach everyone to distrust it.
+func TestLeavingByButtonClearsTheReaction(t *testing.T) {
+	fake, store, srv := forumFake(t)
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Games",
+		Capacity: 4, StartsAt: time.Now().Add(24 * time.Hour).Unix()})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := srv.refreshForumPost(ev); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if _, err := store.Join(ev.ID, "alice", "Alice", JoinedViaReaction); err != nil {
+		t.Fatalf("join: %v", err)
+	}
+	if _, err := store.Leave(ev.ID, "alice", ActorUser); err != nil {
+		t.Fatalf("leave: %v", err)
+	}
+	fresh, _ := store.GetEvent(ev.ID)
+	srv.syncAfterChange(fresh, []stateChange{{UserID: "alice", State: StateWithdrawn}})
+
+	var cleared bool
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodDelete && strings.Contains(c.Path, "/reactions/") &&
+			strings.HasSuffix(c.Path, "/alice") {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Error("alice's ✅ was left on the post after she left by button")
 	}
 }

@@ -427,6 +427,25 @@ func (s *Store) EventByDiscordScheduledEventID(discordEventID string) (*Event, e
 	return e, nil
 }
 
+// EventByForumPostID finds the event a forum post belongs to — the lookup a
+// reaction goes through, since a reaction carries only the message it landed
+// on, and a post's first message shares the post's id.
+func (s *Store) EventByForumPostID(forumPostID string) (*Event, error) {
+	row := s.db.QueryRow(`SELECT `+eventColumns+`
+		FROM events WHERE forum_post_id = ? AND deleted_at = 0`, forumPostID)
+	e, err := scanEvent(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("scan event: %w", err)
+	}
+	if err := s.fillCounts(e); err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
 // EventByMessage finds the roster a signup message belongs to. This is the
 // lookup the interaction handler uses, because a button click arrives carrying
 // the message it sits on.
