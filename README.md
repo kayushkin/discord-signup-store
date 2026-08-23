@@ -174,6 +174,13 @@ curl -s http://127.0.0.1:8312/events/1/history
 
 ## Notes for whoever touches this next
 
+- **A Discord modal can be made entirely of Text Display components**, with no
+  input in it at all. The documentation does not say so either way; this was
+  settled by opening one. It is what lets the details view be genuinely
+  read-only rather than prefilled boxes that look editable.
+- **A modal is the only overlay an app gets.** Everything else — ephemeral
+  replies included — is a message in the channel.
+
 - **Capacity `0` means unlimited**, matching Discord's own convention for
   channel `user_limit` and invite `max_uses`. It does not mean "unset".
 - **Lowering capacity never demotes anyone** who was already admitted. They were

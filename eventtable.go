@@ -410,6 +410,14 @@ func (s *Server) handleTableAction(w http.ResponseWriter, in *Interaction, actio
 // componentTypeTextDisplay is read-only text. Discord allows it in a modal, so
 // the details view needs no text inputs at all — which matters because there is
 // no read-only text input, and prefilled boxes look editable and are not.
+//
+// A modal made ENTIRELY of these is valid, with no interactive component in it
+// at all. Discord's documentation says a modal takes "between 1 and 5
+// components" and lists Text Display among the valid ones, but does not say
+// whether one can be text-only — so this was settled by opening one, on
+// 2026-08-23, and it opens. Recorded because the obvious defensive move is to
+// pad the modal with a throwaway input, and that would put back exactly the
+// editable-looking box this replaced.
 const componentTypeTextDisplay = 10
 
 // textDisplayLimit is the cap on one block's content.
