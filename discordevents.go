@@ -129,6 +129,8 @@ type SyncResult struct {
 	Updated   int      `json:"updated"`
 	Unchanged int      `json:"unchanged"`
 	Posted    int      `json:"posted"`
+	Published int      `json:"published"`
+	Cancelled int      `json:"cancelled"`
 	Problems  []string `json:"problems,omitempty"`
 }
 
@@ -173,6 +175,10 @@ func (s *Server) SyncScheduledEvents(guildID, boardChannelID string) (*SyncResul
 	posted, problems := s.postMissingCards(guildID)
 	result.Posted = posted
 	result.Problems = append(result.Problems, problems...)
+	published, cancelledCount, reconcileProblems := s.reconcileWithNative(guildID, remote)
+	result.Published = published
+	result.Cancelled = cancelledCount
+	result.Problems = append(result.Problems, reconcileProblems...)
 	// Imported and edited events both change what the panel should say, and
 	// the panel is one message, so one redraw covers all of them.
 	if result.Imported > 0 || result.Updated > 0 {
@@ -240,6 +246,8 @@ func (s *Server) SyncAllGuilds() (*SyncResult, error) {
 		total.Updated += result.Updated
 		total.Unchanged += result.Unchanged
 		total.Posted += result.Posted
+		total.Published += result.Published
+		total.Cancelled += result.Cancelled
 		total.Problems = append(total.Problems, result.Problems...)
 	}
 	return total, nil
@@ -707,4 +715,121 @@ func pluralise(count int, noun string) string {
 		return fmt.Sprintf("%d %s", count, noun)
 	}
 	return fmt.Sprintf("%d %ss", count, noun)
+}
+
+// GetScheduledEvent fetches one native event directly. exists=false means
+// Discord no longer has it — the one signal the LIST endpoint cannot give,
+// because completed events drop out of the list too, so absence there is
+// ambiguous and absence HERE is not.
+func (c *DiscordClient) GetScheduledEvent(guildID, eventID string) (ev *DiscordScheduledEvent, exists bool, err error) {
+	raw, err := c.do(http.MethodGet, "/guilds/"+guildID+"/scheduled-events/"+eventID, nil)
+	if err != nil {
+		var apiErr *APIError
+		if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	var out DiscordScheduledEvent
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, false, fmt.Errorf("decode scheduled event: %w", err)
+	}
+	return &out, true, nil
+}
+
+// DeleteScheduledEvent removes a native event.
+func (c *DiscordClient) DeleteScheduledEvent(guildID, eventID string) error {
+	_, err := c.do(http.MethodDelete, "/guilds/"+guildID+"/scheduled-events/"+eventID, nil)
+	return err
+}
+
+// reconcileWithNative closes the gaps the import loop cannot see, in both
+// directions, so the native list and this store cannot drift apart for longer
+// than one sync interval:
+//
+//	local live, never published   → publish (heals web- and API-created events,
+//	                                and retries any publish that once failed)
+//	local live, native GONE       → cancel locally. Deleting the native event
+//	                                is how a person cancels in Discord's own UI,
+//	                                and a roster that outlives its event takes
+//	                                signups for nothing.
+//	local live, native CANCELED   → cancel locally
+//	local live, native COMPLETED  → leave to the time sweep, which owns that
+//	local CANCELLED, native alive → delete the native event, so cancelling on
+//	                                any surface cancels everywhere
+func (s *Server) reconcileWithNative(guildID string, remote []DiscordScheduledEvent) (published, cancelled int, problems []string) {
+	remoteByID := map[string]DiscordScheduledEvent{}
+	for _, r := range remote {
+		remoteByID[r.ID] = r
+	}
+	events, err := s.store.ListEvents(guildID, "", 200)
+	if err != nil {
+		return 0, 0, []string{"list events: " + err.Error()}
+	}
+	for i := range events {
+		ev := &events[i]
+		switch {
+		case !IsArchived(ev.Status) && ev.DiscordScheduledEventID == "":
+			// Discord refuses a start time in the past, and an event that close
+			// to done is hours from the archive anyway.
+			if ev.StartsAt <= now() {
+				continue
+			}
+			if _, err := s.PublishToDiscord(ev.ID, s.boardChannelID); err != nil {
+				problems = append(problems, fmt.Sprintf("publish %q: %v", ev.Name, err))
+				continue
+			}
+			published++
+
+		case !IsArchived(ev.Status) && ev.DiscordScheduledEventID != "":
+			if _, listed := remoteByID[ev.DiscordScheduledEventID]; listed {
+				continue
+			}
+			native, exists, err := s.discord.GetScheduledEvent(guildID, ev.DiscordScheduledEventID)
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("check %q: %v", ev.Name, err))
+				continue
+			}
+			if exists && native.Status != discordEventCanceled {
+				continue // completed or still scheduled; the time sweep owns those
+			}
+			if err := s.cancelEventEverywhere(ev, "its Discord event was deleted"); err != nil {
+				problems = append(problems, fmt.Sprintf("cancel %q: %v", ev.Name, err))
+				continue
+			}
+			cancelled++
+
+		case ev.Status == StatusCancelled && ev.DiscordScheduledEventID != "":
+			if _, listed := remoteByID[ev.DiscordScheduledEventID]; !listed {
+				continue
+			}
+			if err := s.discord.DeleteScheduledEvent(guildID, ev.DiscordScheduledEventID); err != nil {
+				problems = append(problems, fmt.Sprintf("delete native for %q: %v", ev.Name, err))
+			}
+		}
+	}
+	return published, cancelled, problems
+}
+
+// cancelEventEverywhere marks an event cancelled and pushes that fact onto
+// every surface: the card loses its buttons, the table drops the row, the
+// forum post gets the cancelled tag and archives, the thread closes.
+func (s *Server) cancelEventEverywhere(ev *Event, why string) error {
+	status := StatusCancelled
+	updated, err := s.store.UpdateEvent(ev.ID, EventPatch{Status: &status})
+	if err != nil {
+		return err
+	}
+	log.Printf("[discord-signup] event %d (%q) cancelled: %s", ev.ID, ev.Name, why)
+	if err := s.RefreshSignupMessage(ev.ID); err != nil {
+		log.Printf("[discord-signup] refresh cancelled card %d: %v", ev.ID, err)
+	}
+	s.refreshEventTableQuietly(ev.GuildID)
+	s.refreshForumPostQuietly(updated)
+	if updated.ThreadID != "" {
+		if err := s.discord.ArchiveThread(updated.ThreadID); err != nil {
+			log.Printf("[discord-signup] archive thread for cancelled %d: %v", ev.ID, err)
+		}
+	}
+	return nil
 }

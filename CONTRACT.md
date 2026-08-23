@@ -207,6 +207,26 @@ gateway, land on an already-withdrawn row, and no-op — that is what breaks the
 loop. A reaction carries no interaction token, so a waitlisted clicker is told
 by DM, with the card as fallback.
 
+## Native-event reconciliation
+
+The sync's reconcile pass keeps this store and Discord's event list from
+drifting, in both directions, within one sync interval:
+
+| Local | Native | Action |
+|---|---|---|
+| live, unlinked, starts in the future | — | publish |
+| live | **gone** (direct GET 404) | cancel locally, everywhere |
+| live | CANCELED | cancel locally |
+| live | COMPLETED | left to the time sweep, which owns completion |
+| cancelled | still listed | delete the native event |
+
+Absence from the LIST endpoint proves nothing — completed events drop out of it
+too — so a missing id is checked with a direct GET, where a 404 is unambiguous.
+The gateway's GUILD_SCHEDULED_EVENT_DELETE handler does the same cancellation
+instantly; the poll is the backstop for socket downtime. Deleting a native
+event is how a person cancels in Discord's own UI, and it now means that here
+too.
+
 ## Conventions## The native event's title
 
 When a linked event has a capacity, its Discord title carries a badge:
@@ -291,6 +311,26 @@ the reaction stays truthful; the bot's own removals echo back through the
 gateway, land on an already-withdrawn row, and no-op — that is what breaks the
 loop. A reaction carries no interaction token, so a waitlisted clicker is told
 by DM, with the card as fallback.
+
+## Native-event reconciliation
+
+The sync's reconcile pass keeps this store and Discord's event list from
+drifting, in both directions, within one sync interval:
+
+| Local | Native | Action |
+|---|---|---|
+| live, unlinked, starts in the future | — | publish |
+| live | **gone** (direct GET 404) | cancel locally, everywhere |
+| live | CANCELED | cancel locally |
+| live | COMPLETED | left to the time sweep, which owns completion |
+| cancelled | still listed | delete the native event |
+
+Absence from the LIST endpoint proves nothing — completed events drop out of it
+too — so a missing id is checked with a direct GET, where a 404 is unambiguous.
+The gateway's GUILD_SCHEDULED_EVENT_DELETE handler does the same cancellation
+instantly; the poll is the backstop for socket downtime. Deleting a native
+event is how a person cancels in Discord's own UI, and it now means that here
+too.
 
 ## Conventions
 

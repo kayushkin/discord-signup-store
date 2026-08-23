@@ -721,3 +721,115 @@ func TestThreadIsCreatedOnceAndArchivedWhenTheEventEnds(t *testing.T) {
 		t.Error("the thread was not archived when the event finished")
 	}
 }
+
+// TestReconcilePublishesEventsThatMissedIt heals the first desync source: only
+// modal-created events auto-published, so web- and API-created ones never
+// reached Discord's list.
+func TestReconcilePublishesEventsThatMissedIt(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+	fake.on(http.MethodPost, "/guilds/g1/scheduled-events", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"id":"native-new","name":"x"}`)
+	})
+
+	future := time.Now().Add(72 * time.Hour).Unix()
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board",
+		Name: "Never published", StartsAt: future, Timezone: "UTC"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	// And one in the past, which Discord would refuse: skipped, not errored.
+	if _, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board",
+		Name: "Already started", StartsAt: time.Now().Add(-time.Hour).Unix()}); err != nil {
+		t.Fatalf("create past: %v", err)
+	}
+
+	published, cancelled, problems := srv.reconcileWithNative("g1", nil)
+	if len(problems) != 0 {
+		t.Fatalf("problems: %v", problems)
+	}
+	if published != 1 || cancelled != 0 {
+		t.Errorf("published=%d cancelled=%d, want 1 and 0", published, cancelled)
+	}
+	got, _ := store.GetEvent(ev.ID)
+	if got.DiscordScheduledEventID != "native-new" {
+		t.Errorf("link = %q, want the new native id", got.DiscordScheduledEventID)
+	}
+}
+
+// TestReconcileCancelsWhenTheNativeEventIsGone closes the structural hole:
+// deleting a native event is how a person cancels in Discord's UI, and nothing
+// used to notice.
+func TestReconcileCancelsWhenTheNativeEventIsGone(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+
+	// deleted: direct GET answers 404. completedNative: direct GET still finds
+	// it, status COMPLETED — must NOT be cancelled, the time sweep owns it.
+	fake.on(http.MethodGet, "/guilds/g1/scheduled-events/gone", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, `{"code":10070,"message":"Unknown Guild Scheduled Event"}`)
+	})
+	fake.on(http.MethodGet, "/guilds/g1/scheduled-events/done", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"id":"done","status":3,"name":"x"}`)
+	})
+
+	future := time.Now().Add(72 * time.Hour).Unix()
+	mk := func(name, nativeID string) *Event {
+		ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: name,
+			StartsAt: future, DiscordScheduledEventID: nativeID})
+		if err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		return ev
+	}
+	deleted := mk("Deleted natively", "gone")
+	completed := mk("Completed natively", "done")
+
+	published, cancelled, problems := srv.reconcileWithNative("g1", nil)
+	if len(problems) != 0 {
+		t.Fatalf("problems: %v", problems)
+	}
+	if cancelled != 1 || published != 0 {
+		t.Errorf("cancelled=%d published=%d, want 1 and 0", cancelled, published)
+	}
+	if got, _ := store.GetEvent(deleted.ID); got.Status != StatusCancelled {
+		t.Errorf("deleted-native event = %q, want cancelled", got.Status)
+	}
+	if got, _ := store.GetEvent(completed.ID); got.Status != StatusOpen {
+		t.Errorf("completed-native event = %q, want left for the time sweep", got.Status)
+	}
+}
+
+// TestReconcileDeletesTheNativeEventWhenCancelledLocally: cancelling on any
+// surface cancels everywhere, including Discord's own list.
+func TestReconcileDeletesTheNativeEventWhenCancelledLocally(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+
+	future := time.Now().Add(72 * time.Hour).Unix()
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Called off",
+		StartsAt: future, DiscordScheduledEventID: "native-5", Status: StatusCancelled})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	remote := []DiscordScheduledEvent{{ID: "native-5", GuildID: "g1", Status: discordEventScheduled}}
+	if _, _, problems := srv.reconcileWithNative("g1", remote); len(problems) != 0 {
+		t.Fatalf("problems: %v", problems)
+	}
+	var deleted bool
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodDelete && c.Path == "/guilds/g1/scheduled-events/native-5" {
+			deleted = true
+		}
+	}
+	if !deleted {
+		t.Errorf("the native event for cancelled %q was not deleted", ev.Name)
+	}
+}

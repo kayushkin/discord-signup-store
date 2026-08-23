@@ -61,6 +61,7 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver) (*GatewayLis
 	session.AddHandler(listener.onReactionAdd)
 	session.AddHandler(listener.onReactionRemove)
 	session.AddHandler(listener.onScheduledEventCreated)
+	session.AddHandler(listener.onScheduledEventDeleted)
 	session.AddHandler(listener.onScheduledEventChanged)
 	session.AddHandler(func(_ *discordgo.Session, r *discordgo.Ready) {
 		log.Printf("[discord-signup] gateway ready as %s#%s, %d guild(s)",
@@ -259,6 +260,24 @@ func (g *GatewayListener) onScheduledEventCreated(_ *discordgo.Session, e *disco
 	}
 	log.Printf("[discord-signup] discord event %q created: %d imported, %d cards posted",
 		e.Name, result.Imported, result.Posted)
+}
+
+// onScheduledEventDeleted cancels the local event the moment its native one is
+// deleted — deleting is how a person cancels in Discord's own UI, and this is
+// the event the poll cannot see (absence from the LIST is ambiguous; completed
+// events drop out too). The poll's direct-GET reconciliation stays as the
+// backstop for anything this misses while the socket is down.
+func (g *GatewayListener) onScheduledEventDeleted(_ *discordgo.Session, e *discordgo.GuildScheduledEventDelete) {
+	ev, err := g.server.store.EventByDiscordScheduledEventID(e.ID)
+	if err != nil {
+		return // not one of ours, or already gone
+	}
+	if IsArchived(ev.Status) {
+		return // already settled; also breaks the loop when WE deleted it
+	}
+	if err := g.server.cancelEventEverywhere(ev, "its Discord event was deleted"); err != nil {
+		log.Printf("[discord-signup] cancel after native delete %s: %v", e.ID, err)
+	}
 }
 
 // onScheduledEventChanged keeps the local copy fresh when someone edits a
