@@ -266,19 +266,31 @@ func (s *Server) assignableRolesIn(guildID string) []Role {
 	return AssignableRoles(roles, botRoles)
 }
 
-// applicationUserID is the bot's own user id, cached after the first lookup.
+// applicationUserID is the bot's own user id, cached after the first successful
+// lookup and retried after a failed one. Empty means it is still unknown.
+//
+// Only a success is cached. A transient /users/@me failure — a 500, a timeout,
+// a bot token auth-store has not resolved yet at boot — must not become the
+// answer for the rest of the process's life, because every caller of this reads
+// an empty id as a fact about Discord rather than as a lookup that never
+// happened. The lock is held across the request so concurrent callers share one
+// lookup instead of each firing their own; the gateway asks for this on every
+// reaction it sees. Same shape as DiscordClient.token, for the same reason.
 func (s *Server) applicationUserID() string {
-	s.botIDOnce.Do(func() {
-		if s.discord == nil {
-			return
-		}
-		id, err := s.discord.CurrentUserID()
-		if err != nil {
-			log.Printf("[discord-signup] read own user id: %v", err)
-			return
-		}
-		s.botID = id
-	})
+	s.botIDMu.Lock()
+	defer s.botIDMu.Unlock()
+	if s.botID != "" {
+		return s.botID
+	}
+	if s.discord == nil {
+		return ""
+	}
+	id, err := s.discord.CurrentUserID()
+	if err != nil {
+		log.Printf("[discord-signup] read own user id: %v", err)
+		return ""
+	}
+	s.botID = id
 	return s.botID
 }
 

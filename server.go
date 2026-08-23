@@ -25,10 +25,16 @@ type Server struct {
 	// answer 501 rather than half-working: a login page that cannot complete a
 	// login is worse than one that says it is not set up.
 	oauth *OAuthConfig
-	// botID is the bot's own Discord user id, looked up once. Needed to read
-	// which roles the bot holds, which is what decides what it can grant.
-	botID     string
-	botIDOnce sync.Once
+	// botID is the bot's own Discord user id, cached after the first SUCCESSFUL
+	// lookup. Needed to read which roles the bot holds, which is what decides
+	// what it can grant, and to recognise the bot's own reactions and events.
+	//
+	// Guarded by botIDMu rather than a sync.Once because a sync.Once runs its
+	// body once whether or not the body succeeded: one transient /users/@me
+	// failure would leave this empty for the life of the process with nothing
+	// ever looking again. A failure is not an answer.
+	botID   string
+	botIDMu sync.Mutex
 	// defaultTimezone is the IANA zone a time typed into a Discord form is read
 	// in. One per deployment rather than per event, because a modal holds five
 	// fields and a timezone picker is not worth one of them. Printed on the
