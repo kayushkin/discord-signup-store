@@ -170,6 +170,23 @@ When the event completes, the sweep archives the thread (not locked — a
 late "how did it go?" reopens it, and locking would turn that into a
 permission error).
 
+## The forum surface
+
+`PUT /api/guilds/{guildID}/forum {"channel_id"}` adopts a forum channel: the
+managed tags (`open`, `full`, `finished`, `cancelled` — the last two moderated,
+since they state facts this service asserts) are created if missing, matched by
+name once, and joined by id ever after. Every live event then gets a post.
+
+A forum post is a thread whose required first message **shares the thread's
+id**. That message is `RenderSignupMessage` verbatim — the same card and the
+same button custom_ids as the board, so one handler serves both surfaces. The
+post's title carries the capacity badge (`[3/8] Games — 8/29 4pm`) and its tag
+flips with the roster; the sweep tags `finished` and archives.
+
+⚠️ Discord rate-limits **thread renames** to roughly two per ten minutes per
+thread — far harder than message edits. Under signup churn the title badge may
+lag; the card inside stays current.
+
 ## Conventions## The native event's title
 
 When a linked event has a capacity, its Discord title carries a badge:
@@ -217,6 +234,23 @@ message id while the old thread lives on.
 When the event completes, the sweep archives the thread (not locked — a
 late "how did it go?" reopens it, and locking would turn that into a
 permission error).
+
+## The forum surface
+
+`PUT /api/guilds/{guildID}/forum {"channel_id"}` adopts a forum channel: the
+managed tags (`open`, `full`, `finished`, `cancelled` — the last two moderated,
+since they state facts this service asserts) are created if missing, matched by
+name once, and joined by id ever after. Every live event then gets a post.
+
+A forum post is a thread whose required first message **shares the thread's
+id**. That message is `RenderSignupMessage` verbatim — the same card and the
+same button custom_ids as the board, so one handler serves both surfaces. The
+post's title carries the capacity badge (`[3/8] Games — 8/29 4pm`) and its tag
+flips with the roster; the sweep tags `finished` and archives.
+
+⚠️ Discord rate-limits **thread renames** to roughly two per ten minutes per
+thread — far harder than message edits. Under signup churn the title badge may
+lag; the card inside stays current.
 
 ## Conventions
 

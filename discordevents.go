@@ -658,6 +658,8 @@ func (s *Server) CompleteFinishedEvents() ([]int64, error) {
 		// its discussion closes with it.
 		if ev, err := s.store.GetEvent(id); err == nil {
 			s.refreshEventTableQuietly(ev.GuildID)
+			// The forum post gets its finished tag and archives.
+			s.refreshForumPostQuietly(ev)
 			if ev.ThreadID != "" {
 				if err := s.discord.ArchiveThread(ev.ThreadID); err != nil {
 					log.Printf("[discord-signup] archive thread for event %d: %v", id, err)

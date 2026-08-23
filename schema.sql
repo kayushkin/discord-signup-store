@@ -188,3 +188,18 @@ CREATE TABLE IF NOT EXISTS table_pages (
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (guild_id, page)
 );
+
+-- guild_forums: the forum-channel surface, running alongside the cards and the
+-- table so the two shapes can be compared on the same events.
+--
+-- The tag ids are stored, not the tag names: tags are joined on the id Discord
+-- assigned, and a rename in the Discord UI must not orphan every post.
+CREATE TABLE IF NOT EXISTS guild_forums (
+    guild_id      TEXT PRIMARY KEY,
+    channel_id    TEXT NOT NULL,
+    tag_open      TEXT NOT NULL DEFAULT '',
+    tag_full      TEXT NOT NULL DEFAULT '',
+    tag_finished  TEXT NOT NULL DEFAULT '',
+    tag_cancelled TEXT NOT NULL DEFAULT '',
+    updated_at    INTEGER NOT NULL
+);

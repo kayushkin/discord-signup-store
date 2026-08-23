@@ -70,6 +70,8 @@ type Event struct {
 	// made. Stored rather than derived from MessageID because a reposted card
 	// gets a new message id while the old thread lives on.
 	ThreadID string `json:"thread_id"`
+	// ForumPostID is the event's post in the forum surface, "" until made.
+	ForumPostID string `json:"forum_post_id"`
 	// DiscordInterestedCount is Discord's own number, carried for display
 	// beside ours. It is never the roster and never gates a capacity decision.
 	DiscordInterestedCount int    `json:"discord_interested_count"`
@@ -235,6 +237,11 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// would silently point at nothing after the first repost.
 	{"events", "thread_id", "TEXT NOT NULL DEFAULT ''"},
 
+	// The event's post in the forum surface. A forum post is a thread whose
+	// first message shares its id, so this one id reaches both the post (for
+	// retitling and tag flips) and the card inside it (for edits).
+	{"events", "forum_post_id", "TEXT NOT NULL DEFAULT ''"},
+
 	// How this person got onto the roster. Not cosmetic: it decides what
 	// un-marking Interested on Discord does to them. Someone who pressed Join
 	// keeps their place regardless of their Discord RSVP; someone who only ever
@@ -370,14 +377,14 @@ func (s *Store) CreateEvent(e Event) (*Event, error) {
 const eventColumns = `id, guild_id, channel_id, message_id, discord_scheduled_event_id,
 	name, description, capacity, status, attending_role_id, waitlist_role_id,
 	starts_at, ends_at, location, entity_type, recurrence_rule, timezone, origin,
-	thread_id, discord_interested_count, discord_synced_at, created_by, created_at, updated_at`
+	thread_id, forum_post_id, discord_interested_count, discord_synced_at, created_by, created_at, updated_at`
 
 func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 	var e Event
 	err := sc.Scan(&e.ID, &e.GuildID, &e.ChannelID, &e.MessageID, &e.DiscordScheduledEventID,
 		&e.Name, &e.Description, &e.Capacity, &e.Status, &e.AttendingRoleID, &e.WaitlistRoleID,
 		&e.StartsAt, &e.EndsAt, &e.Location, &e.EntityType, &e.RecurrenceRule, &e.Timezone,
-		&e.Origin, &e.ThreadID, &e.DiscordInterestedCount, &e.DiscordSyncedAt, &e.CreatedBy,
+		&e.Origin, &e.ThreadID, &e.ForumPostID, &e.DiscordInterestedCount, &e.DiscordSyncedAt, &e.CreatedBy,
 		&e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -584,6 +591,9 @@ func (s *Store) UpdateEvent(id int64, patch EventPatch) (*Event, error) {
 	if patch.ThreadID != nil {
 		add("thread_id", *patch.ThreadID)
 	}
+	if patch.ForumPostID != nil {
+		add("forum_post_id", *patch.ForumPostID)
+	}
 	if patch.DiscordInterestedCount != nil {
 		add("discord_interested_count", *patch.DiscordInterestedCount)
 		add("discord_synced_at", now())
@@ -623,6 +633,7 @@ type EventPatch struct {
 	Timezone                *string `json:"timezone"`
 	DiscordInterestedCount  *int    `json:"discord_interested_count"`
 	ThreadID                *string `json:"thread_id"`
+	ForumPostID             *string `json:"forum_post_id"`
 }
 
 // validateRecurrence enforces the one rule that cannot be defaulted: a

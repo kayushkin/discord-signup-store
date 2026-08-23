@@ -272,6 +272,7 @@ func (s *Server) syncAfterChange(ev *Event, changes []stateChange) {
 	// that updates a card and forgets the row. One message, not the whole
 	// table: this runs on every signup.
 	s.refreshEventTableQuietly(ev.GuildID)
+	s.refreshForumPostQuietly(ev)
 	// The native event's title carries the count, so it goes stale on every
 	// signup. Pushed through the same function an edit uses rather than a
 	// second, lighter one: two paths that both write the native event would

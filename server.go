@@ -116,6 +116,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/channels/{channelID}/how-to", s.handlePostHowTo)
 	mux.HandleFunc("PUT /api/guilds/{guildID}/table", s.handleSetGuildTable)
 	mux.HandleFunc("POST /api/guilds/{guildID}/table/refresh", s.handleRefreshGuildTable)
+	mux.HandleFunc("PUT /api/guilds/{guildID}/forum", s.handleSetGuildForum)
 	mux.HandleFunc("POST /api/events/complete-finished", s.handleCompleteFinished)
 
 	// Browser surface — session-gated.
@@ -163,6 +164,24 @@ func (s *Server) handleSetGuildTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, table)
+}
+
+// handleSetGuildForum adopts a forum channel as the guild's forum surface:
+// managed tags are added if missing, and every live event gets a post.
+func (s *Server) handleSetGuildForum(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		ChannelID string `json:"channel_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "malformed JSON"})
+		return
+	}
+	forum, err := s.AdoptForum(r.PathValue("guildID"), in.ChannelID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, forum)
 }
 
 // handleRefreshGuildTable deletes every row and reposts them in date order.
