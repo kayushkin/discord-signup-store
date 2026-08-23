@@ -1,0 +1,91 @@
+{{define "content"}}
+<div class="card">
+  <h3>{{if .Event}}Edit event{{else}}New event{{end}}</h3>
+  <form method="post" action="{{if .Event}}/events/{{.Event.ID}}{{else}}/events/new{{end}}">
+
+    <label>Name</label>
+    <input name="name" required maxlength="100" value="{{with .Event}}{{.Name}}{{end}}">
+
+    <label>Description</label>
+    <textarea name="description">{{with .Event}}{{.Description}}{{end}}</textarea>
+
+    {{if not .Event}}
+    <label>Server</label>
+    <select name="guild_id" required>
+      {{range .ManageableGuilds}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+    </select>
+    {{end}}
+
+    <div class="grid2">
+      <div>
+        <label>Starts <span style="color:var(--bad)">*</span></label>
+        <input type="datetime-local" name="starts_at" required value="{{.StartsLocal}}">
+      </div>
+      <div>
+        <label>Ends</label>
+        <input type="datetime-local" name="ends_at" value="{{.EndsLocal}}">
+      </div>
+    </div>
+
+    <label>Timezone <span style="color:var(--bad)">*</span></label>
+    <input name="timezone" required list="zones" value="{{.TimezoneValue}}" placeholder="America/Los_Angeles">
+    <datalist id="zones">{{range .Zones}}<option value="{{.}}">{{end}}</datalist>
+    <div class="hint">An IANA zone name, never a UTC offset — an offset cannot know
+      what happens at a daylight-saving change and drifts an hour twice a year.
+      The times above are read in this zone.</div>
+
+    <div class="grid2">
+      <div>
+        <label>Capacity</label>
+        <input type="number" name="capacity" min="0" value="{{if .Event}}{{.Event.Capacity}}{{else}}0{{end}}">
+        <div class="hint">0 means no limit. Lowering it never removes anyone
+          already in — the new limit applies to the next person to sign up.</div>
+      </div>
+      <div>
+        <label>Location</label>
+        <input name="location" value="{{with .Event}}{{.Location}}{{end}}" placeholder="Where it happens">
+      </div>
+    </div>
+
+    <label>Repeats</label>
+    <select name="recurrence_rule">
+      <option value="" {{if eq .RecurrenceValue ""}}selected{{end}}>Does not repeat</option>
+      {{range .RecurrenceChoices}}
+        <option value="{{.Rule}}" {{if eq $.RecurrenceValue .Rule}}selected{{end}}>{{.Label}}</option>
+      {{end}}
+    </select>
+    <div class="hint">Stored as an RFC 5545 rule, the same grammar Discord accepts
+      on its own scheduled events, so one rule drives both.</div>
+
+    {{if .Event}}
+    <label>Status</label>
+    <select name="status">
+      {{range .Statuses}}<option value="{{.}}" {{if eq $.Event.Status .}}selected{{end}}>{{.}}</option>{{end}}
+    </select>
+    {{end}}
+
+    <div class="grid2">
+      <div>
+        <label>Attending role (optional)</label>
+        <select name="attending_role_id">
+          <option value="">none</option>
+          {{range .Roles}}<option value="{{.ID}}" {{if and $.Event (eq $.Event.AttendingRoleID .ID)}}selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </div>
+      <div>
+        <label>Waitlist role (optional)</label>
+        <select name="waitlist_role_id">
+          <option value="">none</option>
+          {{range .Roles}}<option value="{{.ID}}" {{if and $.Event (eq $.Event.WaitlistRoleID .ID)}}selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </div>
+    </div>
+    <div class="hint">Granted and revoked automatically as people join, move up
+      the waitlist or leave. The bot's own role must sit above these in the
+      server's role list.</div>
+
+    <p style="margin-top:22px"><button>{{if .Event}}Save{{else}}Create{{end}}</button>
+      <a class="btn" style="background:transparent;border:1px solid var(--line)" href="/">Cancel</a></p>
+  </form>
+</div>
+{{end}}

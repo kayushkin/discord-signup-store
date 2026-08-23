@@ -1,0 +1,92 @@
+{{define "content"}}
+{{$canManage := .CanManage}}
+<div class="card">
+  <div class="row">
+    <h3>{{.Event.Name}}</h3>
+    <span class="pill {{.Event.Status}}">{{.Event.Status}}</span>
+    {{if eq .Event.Origin "discord"}}<span class="pill discord">from Discord</span>{{end}}
+  </div>
+  {{if .Event.Description}}<p>{{.Event.Description}}</p>{{end}}
+  <div class="meta">
+    {{if .Event.StartsAt}}{{localTime .Event.StartsAt}}{{else}}no date set{{end}}
+    {{if .Event.Location}} · {{.Event.Location}}{{end}}
+    {{if .Event.RecurrenceRule}} · repeats ({{.Event.RecurrenceRule}}){{end}}
+    {{if .Event.Timezone}}<br><span class="muted">Times above are shown in your own timezone.
+      This event was scheduled in {{.Event.Timezone}}.</span>{{end}}
+  </div>
+  <div class="meta count" style="margin-top:8px">
+    {{if .Event.Capacity}}<strong>{{.Event.AttendingCount}}/{{.Event.Capacity}}</strong> places taken{{else}}<strong>{{.Event.AttendingCount}}</strong> signed up · no limit{{end}}
+    {{if .Event.WaitlistCount}} · {{.Event.WaitlistCount}} on the waitlist{{end}}
+  </div>
+  {{if .Event.DiscordScheduledEventID}}
+  <div class="meta" style="margin-top:6px">
+    <a href="{{.DiscordEventURL}}">Native Discord event</a> shows
+    <strong>{{.Event.DiscordInterestedCount}} interested</strong> —
+    a different number from the roster above, and it always will be.
+    Discord counts people who asked to be notified; this counts people who have a place.
+    It cannot be capped and nobody can be removed from it.
+  </div>
+  {{end}}
+  {{if $canManage}}
+  <p style="margin-top:16px" class="row">
+    <a class="btn" href="/events/{{.Event.ID}}/edit">Edit</a>
+    <form method="post" action="/events/{{.Event.ID}}/post-message" style="margin:0">
+      <button class="ghost">{{if .Event.MessageID}}Repost{{else}}Post{{end}} signup message</button></form>
+    {{if not .Event.DiscordScheduledEventID}}
+    <form method="post" action="/events/{{.Event.ID}}/publish" style="margin:0">
+      <button class="ghost">Publish to Discord events</button></form>
+    {{end}}
+  </p>
+  {{end}}
+</div>
+
+<div class="card">
+  <h3>Roster</h3>
+  {{if not .Roster}}<p class="meta">Nobody yet.</p>{{end}}
+  {{if .Roster}}
+  <table>
+    <tr><th>#</th><th>Who</th><th>State</th><th>Signed up</th>{{if $canManage}}<th></th>{{end}}</tr>
+    {{range .Roster}}
+    <tr>
+      <td class="count">{{if eq .State "waitlisted"}}<span class="muted">wait {{.WaitlistPlace}}</span>{{else}}{{.Position}}{{end}}</td>
+      <td>{{who .DisplayName .DiscordUserID}}</td>
+      <td><span class="pill {{if eq .State "attending"}}open{{else}}closed{{end}}">{{.State}}</span></td>
+      <td class="meta">{{localTime .SignedUpAt}}</td>
+      {{if $canManage}}
+      <td style="text-align:right">
+        <form method="post" action="/events/{{$.Event.ID}}/roster/remove" style="margin:0">
+          <input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
+          <button class="danger">Remove</button></form>
+      </td>{{end}}
+    </tr>
+    {{end}}
+  </table>
+  <p class="hint">Removing someone who holds a place promotes whoever has waited
+    longest, and messages them.</p>
+  {{end}}
+
+  {{if $canManage}}
+  <form method="post" action="/events/{{.Event.ID}}/roster/add" class="row" style="margin-top:16px;align-items:flex-end">
+    <div style="flex:1"><label>Add someone by Discord user id</label>
+      <input name="discord_user_id" placeholder="Discord user id, e.g. 123456789012345678" required></div>
+    <button class="ghost">Add</button>
+  </form>
+  <div class="hint">Goes through the same capacity and waitlist rules as pressing Join.</div>
+  {{end}}
+</div>
+
+<div class="card">
+  <h3>History</h3>
+  <p class="hint">Everything that ever happened to this roster. Discord keeps no
+    equivalent record — its own API has no timestamps on RSVPs at all.</p>
+  <table>
+    <tr><th>When</th><th>Who</th><th>What</th><th>By</th></tr>
+    {{range .History}}
+    <tr><td class="meta">{{localTime .At}}</td>
+        <td>{{who .DisplayName .DiscordUserID}}</td>
+        <td>{{transitionText .Action .ToState}}</td>
+        <td class="meta">{{.Actor}}</td></tr>
+    {{end}}
+  </table>
+</div>
+{{end}}

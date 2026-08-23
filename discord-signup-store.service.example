@@ -1,0 +1,64 @@
+# Copy this to discord-signup-store.service and fill in the blanks. The real
+# file is gitignored, because everything you are about to put in it describes
+# one particular host and one particular Discord application.
+#
+#   cp discord-signup-store.service.example discord-signup-store.service
+
+[Unit]
+Description=Discord Signup Store — event rosters with a capacity and a waitlist
+# auth-store holds the bot token. Not a hard dependency: the token is resolved
+# lazily on first use, so this service starts, serves the roster API and answers
+# Discord's PING with auth-store down. Only the pushes back to Discord fail, and
+# they fail loudly in the log.
+After=network.target auth-store.service
+
+[Service]
+Type=simple
+ExecStart=/home/YOUR_USER/bin/discord-signup-store
+
+# Loopback, deliberately. The admin routes on this server edit rosters and carry
+# no auth of their own; nginx publishes ONLY /interactions to the internet. A
+# wildcard bind would put roster editing on the network for anything that can
+# route to this host.
+Environment=DISCORD_SIGNUP_ADDR=127.0.0.1:8312
+
+# The application's Ed25519 public key, from the Developer Portal under General
+# Information. Public by design — it verifies Discord's signature, it does not
+# sign anything — so it belongs in the unit rather than the secret file.
+# REPLACE THIS before the first start; the service refuses to boot without it.
+Environment=DISCORD_APPLICATION_PUBLIC_KEY=
+
+Environment=AUTH_STORE_URL=http://127.0.0.1:8303
+# Which auth-store credential holds the bot token.
+Environment=DISCORD_CREDENTIAL_PROVIDER=discord
+Environment=DISCORD_CREDENTIAL_ACCOUNT=default
+
+# The browser surface at YOUR_DOMAIN. Unset it and the login routes
+# answer 501 while buttons, rosters and the API carry on working.
+Environment=DISCORD_OAUTH_REDIRECT_URL=https://YOUR_DOMAIN/auth/callback
+Environment=DISCORD_APPLICATION_ID=
+# Which auth-store credential holds the OAuth2 client secret. Deliberately a
+# different account from the bot token: one mints user logins, the other acts
+# in every server, and they should not be one row.
+Environment=DISCORD_OAUTH_CREDENTIAL_ACCOUNT=oauth-client
+# Where signup cards are posted, including ones imported from Discord. A voice
+# event's own channel is the room people talk in, where a card goes unread.
+Environment=DISCORD_BOARD_CHANNEL_ID=
+
+Environment=HOME=/home/YOUR_USER
+
+# AUTH_STORE_TOKEN lives here rather than in an Environment= line above,
+# because a unit file is world-readable and everything in one shows up in
+# `systemctl show`. Create it with mode 0600:
+#   install -m600 /dev/null ~/.config/discord-signup-store/env
+#   echo 'AUTH_STORE_TOKEN=…' >> ~/.config/discord-signup-store/env
+# The leading '-' means a missing file is not a startup failure — the service
+# still runs, and only the calls out to Discord fail.
+EnvironmentFile=-/home/YOUR_USER/.config/discord-signup-store/env
+
+WorkingDirectory=/home/YOUR_USER/repos/discord-signup-store
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

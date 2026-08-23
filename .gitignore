@@ -1,0 +1,8 @@
+/discord-signup-store
+
+# Host-specific configuration. Copy the .example files and fill them in; the
+# filled-in versions name one machine, one domain and one Discord application,
+# and none of that belongs in a shared repository.
+/discord-signup-store.service
+/nginx-interactions.conf
+/nginx-discord-vhost.conf

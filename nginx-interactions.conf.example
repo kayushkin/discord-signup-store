@@ -1,0 +1,36 @@
+# Publishes exactly one route from discord-signup-store to the internet.
+#
+# Paste this location block into the YOUR_EXISTING_DOMAIN server block in
+# /etc/nginx/sites-enabled/YOUR_EXISTING_DOMAIN, then `sudo nginx -t &&
+# sudo systemctl reload nginx`. The Interactions Endpoint URL to paste into the
+# Developer Portal is then:
+#
+#     https://YOUR_EXISTING_DOMAIN/discord/interactions
+#
+# Everything else the service serves — creating events, editing rosters, reading
+# the history — stays on 127.0.0.1:8312 and is deliberately NOT proxied. Adding
+# a second location for /discord/events would publish roster editing to anyone
+# on the internet, since those routes have no auth of their own.
+
+location = /discord/interactions {
+    proxy_pass http://127.0.0.1:8312/interactions;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Discord's signature covers the raw request body byte for byte, and the
+    # timestamp and signature travel in headers. Nothing here may rewrite the
+    # body or drop those headers, or every request fails verification with a
+    # 401 that looks exactly like a wrong public key.
+    proxy_request_buffering on;
+
+    # Discord gives an interaction 3 seconds before it gives up. A shorter
+    # timeout here surfaces a slow upstream as a clean 504 in the nginx log
+    # rather than as a user staring at "This interaction failed".
+    proxy_connect_timeout 2s;
+    proxy_read_timeout 5s;
+
+    # Nothing else may reach the service through nginx.
+    limit_except POST { deny all; }
+}

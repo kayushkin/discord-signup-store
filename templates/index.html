@@ -1,0 +1,54 @@
+{{define "eventcard"}}
+  <div class="card{{if isArchived .Status}} faded{{end}}">
+    <div class="row">
+      <h3><a href="/events/{{.ID}}">{{.Name}}</a></h3>
+      <span class="pill {{.Status}}">{{.Status}}</span>
+      {{if eq .Origin "discord"}}<span class="pill discord">from Discord</span>{{end}}
+    </div>
+    <div class="meta">
+      {{if .StartsAt}}{{localTime .StartsAt}}{{else}}no date set{{end}}
+      {{if .Location}} · {{.Location}}{{end}}
+      {{if .RecurrenceRule}} · repeats ({{.RecurrenceRule}}){{end}}
+    </div>
+    <div class="meta count" style="margin-top:7px">
+      {{if .Capacity}}<strong>{{.AttendingCount}}/{{.Capacity}}</strong> places{{else}}<strong>{{.AttendingCount}}</strong> signed up · no limit{{end}}
+      {{if .WaitlistCount}} · {{.WaitlistCount}} waiting{{end}}
+      {{if .DiscordScheduledEventID}} · <span class="muted">{{.DiscordInterestedCount}} interested on Discord</span>{{end}}
+    </div>
+  </div>
+{{end}}
+
+{{define "content"}}
+{{if not .Session}}
+  <div class="card">
+    <h3>Sign in to manage events</h3>
+    <p class="meta">Log in with Discord to create events, set capacities and manage waitlists.
+    You will only see servers you are already a member of.</p>
+    <p><a class="btn" href="/login">Sign in with Discord</a></p>
+  </div>
+{{else}}
+  <div class="row" style="margin-bottom:18px">
+    <a class="btn" href="/events/new">New event</a>
+    <form method="post" action="/sync" style="margin:0">
+      <button class="ghost">Pull in Discord events</button></form>
+  </div>
+
+  {{if not .Events}}
+    <div class="card"><p class="meta">
+      {{if .Archived}}Nothing coming up. Finished events are in the archive below.
+      {{else}}No events yet. Create one, or pull in the scheduled events that
+      already exist in your Discord servers.{{end}}
+    </p></div>
+  {{end}}
+  {{range .Events}}{{template "eventcard" .}}{{end}}
+
+  {{if .Archived}}
+  <details class="archive">
+    <summary>Archive · {{len .Archived}} finished or cancelled</summary>
+    <div style="margin-top:12px">
+      {{range .Archived}}{{template "eventcard" .}}{{end}}
+    </div>
+  </details>
+  {{end}}
+{{end}}
+{{end}}
