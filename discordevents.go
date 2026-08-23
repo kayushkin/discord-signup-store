@@ -78,7 +78,7 @@ type DiscordScheduledEvent struct {
 // own.
 func (c *DiscordClient) ListScheduledEvents(guildID string) ([]DiscordScheduledEvent, error) {
 	raw, err := c.do(http.MethodGet,
-		"/guilds/"+guildID+"/scheduled-events?with_user_count=true", nil)
+		"/guilds/"+escapePathSegment(guildID)+"/scheduled-events?with_user_count=true", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (c *DiscordClient) ListScheduledEvents(guildID string) ([]DiscordScheduledE
 // so it appears in the server's event list and fires Discord's own start
 // notification. Requires CREATE_EVENTS.
 func (c *DiscordClient) CreateScheduledEvent(payload any) (*DiscordScheduledEvent, error) {
-	raw, err := c.do(http.MethodPost, "/guilds/"+payloadGuildID(payload)+"/scheduled-events", payload)
+	raw, err := c.do(http.MethodPost, "/guilds/"+escapePathSegment(payloadGuildID(payload))+"/scheduled-events", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func (c *DiscordClient) CreateScheduledEvent(payload any) (*DiscordScheduledEven
 // telling people the real roster is elsewhere.
 func (c *DiscordClient) ModifyScheduledEvent(guildID, eventID string, payload any) error {
 	_, err := c.do(http.MethodPatch,
-		"/guilds/"+guildID+"/scheduled-events/"+eventID, payload)
+		"/guilds/"+escapePathSegment(guildID)+"/scheduled-events/"+escapePathSegment(eventID), payload)
 	return err
 }
 
@@ -749,7 +749,7 @@ func pluralise(count int, noun string) string {
 // because completed events drop out of the list too, so absence there is
 // ambiguous and absence HERE is not.
 func (c *DiscordClient) GetScheduledEvent(guildID, eventID string) (ev *DiscordScheduledEvent, exists bool, err error) {
-	raw, err := c.do(http.MethodGet, "/guilds/"+guildID+"/scheduled-events/"+eventID, nil)
+	raw, err := c.do(http.MethodGet, "/guilds/"+escapePathSegment(guildID)+"/scheduled-events/"+escapePathSegment(eventID), nil)
 	if err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
@@ -766,7 +766,7 @@ func (c *DiscordClient) GetScheduledEvent(guildID, eventID string) (ev *DiscordS
 
 // DeleteScheduledEvent removes a native event.
 func (c *DiscordClient) DeleteScheduledEvent(guildID, eventID string) error {
-	_, err := c.do(http.MethodDelete, "/guilds/"+guildID+"/scheduled-events/"+eventID, nil)
+	_, err := c.do(http.MethodDelete, "/guilds/"+escapePathSegment(guildID)+"/scheduled-events/"+escapePathSegment(eventID), nil)
 	return err
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"sync"
@@ -139,6 +140,23 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("discord api %d (code %d): %s", e.Status, e.Code, e.Message)
 }
 
+// escapePathSegment makes a value safe to place in exactly one path segment.
+//
+// Every id this client puts in a Discord path — guild, channel, message, user,
+// role, event, thread — is a snowflake, and a snowflake is decimal digits, so
+// none of them can carry a path-significant character. That is an argument
+// about the data, not a property of the code: nothing in this package checks
+// snowflake-ness at the point the value enters the URL, and the argument stops
+// holding the first time an id arrives from somewhere new. Escaping here makes
+// it a property of the code instead, at the cost of one call.
+//
+// url.PathEscape is the right encoding for this position and url.QueryEscape is
+// not: QueryEscape leaves "/" alone and turns a space into "+", so it would
+// repair nothing and corrupt the well-formed case.
+func escapePathSegment(segment string) string {
+	return url.PathEscape(segment)
+}
+
 // do performs one authenticated request, retrying once on a rate limit.
 //
 // Discord answers 429 with retry_after in seconds. Honouring it once is enough
@@ -229,21 +247,23 @@ func retryAfter(resp *http.Response, body []byte) time.Duration {
 // the single most common way this breaks.
 func (c *DiscordClient) AddMemberRole(guildID, userID, roleID string) error {
 	_, err := c.do(http.MethodPut,
-		fmt.Sprintf("/guilds/%s/members/%s/roles/%s", guildID, userID, roleID), nil)
+		fmt.Sprintf("/guilds/%s/members/%s/roles/%s",
+			escapePathSegment(guildID), escapePathSegment(userID), escapePathSegment(roleID)), nil)
 	return err
 }
 
 // RemoveMemberRole revokes a role. Same hierarchy rule as AddMemberRole.
 func (c *DiscordClient) RemoveMemberRole(guildID, userID, roleID string) error {
 	_, err := c.do(http.MethodDelete,
-		fmt.Sprintf("/guilds/%s/members/%s/roles/%s", guildID, userID, roleID), nil)
+		fmt.Sprintf("/guilds/%s/members/%s/roles/%s",
+			escapePathSegment(guildID), escapePathSegment(userID), escapePathSegment(roleID)), nil)
 	return err
 }
 
 // CreateMessage posts a message and returns its id. Store that id on the event
 // — it is how a later button click finds its roster.
 func (c *DiscordClient) CreateMessage(channelID string, payload any) (string, error) {
-	raw, err := c.do(http.MethodPost, "/channels/"+channelID+"/messages", payload)
+	raw, err := c.do(http.MethodPost, "/channels/"+escapePathSegment(channelID)+"/messages", payload)
 	if err != nil {
 		return "", err
 	}
@@ -258,7 +278,7 @@ func (c *DiscordClient) CreateMessage(channelID string, payload any) (string, er
 
 // EditMessage rewrites a message the bot posted.
 func (c *DiscordClient) EditMessage(channelID, messageID string, payload any) error {
-	_, err := c.do(http.MethodPatch, "/channels/"+channelID+"/messages/"+messageID, payload)
+	_, err := c.do(http.MethodPatch, "/channels/"+escapePathSegment(channelID)+"/messages/"+escapePathSegment(messageID), payload)
 	return err
 }
 
@@ -279,7 +299,7 @@ func (c *DiscordClient) SendDirectMessage(userID, content string) error {
 	if err := json.Unmarshal(raw, &channel); err != nil {
 		return fmt.Errorf("decode dm channel: %w", err)
 	}
-	_, err = c.do(http.MethodPost, "/channels/"+channel.ID+"/messages",
+	_, err = c.do(http.MethodPost, "/channels/"+escapePathSegment(channel.ID)+"/messages",
 		map[string]any{"content": content})
 	return err
 }
@@ -318,7 +338,7 @@ type Role struct {
 
 // ListGuildRoles returns a guild's roles, ordered highest first.
 func (c *DiscordClient) ListGuildRoles(guildID string) ([]Role, error) {
-	raw, err := c.do(http.MethodGet, "/guilds/"+guildID+"/roles", nil)
+	raw, err := c.do(http.MethodGet, "/guilds/"+escapePathSegment(guildID)+"/roles", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +390,7 @@ func AssignableRoles(roles []Role, botRoleIDs []string) []Role {
 
 // GuildMemberRoleIDs reports which roles a member holds.
 func (c *DiscordClient) GuildMemberRoleIDs(guildID, userID string) ([]string, error) {
-	raw, err := c.do(http.MethodGet, "/guilds/"+guildID+"/members/"+userID, nil)
+	raw, err := c.do(http.MethodGet, "/guilds/"+escapePathSegment(guildID)+"/members/"+escapePathSegment(userID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -405,7 +425,7 @@ func (c *DiscordClient) CurrentUserID() (string, error) {
 // That order is what Discord itself shows in a member list, so a roster built
 // from it reads the way the server does.
 func (c *DiscordClient) GuildMemberDisplayName(guildID, userID string) (string, error) {
-	raw, err := c.do(http.MethodGet, "/guilds/"+guildID+"/members/"+userID, nil)
+	raw, err := c.do(http.MethodGet, "/guilds/"+escapePathSegment(guildID)+"/members/"+escapePathSegment(userID), nil)
 	if err != nil {
 		return "", err
 	}
@@ -437,13 +457,13 @@ func (c *DiscordClient) GuildMemberDisplayName(guildID, userID string) (string, 
 // Uses the current pins route. The older /channels/{id}/pins/{id} is deprecated
 // and refuses this identically, so switching back would not help.
 func (c *DiscordClient) PinMessage(channelID, messageID string) error {
-	_, err := c.do(http.MethodPut, "/channels/"+channelID+"/messages/pins/"+messageID, nil)
+	_, err := c.do(http.MethodPut, "/channels/"+escapePathSegment(channelID)+"/messages/pins/"+escapePathSegment(messageID), nil)
 	return err
 }
 
 // CreateGuildChannel makes a text channel. Needs MANAGE_CHANNELS.
 func (c *DiscordClient) CreateGuildChannel(guildID string, payload any) (*Channel, error) {
-	raw, err := c.do(http.MethodPost, "/guilds/"+guildID+"/channels", payload)
+	raw, err := c.do(http.MethodPost, "/guilds/"+escapePathSegment(guildID)+"/channels", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -463,7 +483,7 @@ type Channel struct {
 
 // DeleteMessage removes a message the bot posted.
 func (c *DiscordClient) DeleteMessage(channelID, messageID string) error {
-	_, err := c.do(http.MethodDelete, "/channels/"+channelID+"/messages/"+messageID, nil)
+	_, err := c.do(http.MethodDelete, "/channels/"+escapePathSegment(channelID)+"/messages/"+escapePathSegment(messageID), nil)
 	return err
 }
 
@@ -472,7 +492,7 @@ func (c *DiscordClient) DeleteMessage(channelID, messageID string) error {
 // fact worth knowing when reading logs but never relied on in code.
 func (c *DiscordClient) CreateThreadFromMessage(channelID, messageID, name string) (string, error) {
 	raw, err := c.do(http.MethodPost,
-		"/channels/"+channelID+"/messages/"+messageID+"/threads",
+		"/channels/"+escapePathSegment(channelID)+"/messages/"+escapePathSegment(messageID)+"/threads",
 		map[string]any{
 			"name": name,
 			// The longest Discord offers. Inactivity only hides a thread from
@@ -496,7 +516,7 @@ func (c *DiscordClient) CreateThreadFromMessage(channelID, messageID, name strin
 // "how did it go?" into an archived thread should reopen it, and locking would
 // make that a permission error instead.
 func (c *DiscordClient) ArchiveThread(threadID string) error {
-	_, err := c.do(http.MethodPatch, "/channels/"+threadID,
+	_, err := c.do(http.MethodPatch, "/channels/"+escapePathSegment(threadID),
 		map[string]any{"archived": true})
 	return err
 }

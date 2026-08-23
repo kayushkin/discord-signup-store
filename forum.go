@@ -69,7 +69,7 @@ var forumTagNames = []string{"open", "full", "finished", "cancelled"}
 
 // CreateForumPost starts a post: a thread plus its required first message.
 func (c *DiscordClient) CreateForumPost(forumChannelID, name string, appliedTags []string, message map[string]any) (string, error) {
-	raw, err := c.do(http.MethodPost, "/channels/"+forumChannelID+"/threads", map[string]any{
+	raw, err := c.do(http.MethodPost, "/channels/"+escapePathSegment(forumChannelID)+"/threads", map[string]any{
 		"name":                  name,
 		"applied_tags":          appliedTags,
 		"auto_archive_duration": 10080,
@@ -89,13 +89,13 @@ func (c *DiscordClient) CreateForumPost(forumChannelID, name string, appliedTags
 
 // ModifyThread patches a thread — title, tags, archived.
 func (c *DiscordClient) ModifyThread(threadID string, patch map[string]any) error {
-	_, err := c.do(http.MethodPatch, "/channels/"+threadID, patch)
+	_, err := c.do(http.MethodPatch, "/channels/"+escapePathSegment(threadID), patch)
 	return err
 }
 
 // ForumChannelTags reads a forum's available tags as name → id.
 func (c *DiscordClient) ForumChannelTags(channelID string) (map[string]string, error) {
-	raw, err := c.do(http.MethodGet, "/channels/"+channelID, nil)
+	raw, err := c.do(http.MethodGet, "/channels/"+escapePathSegment(channelID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (s *Server) AdoptForum(guildID, channelID string) (*GuildForum, error) {
 	if len(missing) > 0 {
 		// PATCHing available_tags replaces the whole list, so the existing
 		// tags ride along or they would be destroyed.
-		raw, err := s.discord.do(http.MethodGet, "/channels/"+channelID, nil)
+		raw, err := s.discord.do(http.MethodGet, "/channels/"+escapePathSegment(channelID), nil)
 		if err != nil {
 			return nil, err
 		}
@@ -293,7 +293,7 @@ const joinReactionEmoji = "✅"
 // reaction that exists is clickable even by people denied ADD_REACTIONS.
 func (c *DiscordClient) CreateOwnReaction(channelID, messageID, emoji string) error {
 	_, err := c.do(http.MethodPut,
-		"/channels/"+channelID+"/messages/"+messageID+"/reactions/"+urlEscapeEmoji(emoji)+"/@me", nil)
+		"/channels/"+escapePathSegment(channelID)+"/messages/"+escapePathSegment(messageID)+"/reactions/"+urlEscapeEmoji(emoji)+"/@me", nil)
 	return err
 }
 
@@ -302,7 +302,7 @@ func (c *DiscordClient) CreateOwnReaction(channelID, messageID, emoji string) er
 // MANAGE_MESSAGES.
 func (c *DiscordClient) RemoveUserReaction(channelID, messageID, emoji, userID string) error {
 	_, err := c.do(http.MethodDelete,
-		"/channels/"+channelID+"/messages/"+messageID+"/reactions/"+urlEscapeEmoji(emoji)+"/"+userID, nil)
+		"/channels/"+escapePathSegment(channelID)+"/messages/"+escapePathSegment(messageID)+"/reactions/"+urlEscapeEmoji(emoji)+"/"+escapePathSegment(userID), nil)
 	return err
 }
 
