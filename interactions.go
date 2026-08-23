@@ -508,10 +508,10 @@ func (s *Server) handleModalSubmit(w http.ResponseWriter, in *Interaction) {
 	case "create-modal":
 		s.applyCreateForm(w, in, form)
 	case "details-modal":
-		// Discord requires an answer to every submit. Saying nothing changed is
-		// the honest one: the boxes were a way to display text, not collect it.
-		s.replyEphemeral(w, "That was just the details — nothing was changed. "+
-			"Use **Edit** on the row to change the event.")
+		// The details modal holds no inputs, so there is nothing to save. It
+		// still has a submit button — every modal does — and Discord requires
+		// an answer to it.
+		s.replyEphemeral(w, "Nothing to save there. Use **Edit** on the row to change the event.")
 	default:
 		s.replyEphemeral(w, "That form is not one of mine.")
 	}

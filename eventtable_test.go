@@ -220,83 +220,97 @@ func TestRebuildRepostsInDateOrder(t *testing.T) {
 	}
 }
 
-// TestDetailsModalFitsDiscordsLimits covers the ceilings that reject the whole
-// interaction rather than degrading: five components, a 45-character title, and
-// 4000 characters per value.
-func TestDetailsModalFitsDiscordsLimits(t *testing.T) {
-	ev := &Event{
-		ID: 1, GuildID: "g1", Name: strings.Repeat("A very long event name ", 5),
-		Description: strings.Repeat("word ", 2000), Capacity: 3, AttendingCount: 2,
-		WaitlistCount: 2, StartsAt: 1788067881, Location: "The pub",
-		Timezone: "America/Los_Angeles", DiscordScheduledEventID: "native-1",
-		DiscordInterestedCount: 9,
-	}
+// TestDetailsModalIsAllReadOnlyText is the point of this view.
+//
+// Discord has no read-only text input, so an earlier version prefilled ordinary
+// inputs — boxes that looked editable and were not. Text Display is allowed in
+// a modal and is genuinely read-only, so there is no input here at all and
+// nothing to explain away on submit.
+func TestDetailsModalIsAllReadOnlyText(t *testing.T) {
+	ev := &Event{ID: 1, GuildID: "g1", Name: "Games", Description: "Bring dice.",
+		Capacity: 3, AttendingCount: 2, WaitlistCount: 1, StartsAt: 1788067881,
+		Location: "The pub", Timezone: "America/Los_Angeles"}
 	roster := []Signup{
-		{DiscordUserID: "1", DisplayName: "Alice", State: StateAttending, Position: 1},
-		{DiscordUserID: "2", DisplayName: "Bob", State: StateAttending, Position: 2},
-		{DiscordUserID: "3", DisplayName: "Carol", State: StateWaitlisted, Position: 3, WaitlistPlace: 1},
-		{DiscordUserID: "4", DisplayName: "Dan", State: StateWaitlisted, Position: 4, WaitlistPlace: 2},
+		{DiscordUserID: "1", DisplayName: "Alice", State: StateAttending},
+		{DiscordUserID: "2", DisplayName: "Bob", State: StateAttending},
+		{DiscordUserID: "3", DisplayName: "Carol", State: StateWaitlisted, WaitlistPlace: 1},
 	}
 	modal := buildDetailsModal(ev, roster)
 
+	components := modal["components"].([]any)
+	if len(components) == 0 || len(components) > 5 {
+		t.Fatalf("%d components, want between 1 and 5", len(components))
+	}
+	for i, c := range components {
+		block := c.(map[string]any)
+		if block["type"] != componentTypeTextDisplay {
+			t.Errorf("component %d is type %v, want %d (Text Display) — anything else is "+
+				"an input, which cannot be made read-only", i, block["type"], componentTypeTextDisplay)
+		}
+		if len([]rune(block["content"].(string))) > textDisplayLimit {
+			t.Errorf("component %d is over Discord's %d-character limit", i, textDisplayLimit)
+		}
+	}
 	if len([]rune(modal["title"].(string))) > 45 {
-		t.Errorf("title is %d runes, over Discord's 45", len([]rune(modal["title"].(string))))
+		t.Error("title is over Discord's 45 runes")
 	}
-	rows := modal["components"].([]any)
-	if len(rows) == 0 {
-		t.Fatal("a modal with no components is rejected outright")
+}
+
+// TestDetailsModalReadsDescriptionThenGoingThenWaitlist pins the order the
+// questions actually get asked in.
+func TestDetailsModalReadsDescriptionThenGoingThenWaitlist(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Games", Description: "Bring dice.", Capacity: 2,
+		AttendingCount: 2, WaitlistCount: 1, StartsAt: 1788067881}
+	roster := []Signup{
+		{DiscordUserID: "1", DisplayName: "Alice", State: StateAttending},
+		{DiscordUserID: "2", DisplayName: "Bob", State: StateAttending},
+		{DiscordUserID: "3", DisplayName: "Carol", State: StateWaitlisted, WaitlistPlace: 1},
 	}
-	if len(rows) > 5 {
-		t.Fatalf("%d components, want at most 5", len(rows))
+	blocks := buildDetailsModal(ev, roster)["components"].([]any)
+	var contents []string
+	for _, c := range blocks {
+		contents = append(contents, c.(map[string]any)["content"].(string))
 	}
-	for _, r := range rows {
-		f := r.(map[string]any)["components"].([]any)[0].(map[string]any)
-		if len([]rune(f["label"].(string))) > 45 {
-			t.Errorf("label %q is over 45 runes", f["label"])
-		}
-		if len([]rune(f["value"].(string))) > detailsFieldLimit {
-			t.Errorf("a value is %d runes, over Discord's %d",
-				len([]rune(f["value"].(string))), detailsFieldLimit)
-		}
+	if len(contents) < 3 {
+		t.Fatalf("got %d blocks, want at least description, going and waitlist", len(contents))
+	}
+	if !strings.HasPrefix(contents[0], "Bring dice.") {
+		t.Errorf("first block is %q, want the description first", contents[0])
+	}
+	if !strings.Contains(contents[1], "Going — 2 of 2") || !strings.Contains(contents[1], "Alice") {
+		t.Errorf("second block is %q, want the going list", contents[1])
+	}
+	if !strings.Contains(contents[2], "Waitlist — 1") || !strings.Contains(contents[2], "Carol") {
+		t.Errorf("third block is %q, want the waitlist", contents[2])
 	}
 }
 
 // TestDetailsModalListsNamesNotMentions covers the one thing a modal will not
-// render. A <@id> mention shows as a raw snowflake in angle brackets there, so
-// the roster has to be display names — which is what the backfill is for.
+// render: a <@id> mention shows as a raw snowflake there.
 func TestDetailsModalListsNamesNotMentions(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
 	roster := []Signup{{DiscordUserID: "110122051179687936", DisplayName: "Slava",
-		State: StateAttending, Position: 1}}
-
-	for _, r := range buildDetailsModal(ev, roster)["components"].([]any) {
-		f := r.(map[string]any)["components"].([]any)[0].(map[string]any)
-		value := f["value"].(string)
-		if strings.Contains(value, "<@") {
-			t.Errorf("field %q contains a mention, which a modal shows as a raw id: %q",
-				f["custom_id"], value)
-		}
-		if f["custom_id"] == "details-going" && !strings.Contains(value, "Slava") {
-			t.Errorf("the Going list is %q, want the display name", value)
+		State: StateAttending}}
+	for _, c := range buildDetailsModal(ev, roster)["components"].([]any) {
+		content := c.(map[string]any)["content"].(string)
+		if strings.Contains(content, "<@") {
+			t.Errorf("a block contains a mention, which a modal shows as a raw id: %q", content)
 		}
 	}
 }
 
-// TestDetailsModalOmitsAnEmptyWaitlist keeps a permanently blank box out, since
-// one reads as a broken field rather than an empty list.
+// TestDetailsModalOmitsAnEmptyWaitlist keeps a permanently blank heading out.
 func TestDetailsModalOmitsAnEmptyWaitlist(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
-	for _, r := range buildDetailsModal(ev, nil)["components"].([]any) {
-		f := r.(map[string]any)["components"].([]any)[0].(map[string]any)
-		if f["custom_id"] == "details-waitlist" {
-			t.Error("an empty waitlist still got a box")
+	for _, c := range buildDetailsModal(ev, nil)["components"].([]any) {
+		if strings.Contains(c.(map[string]any)["content"].(string), "Waitlist") {
+			t.Error("an empty waitlist still got a heading")
 		}
 	}
 }
 
-// TestWaitlistIsNumberedByPlaceNotPosition means the modal shows "1." for the
-// next person up, not their arrival number, which is an internal id nobody
-// outside this package has any use for.
+// TestWaitlistIsNumberedByPlaceNotPosition means the next person up reads as
+// "1.", not their internal arrival number.
 func TestWaitlistIsNumberedByPlaceNotPosition(t *testing.T) {
 	got := rosterNames([]Signup{
 		{DisplayName: "Carol", State: StateWaitlisted, Position: 17, WaitlistPlace: 1},

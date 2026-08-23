@@ -407,90 +407,93 @@ func (s *Server) handleTableAction(w http.ResponseWriter, in *Interaction, actio
 	}()
 }
 
-// detailsFieldLimit is Discord's cap on a text input's value. Anything longer
-// is rejected on the whole modal, so each panel is trimmed to fit.
-const detailsFieldLimit = 4000
+// componentTypeTextDisplay is read-only text. Discord allows it in a modal, so
+// the details view needs no text inputs at all — which matters because there is
+// no read-only text input, and prefilled boxes look editable and are not.
+const componentTypeTextDisplay = 10
 
-// buildDetailsModal shows an event's description and roster in a popup.
+// textDisplayLimit is the cap on one block's content.
+const textDisplayLimit = 4000
+
+// buildDetailsModal shows an event as three blocks of plain text: what it is,
+// who is going, and who is waiting — in that order, because that is the order
+// the questions get asked.
 //
-// A modal is the only overlay Discord offers an app. It holds nothing but text
-// inputs, so the panels below are inputs with their values prefilled — and
-// there is NO read-only flag, which is the honest cost of this: the boxes look
-// editable and are not. The labels say so, and submitting is answered with a
-// note that nothing changed rather than being silently swallowed.
-//
-// An ephemeral message is the idiomatic way to show this and needs none of the
-// above. The modal wins on being a dismissible overlay that leaves the channel
-// alone, which is what was asked for.
+// Every component is a Text Display. Nothing here is an input, so nothing looks
+// editable, and there is no submit to explain away.
 func buildDetailsModal(ev *Event, roster []Signup) map[string]any {
-	row := func(field map[string]any) map[string]any {
-		return map[string]any{"type": componentTypeActionRow, "components": []any{field}}
+	text := func(content string) map[string]any {
+		return map[string]any{"type": componentTypeTextDisplay, "content": trimTo(content, textDisplayLimit)}
 	}
-	rows := []any{}
+	components := []any{}
 
-	// Always present, so the modal can never have zero components — which
-	// Discord rejects outright.
-	var when strings.Builder
+	var head strings.Builder
+	if ev.Description != "" {
+		head.WriteString(ev.Description)
+	} else {
+		head.WriteString("_No description._")
+	}
+	// The when and where go under the description as small text, so the thing
+	// asked for first is read first.
+	var meta []string
 	if ev.StartsAt > 0 {
 		zone := ev.Timezone
 		if zone == "" {
 			zone = "UTC"
 		}
 		// Spelled out rather than Discord's <t:…> markup, which renders as
-		// literal text inside a modal instead of localising. The zone is named
-		// so the reader can do the conversion Discord will not do here.
-		fmt.Fprintf(&when, "%s (%s)", FormatEventTime(ev.StartsAt, zone), zone)
-	} else {
-		when.WriteString("No date set")
+		// literal text in a modal instead of localising.
+		meta = append(meta, FormatEventTime(ev.StartsAt, zone)+" ("+zone+")")
 	}
 	if ev.Location != "" {
-		when.WriteString("  ·  " + ev.Location)
+		meta = append(meta, ev.Location)
 	}
-	rows = append(rows, row(modalTextInput("details-when", "When and where (read-only)",
-		trimTo(when.String(), detailsFieldLimit), "", textInputStyleShort, false, detailsFieldLimit)))
-
-	if ev.Description != "" {
-		rows = append(rows, row(modalTextInput("details-description", "Description (read-only)",
-			trimTo(ev.Description, detailsFieldLimit), "", textInputStyleParagraph, false,
-			detailsFieldLimit)))
+	if ev.Status != StatusOpen {
+		meta = append(meta, "signups "+ev.Status)
 	}
+	if len(meta) > 0 {
+		head.WriteString("\n-# " + strings.Join(meta, "  ·  "))
+	}
+	components = append(components, text(head.String()))
 
 	attending, waiting := splitRoster(roster)
-	goingLabel := fmt.Sprintf("Going — %d", len(attending))
+	going := fmt.Sprintf("**Going — %d**", len(attending))
 	if ev.Capacity > 0 {
-		goingLabel = fmt.Sprintf("Going — %d of %d", len(attending), ev.Capacity)
+		going = fmt.Sprintf("**Going — %d of %d**", len(attending), ev.Capacity)
 	}
-	rows = append(rows, row(modalTextInput("details-going", truncate(goingLabel, 45),
-		trimTo(rosterNames(attending), detailsFieldLimit), "Nobody yet",
-		textInputStyleParagraph, false, detailsFieldLimit)))
+	if len(attending) == 0 {
+		going += "\n-# Nobody yet."
+	} else {
+		going += "\n" + rosterNames(attending)
+	}
+	components = append(components, text(going))
 
-	// Only when there is one. A permanently empty box reads as a broken field.
+	// Only when there is one: a permanently empty heading reads as a fault.
 	if len(waiting) > 0 {
-		rows = append(rows, row(modalTextInput("details-waitlist",
-			truncate(fmt.Sprintf("Waitlist — %d, in order", len(waiting)), 45),
-			trimTo(rosterNames(waiting), detailsFieldLimit), "",
-			textInputStyleParagraph, false, detailsFieldLimit)))
+		components = append(components, text(fmt.Sprintf("**Waitlist — %d**\n%s",
+			len(waiting), rosterNames(waiting))))
 	}
 
-	if ev.DiscordScheduledEventID != "" && len(rows) < 5 {
-		rows = append(rows, row(modalTextInput("details-discord", "Discord's own event (read-only)",
-			fmt.Sprintf("%d interested there — a different number from the roster above, "+
-				"and always will be. Discord counts people who asked to be notified.",
-				ev.DiscordInterestedCount), "", textInputStyleParagraph, false, detailsFieldLimit)))
+	if ev.DiscordScheduledEventID != "" && len(components) < 5 {
+		components = append(components, text(fmt.Sprintf(
+			"-# Discord's own event shows **%d interested** — a different number from the "+
+				"list above, and always will be. Discord counts people who asked to be "+
+				"notified; this counts people who have a place.",
+			ev.DiscordInterestedCount)))
 	}
 
 	return map[string]any{
 		"custom_id":  DetailsModalCustomID(ev.ID),
 		"title":      truncate(ev.Name, 45),
-		"components": rows,
+		"components": components,
 	}
 }
 
 // rosterNames lists people one per line, by display name.
 //
-// Names rather than <@id> mentions: a modal renders neither markdown nor
-// mentions, so a mention would show as a raw snowflake in angle brackets. This
-// is the one surface where the backfilled display names are load-bearing.
+// Names rather than <@id> mentions: a modal does not resolve a mention, so one
+// would show as a raw snowflake in angle brackets. This is the surface the
+// display-name backfill exists for.
 func rosterNames(signups []Signup) string {
 	if len(signups) == 0 {
 		return ""
@@ -501,11 +504,11 @@ func rosterNames(signups []Signup) string {
 		if name == "" {
 			name = sg.DiscordUserID
 		}
+		place := i + 1
 		if sg.State == StateWaitlisted {
-			fmt.Fprintf(&b, "%d. %s\n", sg.WaitlistPlace, name)
-			continue
+			place = sg.WaitlistPlace
 		}
-		fmt.Fprintf(&b, "%d. %s\n", i+1, name)
+		fmt.Fprintf(&b, "%d. %s\n", place, name)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
