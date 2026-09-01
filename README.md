@@ -130,8 +130,13 @@ operation.
    `discord-signup-store.service`. It is public by design — it verifies
    Discord's signature and signs nothing.
 4. Put `AUTH_STORE_TOKEN` in `~/.config/discord-signup-store/env`, mode 0600.
-5. Add `nginx-interactions.conf` to the `YOUR_EXISTING_DOMAIN` server block,
-   `sudo nginx -t && sudo systemctl reload nginx`.
+5. Add `nginx-interactions.conf` to the vhost for `YOUR_EXISTING_DOMAIN` — in
+   **whatever repo owns that vhost**, not in `/etc/nginx`. If the host's vhost
+   is installed from a repo (dash installs `deploy/nginx/dash.kayushkin.com.conf`
+   verbatim on every deploy), a hand-edit in `/etc/nginx` survives only until
+   that repo next deploys. On this box it survived one day: added 2026-08-22,
+   erased by a dash deploy 2026-08-23, and for nine days every button click got
+   nginx's 405 while this service sat healthy on 8312.
 6. `./deploy.sh`
 7. Set the Interactions Endpoint URL in the Developer Portal to
    `https://YOUR_EXISTING_DOMAIN/discord/interactions`. Discord validates it on
