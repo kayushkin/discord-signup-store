@@ -229,13 +229,21 @@ flips with the roster; the sweep tags `finished` and archives.
 thread — far harder than message edits. Under signup churn the title badge may
 lag; the card inside stays current.
 
-⚠️ Discord also caps how many times a message **older than one hour** may be
-edited — `429 code 30046`, "Maximum number of edits to messages older than 1
-hour reached". The table is edited on every signup, so it hits that cap and
-stops accepting edits until the window rolls. `POST /api/guilds/{id}/table/rebuild`
-deletes its messages and posts them again, on the hour, so the table is never
-old enough for the cap to apply. The cost is its place in the channel: it moves
-to the bottom every hour.
+⚠️ `429 code 30046` — "Maximum number of edits to messages older than 1 hour
+reached" — exists, and **is not what its name suggests**. Measured 2026-09-02
+against a message 196 hours old: **120 consecutive edits, one every ten seconds,
+over twenty minutes, zero failures.** Discord documents none of this; the
+clarification request (discord/discord-api-docs#4413) has been unanswered since
+2022, and every third-party write-up repeats "a handful of edits per hour",
+which is wrong by roughly two orders of magnitude.
+
+Both times this service hit it, the write was part of a burst that rewrote the
+table and several cards together — so the budget is far likelier to be
+per-channel or shared than per-message-age. An hourly delete-and-repost of the
+table was tried as a workaround and **removed**: it moved the table to the
+bottom of the channel every hour to dodge something age-based, and age is
+demonstrably not the limit. What actually reduces the pressure is
+`published_signature`, which skips writes that would change nothing.
 
 ## The ✅ reaction
 
