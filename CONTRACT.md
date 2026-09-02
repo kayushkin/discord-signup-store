@@ -139,8 +139,7 @@ row, the forum post, and the count in the native scheduled event's title.
 
 ## The consolidated table
 
-**Five events per message**, each one line of text plus a row of
-**Join · Leave · Details · Edit**, wrapped in a Components V2 container. Past
+**As many events per message as fit.** **Join · Leave · Details · Edit**, wrapped in a Components V2 container. Past
 five it spills onto another message.
 
 The line is exactly `{slots} · {title} · {location} · {time}`, in **one** text
@@ -285,62 +284,24 @@ instantly; the poll is the backstop for socket downtime. Deleting a native
 event is how a person cancels in Discord's own UI, and it now means that here
 too.
 
-## The native event's title
+## The native event's title, and the forum post's
 
-When a linked event has a capacity, its Discord title carries a badge:
-`[3/8] Board game night`. Pushed on every roster change, since the count is
-stale the moment somebody joins. No badge on an uncapped event — `[7/∞]` is
-noise.
+Neither carries a live count any more. Both are **renames**, and Discord
+rate-limits thread renames to about two per ten minutes, so under signups
+"[3/8]" was the number from two renames ago — a count that is usually wrong is
+worse than none. The live count lives in the table row and the card, which are
+message edits and have no such limit.
 
-⚠️ **The badge is never stored.** The importer strips it off any name read back
-from Discord, exactly as it strips the signup pointer off a description.
-Without that, pushing `[3/8] Games` and reading it back makes the stored name
-`[3/8] Games`, and the next push produces `[4/8] [3/8] Games` — in a field
-capped at 100 characters, so it breaks within twenty signups. Pinned by a test
-that round-trips twenty times.
+What a title carries is what changes rarely:
 
-The name is trimmed to fit, never the badge: `[3/8] Board game ni` still says
-what the badge is for.
+    Board game night — 8/29 4pm · 8 places      capped, room left
+    [Full] Board game night — 8/29 4pm          capped, no room
+    Open house — 8/29 4pm                       no limit
 
-## Publishing, and why anything can be stale at all
-
-Discord **stores** message text. There is no live rendering: a bot writes words
-and Discord shows those words until different ones are written. So every public
-surface here — the signup card, the forum post and its title, the table line,
-the native event's title — is a copy of the roster that is exactly as current as
-the last write. The surfaces that cannot go stale are the ones built per
-interaction (the details modal, the ephemeral replies) and the web pages, which
-render from SQLite on every request. **Nothing here is cached**: the counts are
-a `COUNT(*)` at read time and are never stored.
-
-Three rules keep the copies true:
-
-1. **One writer per event.** `syncAfterChange` takes an event id and goes
-   through `eventSyncQueue`. A change arriving while a publish is in flight does
-   not start a second publish; it marks the run dirty and the writer does one
-   more pass when it finishes. The event is re-read at the top of each pass, so
-   the write that lands last always carries the newest committed state, and a
-   burst of clicks costs two passes rather than one per click.
-2. **Write only what changed.** `published_signature` fingerprints every input
-   to a stored surface and is recorded only when a publish fully succeeds. A
-   pass whose signature already matches makes no Discord calls at all.
-3. **Sweep and repair.** `POST /api/republish` re-checks every live event and
-   rewrites any whose copies disagree, **every minute**, and names each one it
-   found in the log. A partial publish deliberately leaves the old signature in
-   place, so a write lost to a 500 or a restart is repaired within a minute
-   rather than sitting wrong until the next person happens to join.
-
-   It is a separate route from `POST /api/sync` on purpose. That one starts by
-   listing a guild's native scheduled events and returns early when the call is
-   rate-limited — so repair hung off it was skipped exactly when the API was
-   busiest, which is when writes are most likely to have been lost. Its guild
-   list comes from SQLite, not from Discord, and a settled event costs one
-   query and no Discord calls at all.
-
-Rules 1 and 3 were both missing on 2 September: four Interested clicks in
-thirty-three seconds started four overlapping publishes, the one that had read
-three people finished after the one that had read two, and every Discord surface
-said 3/7 while the database and both web pages said 2/7.
+The name is trimmed to fit Discord's 100 characters, never the decorations.
+Every form this service has ever written — the retired `[3/8]` badge included,
+since it is still sitting on Discord — is stripped on import, or a name read back
+would round-trip and grow a decoration per publish.
 
 ## Conventions
 
