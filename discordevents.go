@@ -128,13 +128,16 @@ func (c *DiscordClient) ModifyScheduledEvent(guildID, eventID string, payload an
 
 // SyncResult reports what one sync pass did.
 type SyncResult struct {
-	Imported  int      `json:"imported"`
-	Updated   int      `json:"updated"`
-	Unchanged int      `json:"unchanged"`
-	Posted    int      `json:"posted"`
-	Published int      `json:"published"`
-	Cancelled int      `json:"cancelled"`
-	Problems  []string `json:"problems,omitempty"`
+	Imported  int `json:"imported"`
+	Updated   int `json:"updated"`
+	Unchanged int `json:"unchanged"`
+	Posted    int `json:"posted"`
+	Published int `json:"published"`
+	Cancelled int `json:"cancelled"`
+	// Finished counts events Discord says are over — somebody pressed End on
+	// the native event — that this run settled locally.
+	Finished int      `json:"finished"`
+	Problems []string `json:"problems,omitempty"`
 }
 
 // SyncScheduledEvents pulls a guild's native events into the local store.
@@ -178,9 +181,10 @@ func (s *Server) SyncScheduledEvents(guildID, boardChannelID string) (*SyncResul
 	posted, problems := s.postMissingCards(guildID)
 	result.Posted = posted
 	result.Problems = append(result.Problems, problems...)
-	published, cancelledCount, reconcileProblems := s.reconcileWithNative(guildID, remote)
+	published, cancelledCount, finishedCount, reconcileProblems := s.reconcileWithNative(guildID, remote)
 	result.Published = published
 	result.Cancelled = cancelledCount
+	result.Finished = finishedCount
 	result.Problems = append(result.Problems, reconcileProblems...)
 	// Imported and edited events both change what the panel should say, and
 	// the panel is one message, so one redraw covers all of them.
@@ -251,6 +255,7 @@ func (s *Server) SyncAllGuilds() (*SyncResult, error) {
 		total.Posted += result.Posted
 		total.Published += result.Published
 		total.Cancelled += result.Cancelled
+		total.Finished += result.Finished
 		total.Problems = append(total.Problems, result.Problems...)
 	}
 	return total, nil
@@ -794,31 +799,45 @@ func (s *Server) CompleteFinishedEvents() ([]int64, error) {
 		return nil, err
 	}
 	for _, id := range finished {
-		// Refresh first: the card that moves should already say the event has
-		// finished and have lost its buttons. Moving a stale card would put a
-		// live Join button in the past-events channel.
-		if err := s.RefreshSignupMessage(id); err != nil {
-			log.Printf("[discord-signup] refresh finished event %d: %v", id, err)
-			continue
-		}
-		if err := s.moveCardToPastEvents(id); err != nil {
-			log.Printf("[discord-signup] move event %d to past events: %v", id, err)
-		}
-		// It has left the live list, so the panel has to stop showing it.
-		// It has left the live list, so the table has to stop showing it and
-		// its discussion closes with it.
-		if ev, err := s.store.GetEvent(id); err == nil {
-			s.refreshEventTableQuietly(ev.GuildID)
-			// The forum post gets its finished tag and archives.
-			s.refreshForumPostQuietly(ev)
-			if ev.ThreadID != "" {
-				if err := s.discord.ArchiveThread(ev.ThreadID); err != nil {
-					log.Printf("[discord-signup] archive thread for event %d: %v", id, err)
-				}
-			}
-		}
+		s.finishEventEverywhere(id)
 	}
 	return finished, nil
+}
+
+// finishEventEverywhere settles a finished event on every surface: the card
+// loses its buttons and moves to past events, the tables drop the row, the
+// forum post gets its finished tag, the thread closes.
+//
+// Its own function because finishing happens two ways and both must look the
+// same afterwards: the event's end time passing, and somebody pressing End on
+// the native Discord event. The second used to do nothing at all until the
+// first caught up.
+func (s *Server) finishEventEverywhere(id int64) {
+	// Refresh first: the card that moves should already say the event has
+	// finished and have lost its buttons. Moving a stale card would put a
+	// live Join button in the past-events channel.
+	if err := s.RefreshSignupMessage(id); err != nil {
+		log.Printf("[discord-signup] refresh finished event %d: %v", id, err)
+		return
+	}
+	if err := s.moveCardToPastEvents(id); err != nil {
+		log.Printf("[discord-signup] move event %d to past events: %v", id, err)
+	}
+	// It has left the live list, so both tables have to stop showing it and its
+	// discussion closes with it.
+	ev, err := s.store.GetEvent(id)
+	if err != nil {
+		return
+	}
+	s.refreshEventTableQuietly(ev.GuildID)
+	s.refreshRosterTableQuietly(ev.GuildID)
+	// The forum post gets its finished tag and archives.
+	s.refreshForumPostQuietly(ev)
+	if ev.ThreadID != "" {
+		if err := s.discord.ArchiveThread(ev.ThreadID); err != nil {
+			log.Printf("[discord-signup] archive thread for event %d: %v", id, err)
+		}
+	}
 }
 
 // PushEditToDiscord updates the native scheduled event linked to a local
@@ -900,14 +919,14 @@ func (c *DiscordClient) DeleteScheduledEvent(guildID, eventID string) error {
 //	local live, native COMPLETED  → leave to the time sweep, which owns that
 //	local CANCELLED, native alive → delete the native event, so cancelling on
 //	                                any surface cancels everywhere
-func (s *Server) reconcileWithNative(guildID string, remote []DiscordScheduledEvent) (published, cancelled int, problems []string) {
+func (s *Server) reconcileWithNative(guildID string, remote []DiscordScheduledEvent) (published, cancelled, finished int, problems []string) {
 	remoteByID := map[string]DiscordScheduledEvent{}
 	for _, r := range remote {
 		remoteByID[r.ID] = r
 	}
 	events, err := s.store.ListEvents(guildID, "", 200)
 	if err != nil {
-		return 0, 0, []string{"list events: " + err.Error()}
+		return 0, 0, 0, []string{"list events: " + err.Error()}
 	}
 	for i := range events {
 		ev := &events[i]
@@ -933,8 +952,26 @@ func (s *Server) reconcileWithNative(guildID string, remote []DiscordScheduledEv
 				problems = append(problems, fmt.Sprintf("check %q: %v", ev.Name, err))
 				continue
 			}
+			// Absent from the list is ambiguous: Discord drops COMPLETED events
+			// from it as well as deleted ones, which is why this asks about the
+			// event directly rather than reading anything into the silence.
+			if exists && native.Status == discordEventCompleted {
+				// Somebody pressed End on the native event. That is an explicit
+				// act and it means now, not at the scheduled end time — this
+				// used to `continue` and leave it to the time sweep, so an
+				// event ended early stayed on the board, kept its Join button
+				// and never reached past events until its original end passed.
+				completed := StatusCompleted
+				if _, err := s.store.UpdateEvent(ev.ID, EventPatch{Status: &completed}); err != nil {
+					problems = append(problems, fmt.Sprintf("complete %q: %v", ev.Name, err))
+					continue
+				}
+				s.finishEventEverywhere(ev.ID)
+				finished++
+				continue
+			}
 			if exists && native.Status != discordEventCanceled {
-				continue // completed or still scheduled; the time sweep owns those
+				continue // still scheduled or running; the time sweep owns those
 			}
 			if err := s.cancelEventEverywhere(ev, "its Discord event was deleted"); err != nil {
 				problems = append(problems, fmt.Sprintf("cancel %q: %v", ev.Name, err))
@@ -951,7 +988,7 @@ func (s *Server) reconcileWithNative(guildID string, remote []DiscordScheduledEv
 			}
 		}
 	}
-	return published, cancelled, problems
+	return published, cancelled, finished, problems
 }
 
 // cancelEventEverywhere marks an event cancelled and pushes that fact onto

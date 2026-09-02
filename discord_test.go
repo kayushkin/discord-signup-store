@@ -809,7 +809,7 @@ func TestReconcilePublishesEventsThatMissedIt(t *testing.T) {
 		t.Fatalf("create past: %v", err)
 	}
 
-	published, cancelled, problems := srv.reconcileWithNative("g1", nil)
+	published, cancelled, _, problems := srv.reconcileWithNative("g1", nil)
 	if len(problems) != 0 {
 		t.Fatalf("problems: %v", problems)
 	}
@@ -853,7 +853,7 @@ func TestReconcileCancelsWhenTheNativeEventIsGone(t *testing.T) {
 	deleted := mk("Deleted natively", "gone")
 	completed := mk("Completed natively", "done")
 
-	published, cancelled, problems := srv.reconcileWithNative("g1", nil)
+	published, cancelled, finished, problems := srv.reconcileWithNative("g1", nil)
 	if len(problems) != 0 {
 		t.Fatalf("problems: %v", problems)
 	}
@@ -863,8 +863,21 @@ func TestReconcileCancelsWhenTheNativeEventIsGone(t *testing.T) {
 	if got, _ := store.GetEvent(deleted.ID); got.Status != StatusCancelled {
 		t.Errorf("deleted-native event = %q, want cancelled", got.Status)
 	}
-	if got, _ := store.GetEvent(completed.ID); got.Status != StatusOpen {
-		t.Errorf("completed-native event = %q, want left for the time sweep", got.Status)
+
+	// This assertion used to read "want left for the time sweep", and that was
+	// the bug rather than the behaviour. Absence from the list is ambiguous —
+	// Discord drops COMPLETED events from it as well as deleted ones — and the
+	// old code, having asked directly and been told COMPLETED, decided to do
+	// nothing. Pressing End on a native event is an explicit act meaning NOW.
+	// Waiting for the scheduled end left the event on the board with a live
+	// Join button, out of past events, for however long remained: an event
+	// ended half an hour early stayed up for half an hour.
+	if finished != 1 {
+		t.Errorf("finished=%d, want 1", finished)
+	}
+	if got, _ := store.GetEvent(completed.ID); got.Status != StatusCompleted {
+		t.Errorf("completed-native event = %q, want completed the moment Discord says it is",
+			got.Status)
 	}
 }
 
@@ -883,7 +896,7 @@ func TestReconcileDeletesTheNativeEventWhenCancelledLocally(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 	remote := []DiscordScheduledEvent{{ID: "native-5", GuildID: "g1", Status: discordEventScheduled}}
-	if _, _, problems := srv.reconcileWithNative("g1", remote); len(problems) != 0 {
+	if _, _, _, problems := srv.reconcileWithNative("g1", remote); len(problems) != 0 {
 		t.Fatalf("problems: %v", problems)
 	}
 	var deleted bool
