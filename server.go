@@ -130,6 +130,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/events/complete-finished", s.handleCompleteFinished)
 	mux.HandleFunc("POST /api/republish", s.handleRepublish)
 	mux.HandleFunc("POST /api/guilds/{guildID}/table/rebuild", s.handleRebuildGuildTable)
+	mux.HandleFunc("POST /api/tables/rebuild", s.handleRebuildAllTables)
 
 	// Browser surface — session-gated.
 	mux.HandleFunc("GET /", s.handleWebIndex)
@@ -259,6 +260,28 @@ func (s *Server) handleRebuildGuildTable(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleRebuildAllTables reposts every guild's table.
+//
+// The endpoint the hourly job calls, so that job does not have to name a guild.
+// A cron line carrying a guild id would be a second place the deployment's
+// identity lives, and the wrong place: this service already knows which guilds
+// it holds events for.
+func (s *Server) handleRebuildAllTables(w http.ResponseWriter, r *http.Request) {
+	guilds, err := s.store.GuildsWithEvents()
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	var problems []string
+	for _, guildID := range guilds {
+		if err := s.RebuildEventTable(guildID); err != nil {
+			log.Printf("[discord-signup] rebuild table for guild %s: %v", guildID, err)
+			problems = append(problems, guildID+": "+err.Error())
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"guilds": len(guilds), "problems": problems})
 }
 
 // handleCompleteFinished archives events whose time has passed. Exposed as well
