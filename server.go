@@ -129,6 +129,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/guilds/{guildID}/forum", s.handleSetGuildForum)
 	mux.HandleFunc("POST /api/events/complete-finished", s.handleCompleteFinished)
 	mux.HandleFunc("POST /api/republish", s.handleRepublish)
+	mux.HandleFunc("POST /api/reminders", s.handleSendReminders)
 	mux.HandleFunc("POST /api/guilds/{guildID}/table/rebuild", s.handleRebuildGuildTable)
 	mux.HandleFunc("POST /api/tables/rebuild", s.handleRebuildAllTables)
 
@@ -269,6 +270,21 @@ func (s *Server) handleRebuildGuildTable(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSendReminders posts whichever event reminders have come due.
+//
+// Called every minute. It is idempotent by the stamps on the event row, so
+// calling it more often sends nothing extra and calling it less often only
+// makes reminders late — and a reminder late enough to have missed its grace
+// window is dropped rather than sent about an event already under way.
+func (s *Server) handleSendReminders(w http.ResponseWriter, r *http.Request) {
+	sent, err := s.SendDueReminders()
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sent": sent})
 }
 
 // handleRebuildAllTables reposts every guild's table.

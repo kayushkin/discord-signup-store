@@ -81,8 +81,12 @@ type Event struct {
 	// Discord for this event. Bookkeeping, not content: it is written by the
 	// publisher and read only by the publisher.
 	PublishedSignature string `json:"published_signature"`
-	CreatedAt          int64  `json:"created_at"`
-	UpdatedAt          int64  `json:"updated_at"`
+	// RemindedBeforeAt and RemindedStartAt are when each reminder went out, or
+	// when it was written off as too late. Zero means still owed.
+	RemindedBeforeAt int64 `json:"reminded_before_at"`
+	RemindedStartAt  int64 `json:"reminded_start_at"`
+	CreatedAt        int64 `json:"created_at"`
+	UpdatedAt        int64 `json:"updated_at"`
 
 	// AttendingCount and WaitlistCount are computed by the read path. They are
 	// never stored, so they can never disagree with the signups table.
@@ -240,6 +244,13 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// whose write was lost instead of rewriting every card every ten minutes.
 	{"events", "published_signature", "TEXT NOT NULL DEFAULT ''"},
 
+	// When each reminder went out, or was written off as too late to send.
+	// Stamps rather than a boolean: knowing an event was reminded about is
+	// worth less than knowing when, and a zero is the only value that means
+	// "still owed".
+	{"events", "reminded_before_at", "INTEGER NOT NULL DEFAULT 0"},
+	{"events", "reminded_start_at", "INTEGER NOT NULL DEFAULT 0"},
+
 	// The discussion thread hanging off the signup card. Discord gives a
 	// message thread the SAME id as its parent message, but it is stored
 	// separately anyway: the card can be reposted (new message id) while the
@@ -388,7 +399,7 @@ const eventColumns = `id, guild_id, channel_id, message_id, discord_scheduled_ev
 	name, description, capacity, status, attending_role_id, waitlist_role_id,
 	starts_at, ends_at, location, entity_type, recurrence_rule, timezone, origin,
 	thread_id, forum_post_id, discord_interested_count, discord_synced_at, created_by,
-	published_signature, created_at, updated_at`
+	published_signature, reminded_before_at, reminded_start_at, created_at, updated_at`
 
 func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 	var e Event
@@ -396,7 +407,8 @@ func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 		&e.Name, &e.Description, &e.Capacity, &e.Status, &e.AttendingRoleID, &e.WaitlistRoleID,
 		&e.StartsAt, &e.EndsAt, &e.Location, &e.EntityType, &e.RecurrenceRule, &e.Timezone,
 		&e.Origin, &e.ThreadID, &e.ForumPostID, &e.DiscordInterestedCount, &e.DiscordSyncedAt, &e.CreatedBy,
-		&e.PublishedSignature, &e.CreatedAt, &e.UpdatedAt)
+		&e.PublishedSignature, &e.RemindedBeforeAt, &e.RemindedStartAt,
+		&e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -721,6 +733,23 @@ func (s *Store) GuildsWithEvents() ([]string, error) {
 		return nil, fmt.Errorf("iterate guilds: %w", err)
 	}
 	return out, nil
+}
+
+// StampReminder records that a reminder stage is settled — sent, or written
+// off. Both are the same fact to everything downstream: nothing more is owed.
+func (s *Store) StampReminder(id int64, stage string) error {
+	column := "reminded_before_at"
+	if stage == reminderStageStart {
+		column = "reminded_start_at"
+	}
+	// The column name is chosen here from a closed set, never taken from a
+	// caller, so it cannot carry anything into the statement.
+	_, err := s.db.Exec(
+		`UPDATE events SET `+column+` = ? WHERE id = ? AND `+column+` = 0`, now(), id)
+	if err != nil {
+		return fmt.Errorf("stamp %s reminder: %w", stage, err)
+	}
+	return nil
 }
 
 // SetPublishedSignature records what was last successfully written to Discord.

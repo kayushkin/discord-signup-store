@@ -75,10 +75,17 @@ title and description. They are kept true by three rules:
 3. **Sweep and repair, every minute.** Anything that disagrees is rewritten, and
    named in the log. A partial publish is not recorded, so it is retried.
 
+**Reminders** are the exception to everything above: not a copy of anything, and
+the only messages this service sends that deliberately ping. One an hour before
+an event, one when it starts, naming everyone who has a place. Each is sent once
+and stamped on the event row, and one that missed its moment by more than 15
+minutes is written off rather than sent — coming back from an outage must not
+ping everybody about events that already happened.
+
 On a timer, and nothing else: **finished events archived** every 5 minutes;
 **native events imported** every 10 (plus instantly over the gateway);
 **the table deleted and reposted** hourly, because Discord caps edits to
-messages older than an hour.
+messages older than an hour; **reminders checked** every minute.
 
 ## 4. What each surface is for
 

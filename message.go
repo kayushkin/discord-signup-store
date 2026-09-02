@@ -346,17 +346,12 @@ func (s *Server) notifyPromoted(ev *Event, promoted *Signup) {
 // is broken.
 func RenderHowToMessage(boardChannelID, timezone string) map[string]any {
 	var b strings.Builder
-	b.WriteString("## Events\n")
-	fmt.Fprintf(&b, "**Create an event** — press the button and fill in the form. "+
-		"It appears in <#%s> with **Join** and **Leave**.\n\n", boardChannelID)
-	b.WriteString("**My events** — what you are signed up for, and a way off it.\n\n")
-
-	b.WriteString("Full events keep a waitlist. If someone drops out, whoever has waited " +
-		"longest moves up and gets a message.\n\n")
-
-	fmt.Fprintf(&b, "-# Times are in %s and can be typed `9/29 3`, `9/29 3:00`, "+
-		"`9/29 3:00pm`, `tomorrow 6pm` or `friday noon`. No am/pm means pm.\n", timezone)
-	b.WriteString("-# Description, repeating events and roles are on the web page.\n")
+	b.WriteString("## Make an event\n")
+	fmt.Fprintf(&b, "Press **Create an event** and fill in the form. That is all there is "+
+		"to it — your event turns up in <#%s> and people press **Join**.\n\n", boardChannelID)
+	b.WriteString("If it fills up, everyone after that waits in line and moves up on their own.\n\n")
+	fmt.Fprintf(&b, "-# Times are in %s and can be written `9/29 3` · `9/29 3:00` · "+
+		"`9/29 3:00pm` · `tomorrow 6pm` · `friday noon`\n", timezone)
 
 	return map[string]any{
 		"content":          b.String(),
