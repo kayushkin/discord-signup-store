@@ -395,8 +395,8 @@ func TestCreatingFromDiscordAlsoMakesANativeEvent(t *testing.T) {
 	// It said the opposite for months while the pinned how-to said this, which
 	// is two shipped messages contradicting each other about the one thing
 	// somebody reading a Discord event needs to know.
-	if desc, _ := payload["description"].(string); !strings.Contains(desc, "signs you up") {
-		t.Errorf("description = %q, want it to say Interested signs you up", desc)
+	if desc, _ := payload["description"].(string); !strings.Contains(desc, "**Interested** here") {
+		t.Errorf("description = %q, want it to offer Interested as a way to sign up", desc)
 	}
 	if payload["scheduled_end_time"] == nil || payload["scheduled_end_time"] == "" {
 		t.Error("no end time sent; Discord requires one on an EXTERNAL event")
@@ -471,7 +471,7 @@ func TestEditingPushesThroughToTheNativeEvent(t *testing.T) {
 	}
 	ev.Name = "After"
 	ev.Location = "The new place"
-	if err := srv.PushEditToDiscord(ev); err != nil {
+	if err := srv.PushEditToDiscord(ev, nil); err != nil {
 		t.Fatalf("push: %v", err)
 	}
 
@@ -502,7 +502,7 @@ func TestUnpublishedEventsPushNothing(t *testing.T) {
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
 
-	if err := srv.PushEditToDiscord(&Event{ID: 1, GuildID: "g1", Name: "Local only"}); err != nil {
+	if err := srv.PushEditToDiscord(&Event{ID: 1, GuildID: "g1", Name: "Local only"}, nil); err != nil {
 		t.Fatalf("push: %v", err)
 	}
 	if calls := fake.recorded(); len(calls) != 0 {
@@ -518,32 +518,92 @@ func TestPluralise(t *testing.T) {
 	}
 }
 
-// TestTheSignupPointerDoesNotRoundTrip covers an accumulating corruption.
+// TestTheSignupBlockDoesNotRoundTrip covers an accumulating corruption.
 //
-// This service appends a line to a native event's description saying where the
-// real roster is. The sync then reads that description back as the event's own.
-// Without stripping it, the next publish appends the pointer to a description
-// that already ends in one, and it grows by a paragraph on every edit until
-// Discord refuses the event for length.
-func TestTheSignupPointerDoesNotRoundTrip(t *testing.T) {
-	ev := &Event{ID: 1, Name: "Games", Capacity: 8, AttendingCount: 2}
+// This service appends a block to a native event's description — how to sign
+// up, how full it is, who is going. The sync then reads that description back
+// as the event's own. Without stripping it, the next publish appends a block to
+// a description that already ends in one, and it grows by a paragraph on every
+// signup until Discord refuses the event for length.
+func TestTheSignupBlockDoesNotRoundTrip(t *testing.T) {
+	ev := &Event{ID: 1, GuildID: "g1", Name: "Games", Capacity: 8, AttendingCount: 2}
+	roster := []Signup{
+		{DiscordUserID: "u1", DisplayName: "Alice", State: StateAttending},
+		{DiscordUserID: "u2", DisplayName: "Bob", State: StateAttending},
+	}
 	written := "Bring dice."
+	ev.Description = written
 
-	// One trip out and back.
-	published := written + signupPointer(ev, "board-channel")
-	got := stripSignupPointer(published)
-	if got != written {
+	published := nativeEventDescription(ev, roster, "board-channel")
+	if !strings.Contains(published, "Going: Alice, Bob") {
+		t.Errorf("description = %q, want it to list who is going", published)
+	}
+	if got := stripSignupPointer(published); got != written {
 		t.Fatalf("after one round trip the description is %q, want %q", got, written)
 	}
 
 	// Ten more. The failure mode is growth, so the test has to iterate.
 	current := written
 	for i := 0; i < 10; i++ {
-		current = stripSignupPointer(current + signupPointer(ev, "board-channel"))
+		ev.Description = current
+		current = stripSignupPointer(nativeEventDescription(ev, roster, "board-channel"))
 	}
 	if current != written {
 		t.Errorf("after eleven round trips the description is %q (%d chars), want %q",
 			current, len(current), written)
+	}
+}
+
+// TestAnOldSignupBlockIsStillStripped. Descriptions written by earlier versions
+// are sitting on Discord right now, and the marker they start with is not the
+// one this version writes. Forgetting the old form does not edit Discord — it
+// stops the strip finding our own text, which then round-trips and grows.
+func TestAnOldSignupBlockIsStillStripped(t *testing.T) {
+	old := "Bring dice.\n\n— Signups are in the forum: https://discord.com/channels/g1/p1 " +
+		"(8 places, 6 left). Pressing Interested here does not hold you a place."
+	if got := stripSignupPointer(old); got != "Bring dice." {
+		t.Errorf("stripSignupPointer of an old-style description = %q, want %q", got, "Bring dice.")
+	}
+}
+
+// TestALongRosterIsTrimmedAndTheDescriptionIsNot. The words are the organiser's
+// and the block is ours, so ours is what gives way.
+func TestALongRosterIsTrimmedAndTheDescriptionIsNot(t *testing.T) {
+	var roster []Signup
+	for i := 0; i < 200; i++ {
+		roster = append(roster, Signup{
+			DiscordUserID: fmt.Sprintf("u%d", i),
+			DisplayName:   fmt.Sprintf("Person Number %d", i),
+			State:         StateAttending,
+		})
+	}
+	written := strings.Repeat("word ", 100)
+	ev := &Event{ID: 1, GuildID: "g1", Name: "Big", Capacity: 300, AttendingCount: 200,
+		Description: written}
+
+	got := nativeEventDescription(ev, roster, "board-channel")
+	if n := len([]rune(got)); n > nativeDescriptionLimit {
+		t.Errorf("description is %d runes, over Discord's %d", n, nativeDescriptionLimit)
+	}
+	if !strings.HasPrefix(got, written) {
+		t.Error("the organiser's own words were trimmed to make room for ours")
+	}
+	if !strings.Contains(got, "more") {
+		t.Errorf("description = %q, want the roster shortened rather than dropped", got)
+	}
+}
+
+// TestABlockIsSkippedRatherThanCrowdingOutALongDescription: at 990 characters
+// of somebody else's writing there is no room, and the answer is no block.
+func TestABlockIsSkippedRatherThanCrowdingOutALongDescription(t *testing.T) {
+	written := strings.Repeat("x", 990)
+	ev := &Event{ID: 1, GuildID: "g1", Name: "Wordy", Capacity: 8, AttendingCount: 1,
+		Description: written}
+	got := nativeEventDescription(ev, []Signup{{DiscordUserID: "u1", DisplayName: "Alice",
+		State: StateAttending}}, "board-channel")
+	if got != written {
+		t.Errorf("description = %q (%d runes), want the original untouched",
+			got, len([]rune(got)))
 	}
 }
 

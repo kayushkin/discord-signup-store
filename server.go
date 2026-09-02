@@ -210,7 +210,16 @@ func (s *Server) handleRefreshGuildTable(w http.ResponseWriter, r *http.Request)
 
 // handlePostHowTo puts the standing how-to and its Create button in a channel.
 func (s *Server) handlePostHowTo(w http.ResponseWriter, r *http.Request) {
-	messageID, err := s.PostHowToMessage(r.PathValue("channelID"))
+	// adopt_message_id takes over a how-to that is already pinned — one posted
+	// before this service recorded where it put things. Optional, and only
+	// used once per channel: after that the id is stored.
+	var in struct {
+		AdoptMessageID string `json:"adopt_message_id"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&in)
+	}
+	messageID, err := s.PublishHowToMessage(r.PathValue("channelID"), in.AdoptMessageID)
 	if err != nil {
 		writeStoreError(w, err)
 		return

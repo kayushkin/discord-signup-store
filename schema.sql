@@ -203,3 +203,19 @@ CREATE TABLE IF NOT EXISTS guild_forums (
     tag_cancelled TEXT NOT NULL DEFAULT '',
     updated_at    INTEGER NOT NULL
 );
+
+-- standing_messages: the messages this service keeps written rather than
+-- posts once, keyed by what they are and where they live.
+--
+-- Without this the how-to could only ever be re-posted, because the code has no
+-- way to find a message it wrote and forgot. Every copy change meant a second
+-- pinned how-to and somebody deleting the first by hand. A stored id means the
+-- message is edited where it already sits, which is also what people expect of
+-- a pinned message: it does not move when its wording improves.
+CREATE TABLE IF NOT EXISTS standing_messages (
+    kind       TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (kind, channel_id)
+);

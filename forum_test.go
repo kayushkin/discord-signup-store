@@ -266,12 +266,22 @@ func TestSurfacesLinkToTheForumPostExceptTheForumItself(t *testing.T) {
 	if !strings.Contains(line, "💬 <#post-9>") {
 		t.Errorf("the table line does not reference the forum the way the card does: %q", line)
 	}
-	pointer := signupPointer(ev, "board")
-	if !strings.Contains(pointer, "the forum: https://discord.com/channels/g1/post-9") {
-		t.Errorf("the native description should send people to the forum post: %q", pointer)
+	// The native event points at the forum as the DISCUSSION, not as the place
+	// to sign up. Naming one surface as "where signups are" sent people away
+	// from the Interested button already in front of them, which signs them up.
+	ev.Description = "Real description."
+	block := nativeEventDescription(ev, nil, "board")
+	if !strings.Contains(block, "Chat about it: https://discord.com/channels/g1/post-9") {
+		t.Errorf("the native description should link the forum as discussion: %q", block)
 	}
-	// And the round-trip strip still removes the whole pointer, link included.
-	if got := stripSignupPointer("Real description." + pointer); got != "Real description." {
+	if !strings.Contains(block, "**Interested** here") {
+		t.Errorf("the native description should say Interested signs you up: %q", block)
+	}
+	if strings.Contains(block, "Signups are in") {
+		t.Errorf("the native description still calls the forum the place to sign up: %q", block)
+	}
+	// And the round-trip strip still removes the whole block, link included.
+	if got := stripSignupPointer(block); got != "Real description." {
 		t.Errorf("stripSignupPointer left %q", got)
 	}
 

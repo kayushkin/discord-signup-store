@@ -387,30 +387,3 @@ func RenderHowToMessage(boardChannelID, timezone string) map[string]any {
 		},
 	}
 }
-
-// PostHowToMessage puts the standing how-to in a channel and pins it.
-//
-// Pinned because it is the one message in that channel and it must stay
-// reachable; a pin failure is logged rather than fatal, since an unpinned
-// how-to in an otherwise empty channel is still the first thing anyone sees.
-func (s *Server) PostHowToMessage(channelID string) (string, error) {
-	if s.discord == nil {
-		return "", errors.New("no discord client configured")
-	}
-	messageID, err := s.discord.CreateMessage(channelID,
-		RenderHowToMessage(s.BoardChannelID(), s.DefaultTimezone()))
-	if err != nil {
-		return "", fmt.Errorf("post how-to: %w", err)
-	}
-	if err := s.discord.PinMessage(channelID, messageID); err != nil {
-		// Almost always a 403 for want of PIN_MESSAGES. Discord split that out
-		// of MANAGE_MESSAGES into its own permission (bit 51), so a bot invited
-		// before the split — or with an invite link that predates it — can
-		// delete messages and still not pin one. Logged rather than fatal: an
-		// unpinned how-to in an otherwise empty channel is still the first
-		// thing anyone reads.
-		log.Printf("[discord-signup] could not pin the how-to (needs PIN_MESSAGES, "+
-			"which is separate from MANAGE_MESSAGES): %v", err)
-	}
-	return messageID, nil
-}

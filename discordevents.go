@@ -448,6 +448,10 @@ func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event,
 	if ev.StartsAt == 0 {
 		return nil, fmt.Errorf("%w: a discord scheduled event needs a start time", ErrInvalidEvent)
 	}
+	roster, err := s.store.Roster(eventID, false)
+	if err != nil {
+		return nil, err
+	}
 	// EXTERNAL is the only entity type that does not need a voice or stage
 	// channel, and it is the only one Discord requires an end time for.
 	endsAt := ev.EndsAt
@@ -467,7 +471,7 @@ func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event,
 	}
 	payload := map[string]any{
 		"name":                 nativeEventName(ev),
-		"description":          ev.Description + signupPointer(ev, boardChannelID),
+		"description":          nativeEventDescription(ev, roster, boardChannelID),
 		"scheduled_start_time": time.Unix(ev.StartsAt, 0).UTC().Format(time.RFC3339),
 		"scheduled_end_time":   time.Unix(endsAt, 0).UTC().Format(time.RFC3339),
 		"privacy_level":        2, // GUILD_ONLY, the only value Discord accepts
@@ -554,41 +558,151 @@ func nativeEventName(ev *Event) string {
 // the old form ("— Signups are in <#channel>") still sitting in descriptions
 // Discord holds, and the forum form ("— Signups are in the forum: <url>"), or
 // the strip misses one of them and the round-trip corruption returns.
-const signupPointerMarker = "\n\n— Signups are in "
+const signupPointerMarker = "\n\n— Sign up with "
+
+// retiredPointerMarkers are the forms this service used to append and that are
+// still sitting in descriptions Discord is holding.
+//
+// Never pruned. A description written last month is stripped by the marker that
+// was current last month, and dropping that line here does not edit Discord —
+// it just stops the strip finding our own text, which then round-trips and
+// grows a copy of itself on every publish.
+var retiredPointerMarkers = []string{
+	"\n\n— Signups are in ",
+}
 
 // stripSignupPointer removes this service's own footer from a description read
 // back from Discord, so what is stored is what a person actually wrote.
 func stripSignupPointer(description string) string {
-	if i := strings.Index(description, signupPointerMarker); i >= 0 {
-		return strings.TrimRight(description[:i], "\n ")
+	cut := -1
+	for _, marker := range append([]string{signupPointerMarker}, retiredPointerMarkers...) {
+		if i := strings.Index(description, marker); i >= 0 && (cut < 0 || i < cut) {
+			cut = i
+		}
 	}
-	return description
+	if cut < 0 {
+		return description
+	}
+	return strings.TrimRight(description[:cut], "\n ")
 }
 
-// signupPointer is the line appended to a native event's description telling
-// people where the real roster is. Says the number too, because "signups are
-// elsewhere" is much less convincing than "20 places, 3 left".
-func signupPointer(ev *Event, boardChannelID string) string {
+// nativeDescriptionLimit is Discord's cap on a scheduled event's description.
+const nativeDescriptionLimit = 1000
+
+// signupBlock is what this service appends to a native event's description: how
+// to sign up, how full it is, and who is going.
+//
+// It used to say "Signups are in the forum", which was misleading in the one
+// place it mattered. Signing up is possible from wherever somebody happens to
+// be — Interested on this very event, Join on the card, ✅ on the forum post —
+// and naming one of them as *the* place sends people away from the button
+// already in front of them. The forum link stays, as what it is: the discussion.
+//
+// The roster is listed by NAME, not by mention. Discord's own Interested list
+// is not the roster and cannot be made into one, so an event that shows only
+// that number shows a number nobody can check. Names are checkable. Mentions
+// would ping every attendee each time the description is rewritten, which is
+// every signup.
+func signupBlock(ev *Event, roster []Signup, boardChannelID string, budget int) string {
 	var b strings.Builder
-	if ev.ForumPostID != "" {
-		// The forum post is signups AND discussion in one place, so it wins
-		// over the board channel whenever it exists.
-		fmt.Fprintf(&b, "%sthe forum: https://discord.com/channels/%s/%s",
-			signupPointerMarker, ev.GuildID, ev.ForumPostID)
-	} else {
-		b.WriteString(signupPointerMarker + "<#" + boardChannelID + ">")
+	b.WriteString(signupPointerMarker + "**Interested** here")
+	if ev.MessageID != "" || boardChannelID != "" {
+		fmt.Fprintf(&b, ", or **Join** in <#%s>", boardChannelID)
 	}
+	b.WriteString(".")
+
 	if ev.Capacity > 0 {
-		fmt.Fprintf(&b, " (%s", pluralise(ev.Capacity, "place"))
-		if left := ev.Capacity - ev.AttendingCount; left > 0 {
-			fmt.Fprintf(&b, ", %d left", left)
-		} else {
-			b.WriteString(", full — waitlist open")
+		fmt.Fprintf(&b, " %d of %d places taken", ev.AttendingCount, ev.Capacity)
+		if ev.AttendingCount >= ev.Capacity {
+			b.WriteString(" — full, waitlist open")
 		}
-		b.WriteString(")")
+		b.WriteString(".")
+	} else if ev.AttendingCount > 0 {
+		fmt.Fprintf(&b, " %s so far.", pluralise(ev.AttendingCount, "person"))
 	}
-	b.WriteString(". Pressing **Interested** here signs you up, same as Join.")
+
+	attending, waiting := splitRoster(roster)
+	// The lists come last so that trimming them for length costs the least:
+	// what goes first is how to sign up, which is the only part somebody has to
+	// have.
+	remaining := budget - len([]rune(b.String()))
+	if line := rosterLine("Going", attending, remaining); line != "" {
+		b.WriteString(line)
+		remaining -= len([]rune(line))
+	}
+	if line := rosterLine("Waitlist", waiting, remaining); line != "" {
+		b.WriteString(line)
+		remaining -= len([]rune(line))
+	}
+	if ev.ForumPostID != "" {
+		chat := fmt.Sprintf("\nChat about it: https://discord.com/channels/%s/%s",
+			ev.GuildID, ev.ForumPostID)
+		if len([]rune(chat)) <= remaining {
+			b.WriteString(chat)
+		}
+	}
 	return b.String()
+}
+
+// rosterLine writes "Going: Alice, Bob, Carol" inside a rune budget, dropping
+// names off the end rather than cutting one in half.
+//
+// Returns "" when it cannot fit even the shortest honest version, because a
+// heading with nobody under it says less than nothing.
+func rosterLine(heading string, signups []Signup, budget int) string {
+	if len(signups) == 0 {
+		return ""
+	}
+	full := "\n" + heading + ": " + strings.Join(rosterDisplayNames(signups), ", ")
+	if len([]rune(full)) <= budget {
+		return full
+	}
+	names := rosterDisplayNames(signups)
+	for shown := len(names) - 1; shown >= 1; shown-- {
+		line := fmt.Sprintf("\n%s: %s and %d more", heading,
+			strings.Join(names[:shown], ", "), len(names)-shown)
+		if len([]rune(line)) <= budget {
+			return line
+		}
+	}
+	short := fmt.Sprintf("\n%s: %d", heading, len(names))
+	if len([]rune(short)) <= budget {
+		return short
+	}
+	return ""
+}
+
+// rosterDisplayNames is the names to print, falling back to the id only when
+// there is genuinely no name — which shows as a raw number and is meant to,
+// since inventing a name would be worse.
+func rosterDisplayNames(signups []Signup) []string {
+	out := make([]string, 0, len(signups))
+	for _, sg := range signups {
+		name := sg.DisplayName
+		if name == "" {
+			name = sg.DiscordUserID
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+// nativeEventDescription is what gets sent to Discord: what somebody wrote,
+// then this service's block, inside Discord's limit.
+//
+// The person's own words are never trimmed to make room for ours. If they have
+// written 990 characters there is no block, which is the right way round: the
+// block is useful and the description is theirs.
+func nativeEventDescription(ev *Event, roster []Signup, boardChannelID string) string {
+	written := []rune(ev.Description)
+	if len(written) >= nativeDescriptionLimit {
+		return string(written[:nativeDescriptionLimit])
+	}
+	block := signupBlock(ev, roster, boardChannelID, nativeDescriptionLimit-len(written))
+	if len(written)+len([]rune(block)) > nativeDescriptionLimit {
+		return ev.Description
+	}
+	return ev.Description + block
 }
 
 // DiscordEventURL is the deep link to a native scheduled event.
@@ -714,7 +828,7 @@ func (s *Server) CompleteFinishedEvents() ([]int64, error) {
 // event that was never published has nothing to push to. A failure is returned
 // rather than swallowed, but callers treat it as non-fatal — the roster is the
 // source of truth and the native event is a copy of it.
-func (s *Server) PushEditToDiscord(ev *Event) error {
+func (s *Server) PushEditToDiscord(ev *Event, roster []Signup) error {
 	if s.discord == nil || ev.DiscordScheduledEventID == "" {
 		return nil
 	}
@@ -728,7 +842,7 @@ func (s *Server) PushEditToDiscord(ev *Event) error {
 	}
 	payload := map[string]any{
 		"name":                 nativeEventName(ev),
-		"description":          ev.Description + signupPointer(ev, s.boardChannelID),
+		"description":          nativeEventDescription(ev, roster, s.boardChannelID),
 		"scheduled_start_time": time.Unix(ev.StartsAt, 0).UTC().Format(time.RFC3339),
 		"scheduled_end_time":   time.Unix(endsAt, 0).UTC().Format(time.RFC3339),
 		"entity_metadata":      map[string]any{"location": location},

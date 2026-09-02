@@ -176,7 +176,7 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 	// signup. Pushed through the same function an edit uses rather than a
 	// second, lighter one: two paths that both write the native event would
 	// eventually disagree about what they write.
-	if err := s.PushEditToDiscord(ev); err != nil {
+	if err := s.PushEditToDiscord(ev, roster); err != nil {
 		log.Printf("[discord-signup] push title for event %d: %v", ev.ID, err)
 		published = false
 	}
