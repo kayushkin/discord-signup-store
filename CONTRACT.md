@@ -221,6 +221,14 @@ flips with the roster; the sweep tags `finished` and archives.
 thread — far harder than message edits. Under signup churn the title badge may
 lag; the card inside stays current.
 
+⚠️ Discord also caps how many times a message **older than one hour** may be
+edited — `429 code 30046`, "Maximum number of edits to messages older than 1
+hour reached". The table is edited on every signup, so it hits that cap and
+stops accepting edits until the window rolls. `POST /api/guilds/{id}/table/rebuild`
+deletes its messages and posts them again, on the hour, so the table is never
+old enough for the cap to apply. The cost is its place in the channel: it moves
+to the bottom every hour.
+
 ## The ✅ reaction
 
 React ✅ on a forum post to join; remove it to leave. The forum's
@@ -300,11 +308,18 @@ Three rules keep the copies true:
 2. **Write only what changed.** `published_signature` fingerprints every input
    to a stored surface and is recorded only when a publish fully succeeds. A
    pass whose signature already matches makes no Discord calls at all.
-3. **Sweep and repair.** The ten-minute reconcile (`POST /api/sync`, scheduler
-   job 65) ends by re-checking every live event and rewriting any whose copies
-   disagree. A partial publish deliberately leaves the old signature in place,
-   so a write lost to a 500 or a restart is repaired within ten minutes rather
-   than sitting wrong until the next person happens to join.
+3. **Sweep and repair.** `POST /api/republish` re-checks every live event and
+   rewrites any whose copies disagree, **every minute**, and names each one it
+   found in the log. A partial publish deliberately leaves the old signature in
+   place, so a write lost to a 500 or a restart is repaired within a minute
+   rather than sitting wrong until the next person happens to join.
+
+   It is a separate route from `POST /api/sync` on purpose. That one starts by
+   listing a guild's native scheduled events and returns early when the call is
+   rate-limited — so repair hung off it was skipped exactly when the API was
+   busiest, which is when writes are most likely to have been lost. Its guild
+   list comes from SQLite, not from Discord, and a settled event costs one
+   query and no Discord calls at all.
 
 Rules 1 and 3 were both missing on 2 September: four Interested clicks in
 thirty-three seconds started four overlapping publishes, the one that had read

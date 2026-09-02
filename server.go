@@ -128,6 +128,8 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/guilds/{guildID}/table/refresh", s.handleRefreshGuildTable)
 	mux.HandleFunc("PUT /api/guilds/{guildID}/forum", s.handleSetGuildForum)
 	mux.HandleFunc("POST /api/events/complete-finished", s.handleCompleteFinished)
+	mux.HandleFunc("POST /api/republish", s.handleRepublish)
+	mux.HandleFunc("POST /api/guilds/{guildID}/table/rebuild", s.handleRebuildGuildTable)
 
 	// Browser surface — session-gated.
 	mux.HandleFunc("GET /", s.handleWebIndex)
@@ -225,6 +227,38 @@ func (s *Server) handleSyncAllGuilds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+// handleRepublish rewrites every Discord copy that disagrees with its roster.
+//
+// Separate from POST /api/sync on purpose, and not a second copy of it. That
+// route starts by listing a guild's native scheduled events, and when that call
+// is rate-limited it returns before reaching anything else — so repair hung off
+// it was skipped exactly when the API was busiest, which is when writes are
+// most likely to have been lost. This one touches Discord only for an event
+// that is actually stale.
+func (s *Server) handleRepublish(w http.ResponseWriter, r *http.Request) {
+	if err := s.RepublishAllGuilds(); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleRebuildGuildTable deletes the table's messages and posts them again.
+//
+// Discord caps how many times a message older than an hour may be edited
+// (429 code 30046), and the table is edited on every signup. Once that cap is
+// hit the table stops accepting edits and goes stale until the window rolls.
+// Reposting on the hour means the message is never old enough for the cap to
+// apply. It costs the table its place in the channel, which is the trade: it
+// moves to the bottom, and it is correct.
+func (s *Server) handleRebuildGuildTable(w http.ResponseWriter, r *http.Request) {
+	if err := s.RebuildEventTable(r.PathValue("guildID")); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleCompleteFinished archives events whose time has passed. Exposed as well

@@ -243,3 +243,56 @@ func firstLine(s string) string {
 	}
 	return s
 }
+
+// TestTheSweepOnlyTouchesDiscordForStaleEvents. It runs every minute, so an
+// event nobody has touched must cost a query and nothing else — otherwise the
+// cadence is what causes the rate limits it exists to recover from.
+func TestTheSweepOnlyTouchesDiscordForStaleEvents(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+	ev := syncTestEvent(t, store, 3, "alice")
+
+	srv.syncAfterChange(ev.ID, nil) // first publish, records the signature
+	settled := len(fake.recorded())
+
+	for i := 0; i < 5; i++ {
+		srv.RepublishStaleEvents("g1")
+	}
+	if got := len(fake.recorded()); got != settled {
+		t.Errorf("%d Discord calls after five sweeps of a settled event, want %d",
+			got, settled)
+	}
+
+	if _, err := store.Join(ev.ID, "bob", "Bob", JoinedViaButton); err != nil {
+		t.Fatalf("join: %v", err)
+	}
+	srv.RepublishStaleEvents("g1")
+	writes := cardWrites(fake)
+	if len(writes) != 2 || !strings.Contains(writes[1], "2/3 places taken") {
+		t.Errorf("card writes = %d, last = %q; want the sweep to have republished 2/3",
+			len(writes), firstLine(writes[len(writes)-1]))
+	}
+}
+
+// TestTheSweepCoversEveryGuildItHoldsAnEventFor pins where the guild list comes
+// from: the database, not a Discord call made sixty times an hour.
+func TestTheSweepCoversEveryGuildItHoldsAnEventFor(t *testing.T) {
+	store := testStore(t)
+	for _, guildID := range []string{"g1", "g1", "g2"} {
+		if _, err := store.CreateEvent(Event{
+			GuildID: guildID, ChannelID: "board", Name: "Games", Status: StatusOpen,
+			StartsAt: time.Now().Add(48 * time.Hour).Unix(),
+		}); err != nil {
+			t.Fatalf("create in %s: %v", guildID, err)
+		}
+	}
+	guilds, err := store.GuildsWithEvents()
+	if err != nil {
+		t.Fatalf("guilds: %v", err)
+	}
+	if len(guilds) != 2 {
+		t.Errorf("guilds = %v, want each of g1 and g2 exactly once", guilds)
+	}
+}

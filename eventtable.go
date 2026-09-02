@@ -182,13 +182,18 @@ func buildDetailsModal(ev *Event, roster []Signup) map[string]any {
 	if len(attending) == 0 {
 		going += "\n-# Nobody yet."
 	} else {
-		going += "\n" + rosterNames(attending)
+		// A BLANK line, not a single newline. "1." at the start of a line is
+		// Discord's ordered-list syntax, and a list that follows a paragraph
+		// with no blank line between them gets pulled up onto that paragraph's
+		// last line — which is why the details view read
+		// "**Going — 2 of 7** 1. Domonation" with no break.
+		going += "\n\n" + rosterNames(attending)
 	}
 	components = append(components, text(going))
 
 	// Only when there is one: a permanently empty heading reads as a fault.
 	if len(waiting) > 0 {
-		components = append(components, text(fmt.Sprintf("**Waitlist — %d**\n%s",
+		components = append(components, text(fmt.Sprintf("**Waitlist — %d**\n\n%s",
 			len(waiting), rosterNames(waiting))))
 	}
 

@@ -451,3 +451,37 @@ func TestUserSignupsInGuildAnswersThePerViewerQuestion(t *testing.T) {
 		}
 	}
 }
+
+// TestTheDetailsListStartsOnItsOwnLine covers what the details view actually
+// showed: "**Going — 2 of 7** 1. Domonation", all on one line.
+//
+// "1." at the start of a line is Discord's ordered-list syntax, and a list that
+// follows a paragraph with no blank line between them is pulled up onto that
+// paragraph's last line. A single \n is not enough; the blank line is what
+// makes it a list of its own.
+func TestTheDetailsListStartsOnItsOwnLine(t *testing.T) {
+	ev := &Event{ID: 1, Name: "deez", Capacity: 7, AttendingCount: 2, StartsAt: 1788067881}
+	roster := []Signup{
+		{DiscordUserID: "u1", DisplayName: "Domonation", State: StateAttending},
+		{DiscordUserID: "u2", DisplayName: "Twili Midna", State: StateAttending},
+		{DiscordUserID: "u3", DisplayName: "Slava", State: StateWaitlisted, WaitlistPlace: 1},
+	}
+
+	var going, waitlist string
+	for _, c := range buildDetailsModal(ev, roster)["components"].([]any) {
+		content := c.(map[string]any)["content"].(string)
+		switch {
+		case strings.HasPrefix(content, "**Going"):
+			going = content
+		case strings.HasPrefix(content, "**Waitlist"):
+			waitlist = content
+		}
+	}
+
+	if !strings.HasPrefix(going, "**Going — 2 of 7**\n\n1. Domonation") {
+		t.Errorf("the going block is %q, want a blank line before the list", going)
+	}
+	if !strings.HasPrefix(waitlist, "**Waitlist — 1**\n\n1. Slava") {
+		t.Errorf("the waitlist block is %q, want a blank line before the list", waitlist)
+	}
+}

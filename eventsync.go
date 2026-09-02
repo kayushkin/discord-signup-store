@@ -239,6 +239,59 @@ func (s *Server) RepublishStaleEvents(guildID string) {
 		return
 	}
 	for i := range events {
-		s.syncAfterChange(events[i].ID, nil)
+		ev := &events[i]
+		roster, err := s.store.Roster(ev.ID, false)
+		if err != nil {
+			log.Printf("[discord-signup] sweep event=%d: roster: %v", ev.ID, err)
+			continue
+		}
+		if eventPublishSignature(ev, roster) == ev.PublishedSignature {
+			continue
+		}
+		// The one line worth reading in this log. Reaching here means a write
+		// this service believed it had made is not the write Discord is
+		// holding — a failed edit, a restart mid-publish, a rate limit that
+		// outlived its retry. Named loudly and individually, because the point
+		// of a repair loop nobody watches is that it leaves a record of how
+		// often it had to repair anything.
+		log.Printf("[discord-signup] sweep: event %d (%q) is stale — Discord was last written "+
+			"%s, the roster now reads %s; republishing",
+			ev.ID, ev.Name, describePublishState(ev), describeRosterCounts(ev))
+		s.syncAfterChange(ev.ID, nil)
 	}
+}
+
+// RepublishAllGuilds runs the sweep for every guild that has a live event.
+//
+// The guild list comes from the database, not from Discord. This runs every
+// minute, and asking Discord who we are in every time would spend a call a
+// minute to learn something that changes about once a year.
+func (s *Server) RepublishAllGuilds() error {
+	guilds, err := s.store.GuildsWithEvents()
+	if err != nil {
+		return err
+	}
+	for _, guildID := range guilds {
+		s.RepublishStaleEvents(guildID)
+	}
+	return nil
+}
+
+// describePublishState says when this event was last successfully published, in
+// the only terms available: whether it ever was, and which fingerprint.
+func describePublishState(ev *Event) string {
+	if ev.PublishedSignature == "" {
+		return "never (or its last publish failed part way)"
+	}
+	return "as " + ev.PublishedSignature[:12]
+}
+
+// describeRosterCounts is the human half of the same line.
+func describeRosterCounts(ev *Event) string {
+	if ev.Capacity == 0 {
+		return fmt.Sprintf("%d signed up, no limit, %d waiting",
+			ev.AttendingCount, ev.WaitlistCount)
+	}
+	return fmt.Sprintf("%d/%d places taken, %d waiting",
+		ev.AttendingCount, ev.Capacity, ev.WaitlistCount)
 }

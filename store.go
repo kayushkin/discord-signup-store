@@ -691,6 +691,38 @@ func validateRecurrence(rule, timezone string) error {
 // DeleteEvent soft-deletes a roster. The rows stay so the history stays
 // readable; use status 'cancelled' if you mean the event is off but the record
 // should remain visible.
+// GuildsWithEvents lists every guild this service holds an event for.
+//
+// The repair sweep's guild list, taken from here rather than from Discord: the
+// sweep runs every minute, and asking Discord which servers the bot is in sixty
+// times an hour to learn something that changes about once a year is a call
+// spent on nothing.
+//
+// Deliberately not filtered to live events. Which statuses count as over lives
+// in vocabulary.go and is applied by liveEventsFor, and a second copy of that
+// list written in SQL is how the two would come to disagree. A guild whose
+// events are all finished costs the sweep one query and no Discord calls.
+func (s *Store) GuildsWithEvents() ([]string, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT guild_id FROM events
+		WHERE deleted_at = 0 AND guild_id != ''`)
+	if err != nil {
+		return nil, fmt.Errorf("list guilds with live events: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var guildID string
+		if err := rows.Scan(&guildID); err != nil {
+			return nil, fmt.Errorf("scan guild id: %w", err)
+		}
+		out = append(out, guildID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate guilds: %w", err)
+	}
+	return out, nil
+}
+
 // SetPublishedSignature records what was last successfully written to Discord.
 //
 // updated_at is deliberately not touched. This is the publisher noting what it
