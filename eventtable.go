@@ -156,7 +156,7 @@ func buildDetailsModal(ev *Event, roster []Signup, canEdit bool, zone string) ma
 	if canEdit {
 		return buildEditModalWithRoster(ev, roster, zone)
 	}
-	return buildViewOnlyDetailsModal(ev, roster)
+	return buildRosterOnlyModal(ev, roster)
 }
 
 func buildViewOnlyDetailsModal(ev *Event, roster []Signup) map[string]any {

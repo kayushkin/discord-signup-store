@@ -211,7 +211,7 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	3  the roster table, drawn beside the event table in the same channel
 //	4  roster table rows link their thread instead of restating its title
 //	5  Edit back on those rows: the merged Details+Edit modal was rejected
-//	6  merged modal rebuilt with Labels, so Edit comes off the rows again
+//	6  Edit off the roster table rows: Details is the edit form
 const publishFormatVersion = 6
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.

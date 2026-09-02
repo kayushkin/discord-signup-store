@@ -192,91 +192,29 @@ func TestTableIsEditedInPlaceAndShrinks(t *testing.T) {
 	}
 }
 
-// TestDetailsModalIsAllReadOnlyText is the point of this view.
+// TestTheDetailsModalIsBuiltFromTheOnlyShapeThatWorks.
 //
-// Discord has no read-only text input, so an earlier version prefilled ordinary
-// inputs — boxes that looked editable and were not. Text Display is allowed in
-// a modal and is genuinely read-only, so there is no input here at all and
-// nothing to explain away on submit.
-func TestDetailsModalIsAllReadOnlyText(t *testing.T) {
-	ev := &Event{ID: 1, GuildID: "g1", Name: "Games", Description: "Bring dice.",
-		Capacity: 3, AttendingCount: 2, WaitlistCount: 1, StartsAt: 1788067881,
-		Location: "The pub", Timezone: "America/Los_Angeles"}
-	roster := []Signup{
-		{DiscordUserID: "1", DisplayName: "Alice", State: StateAttending},
-		{DiscordUserID: "2", DisplayName: "Bob", State: StateAttending},
-		{DiscordUserID: "3", DisplayName: "Carol", State: StateWaitlisted, WaitlistPlace: 1},
-	}
-	modal := buildDetailsModal(ev, roster, false, "America/Los_Angeles")
-
-	components := modal["components"].([]any)
-	if len(components) == 0 || len(components) > 5 {
-		t.Fatalf("%d components, want between 1 and 5", len(components))
-	}
-	for i, c := range components {
-		block := c.(map[string]any)
-		if block["type"] != componentTypeTextDisplay {
-			t.Errorf("component %d is type %v, want %d (Text Display) — anything else is "+
-				"an input, which cannot be made read-only", i, block["type"], componentTypeTextDisplay)
-		}
-		if len([]rune(block["content"].(string))) > textDisplayLimit {
-			t.Errorf("component %d is over Discord's %d-character limit", i, textDisplayLimit)
-		}
-	}
-	if len([]rune(modal["title"].(string))) > 45 {
-		t.Error("title is over Discord's 45 runes")
-	}
-}
-
-// TestDetailsModalReadsDescriptionThenGoingThenWaitlist pins the order the
-// questions actually get asked in.
-func TestDetailsModalReadsDescriptionThenGoingThenWaitlist(t *testing.T) {
-	ev := &Event{ID: 1, Name: "Games", Description: "Bring dice.", Capacity: 2,
-		AttendingCount: 2, WaitlistCount: 1, StartsAt: 1788067881}
-	roster := []Signup{
-		{DiscordUserID: "1", DisplayName: "Alice", State: StateAttending},
-		{DiscordUserID: "2", DisplayName: "Bob", State: StateAttending},
-		{DiscordUserID: "3", DisplayName: "Carol", State: StateWaitlisted, WaitlistPlace: 1},
-	}
-	blocks := buildDetailsModal(ev, roster, false, "America/Los_Angeles")["components"].([]any)
-	var contents []string
-	for _, c := range blocks {
-		contents = append(contents, c.(map[string]any)["content"].(string))
-	}
-	if len(contents) < 3 {
-		t.Fatalf("got %d blocks, want at least description, going and waitlist", len(contents))
-	}
-	if !strings.HasPrefix(contents[0], "Bring dice.") {
-		t.Errorf("first block is %q, want the description first", contents[0])
-	}
-	if !strings.Contains(contents[1], "Going — 2 of 2") || !strings.Contains(contents[1], "Alice") {
-		t.Errorf("second block is %q, want the going list", contents[1])
-	}
-	if !strings.Contains(contents[2], "Waitlist — 1") || !strings.Contains(contents[2], "Carol") {
-		t.Errorf("third block is %q, want the waitlist", contents[2])
-	}
-}
-
-// TestDetailsModalListsNamesNotMentions covers the one thing a modal will not
-// render: a <@id> mention shows as a raw snowflake there.
-func TestDetailsModalListsNamesNotMentions(t *testing.T) {
+// This test used to assert the opposite — that every component was a Text
+// Display (type 10), "because anything else is an input, which cannot be made
+// read-only". The reasoning was sound and the premise was false: Discord
+// refuses a modal carrying a Text Display, so that assertion held a button
+// broken for ten days while the suite stayed green.
+//
+// A modal cannot show read-only text at all. The roster therefore travels as a
+// paragraph Text Input that is not required, is labelled "read only", and whose
+// contents are thrown away on submit.
+func TestTheDetailsModalIsBuiltFromTheOnlyShapeThatWorks(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
-	roster := []Signup{{DiscordUserID: "110122051179687936", DisplayName: "Slava",
-		State: StateAttending}}
-	for _, c := range buildDetailsModal(ev, roster, false, "America/Los_Angeles")["components"].([]any) {
-		content := c.(map[string]any)["content"].(string)
-		if strings.Contains(content, "<@") {
-			t.Errorf("a block contains a mention, which a modal shows as a raw id: %q", content)
-		}
-	}
-}
+	roster := []Signup{{DiscordUserID: "u1", DisplayName: "Al", State: StateAttending}}
 
-// TestDetailsModalOmitsAnEmptyWaitlist keeps a permanently blank heading out.
-func TestDetailsModalOmitsAnEmptyWaitlist(t *testing.T) {
-	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
-	for _, c := range buildDetailsModal(ev, nil, false, "America/Los_Angeles")["components"].([]any) {
-		if strings.Contains(c.(map[string]any)["content"].(string), "Waitlist") {
-			t.Error("an empty waitlist still got a heading")
+	for _, canEdit := range []bool{false, true} {
+		modal := buildDetailsModal(ev, roster, canEdit, "America/Los_Angeles")
+		for i, c := range modal["components"].([]any) {
+			m := c.(map[string]any)
+			if m["type"] != componentTypeActionRow {
+				t.Errorf("canEdit=%v component %d is type %v, want an Action Row",
+					canEdit, i, m["type"])
+			}
 		}
 	}
 }
@@ -458,36 +396,29 @@ func TestUserSignupsInGuildAnswersThePerViewerQuestion(t *testing.T) {
 	}
 }
 
-// TestTheDetailsListStartsOnItsOwnLine covers what the details view actually
-// showed: "**Going — 2 of 7** 1. Domonation", all on one line.
-//
-// "1." at the start of a line is Discord's ordered-list syntax, and a list that
-// follows a paragraph with no blank line between them is pulled up onto that
-// paragraph's last line. A single \n is not enough; the blank line is what
-// makes it a list of its own.
-func TestTheDetailsListStartsOnItsOwnLine(t *testing.T) {
-	ev := &Event{ID: 1, Name: "deez", Capacity: 7, AttendingCount: 2, StartsAt: 1788067881}
-	roster := []Signup{
-		{DiscordUserID: "u1", DisplayName: "Domonation", State: StateAttending},
-		{DiscordUserID: "u2", DisplayName: "Twili Midna", State: StateAttending},
-		{DiscordUserID: "u3", DisplayName: "Slava", State: StateWaitlisted, WaitlistPlace: 1},
-	}
+// TestTheRosterFieldNamesPeopleWithoutMentioning. A modal renders <@id> as a
+// raw snowflake, so the roster has always had to carry names — and now it also
+// carries them into a text input, where a mention would be worse still.
+func TestTheRosterFieldNamesPeopleWithoutMentioning(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
+	modal := buildDetailsModal(ev, []Signup{
+		{DiscordUserID: "110122051179687936", DisplayName: "Slava", State: StateAttending},
+	}, false, "America/Los_Angeles")
 
-	var going, waitlist string
-	for _, c := range buildDetailsModal(ev, roster, false, "America/Los_Angeles")["components"].([]any) {
-		content := c.(map[string]any)["content"].(string)
-		switch {
-		case strings.HasPrefix(content, "**Going"):
-			going = content
-		case strings.HasPrefix(content, "**Waitlist"):
-			waitlist = content
-		}
+	rendered := fmt.Sprint(modal)
+	if strings.Contains(rendered, "<@") {
+		t.Errorf("the modal contains a mention, which shows there as a raw id: %q", rendered)
 	}
+	if !strings.Contains(rendered, "Slava") {
+		t.Error("the modal does not name who is going")
+	}
+}
 
-	if !strings.HasPrefix(going, "**Going — 2 of 7**\n\n1. Domonation") {
-		t.Errorf("the going block is %q, want a blank line before the list", going)
-	}
-	if !strings.HasPrefix(waitlist, "**Waitlist — 1**\n\n1. Slava") {
-		t.Errorf("the waitlist block is %q, want a blank line before the list", waitlist)
+// TestAnEmptyRosterSaysSoRatherThanShowingNothing.
+func TestAnEmptyRosterSaysSoRatherThanShowingNothing(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Games", Capacity: 4, StartsAt: 1788067881}
+	modal := buildDetailsModal(ev, nil, false, "America/Los_Angeles")
+	if !strings.Contains(fmt.Sprint(modal), "Nobody yet") {
+		t.Errorf("an empty roster renders as %q", fmt.Sprint(modal))
 	}
 }

@@ -26,6 +26,9 @@ const (
 	fieldCapacity    = "capacity"
 	fieldLocation    = "location"
 	fieldDescription = "description"
+	// fieldRoster carries the roster into a modal as read-only-looking text.
+	// Never read back: whatever somebody types into it is thrown away.
+	fieldRoster = "roster"
 )
 
 // EventForm is the five typed values, before validation.
@@ -109,40 +112,6 @@ func modalTextInput(customID, label, value, placeholder string, style int, requi
 	return field
 }
 
-// labelWrapModalRows converts Action-Row-per-input into Label-per-input.
-//
-// The Label carries the wording and the input keeps everything else — a wrapped
-// Text Input does NOT keep its own "label" field, so it is moved rather than
-// copied, or the same words would be declared twice and one of them ignored.
-func labelWrapModalRows(rows []any) []any {
-	out := make([]any, 0, len(rows))
-	for _, row := range rows {
-		m, ok := row.(map[string]any)
-		if !ok || m["type"] != componentTypeActionRow {
-			out = append(out, row) // already a Label, or a Text Display
-			continue
-		}
-		inner, ok := m["components"].([]any)
-		if !ok || len(inner) != 1 {
-			out = append(out, row)
-			continue
-		}
-		field, ok := inner[0].(map[string]any)
-		if !ok {
-			out = append(out, row)
-			continue
-		}
-		label, _ := field["label"].(string)
-		delete(field, "label")
-		out = append(out, map[string]any{
-			"type":      componentTypeLabel,
-			"label":     label,
-			"component": field,
-		})
-	}
-	return out
-}
-
 // buildEventModal assembles the form. ev is nil when creating, in which case
 // every field opens empty except the ones with a sensible starting point.
 func buildEventModal(customID, title string, ev *Event, zone string) map[string]any {
@@ -185,53 +154,121 @@ func buildEventModal(customID, title string, ev *Event, zone string) map[string]
 	}
 }
 
-// buildEditModalWithRoster is the edit form with the roster written above it.
+// rosterField is the roster shown inside a modal.
 //
-// One modal instead of two. Somebody changing an event's capacity wants to see
-// who is already on it while they choose the number, and before this they had
-// to open Details, read it, dismiss it and press Edit.
+// A Text Input, not a Text Display, and that is not a preference. Every modal
+// this service sent carrying a Text Display was refused by Discord — the
+// viewer's Details modal since 23 August, silently, because a modal is
+// validated after the interaction is already answered 200, so a refusal reaches
+// no log here and shows only as "didn't respond in time" to the person
+// pressing. The one modal shape known to work in this application is the one
+// the Edit button has always used: Action Rows holding Text Inputs. So the
+// roster travels as one of those.
 //
-// The roster is a single Text Display, not one per section. Discord documents
-// no total component limit for modals, and this one already spends five on the
-// inputs, so the summary stays at one rather than finding that limit live.
-func buildEditModalWithRoster(ev *Event, roster []Signup, zone string) map[string]any {
-	modal := buildEventModal(EditModalCustomID(ev.ID), "Edit "+ev.Name, ev, zone)
-	// Every input is re-wrapped in a Label, which is what makes the summary
-	// legal beside them. The first attempt at this modal put a Text Display in
-	// an array of Action Rows and Discord refused the whole thing — silently,
-	// because a modal is validated after the interaction is answered, so it
-	// showed as "This interaction failed" and left no trace in any log here.
-	//
-	// Discord's own reference says Action Row with Text Inputs in modals is
-	// deprecated in favour of Label. A modal is evidently one shape or the
-	// other, so a modal holding a Text Display has to be Label all through.
-	modal["components"] = labelWrapModalRows(modal["components"].([]any))
-
+// The cost is honest and visible: Discord has no read-only text in this shape,
+// so the box looks editable. It is not required, whatever is typed into it is
+// ignored, and its label says so.
+func rosterField(ev *Event, roster []Signup) map[string]any {
 	attending, waiting := splitRoster(roster)
 	var b strings.Builder
-	if ev.Capacity > 0 {
-		fmt.Fprintf(&b, "**Going — %d of %d**", ev.AttendingCount, ev.Capacity)
-	} else {
-		fmt.Fprintf(&b, "**Going — %d**, no limit", ev.AttendingCount)
-	}
 	if len(attending) == 0 {
-		b.WriteString("\n-# Nobody yet.")
+		b.WriteString("Nobody yet.")
 	} else {
-		b.WriteString("\n" + rosterNames(attending))
+		b.WriteString(rosterNames(attending))
 	}
 	if len(waiting) > 0 {
-		fmt.Fprintf(&b, "\n\n**Waitlist — %d**\n%s", len(waiting), rosterNames(waiting))
+		fmt.Fprintf(&b, "\n\nWaitlist:\n%s", rosterNames(waiting))
 	}
-	// Lowering the limit never removes anyone, so somebody typing a smaller
-	// number needs to know it will not — said here, where the number is typed.
-	if ev.AttendingCount > 0 {
-		b.WriteString("\n\n-# Lowering the limit does not remove anyone. Raising it lets " +
-			"the waitlist in, oldest first.")
+	label := fmt.Sprintf("Going — %d", ev.AttendingCount)
+	if ev.Capacity > 0 {
+		label = fmt.Sprintf("Going — %d of %d (read only)", ev.AttendingCount, ev.Capacity)
+	} else {
+		label += " (read only)"
 	}
+	return modalTextInput(fieldRoster, label, trimTo(b.String(), 4000), "",
+		textInputStyleParagraph, false, 4000)
+}
 
-	summary := map[string]any{
-		"type": componentTypeTextDisplay, "content": trimTo(b.String(), textDisplayLimit),
+// buildEditModalWithRoster is the edit form with the roster at the top of it.
+//
+// One modal instead of two: somebody choosing a new capacity wants to see who
+// is already on it while they choose, and before this they had to open Details,
+// read it, dismiss it and press Edit.
+//
+// ⚠️ Description is NOT in this form, and its absence is the price of the
+// merge. A modal takes five Action Rows and no more, the roster takes one, so
+// one field had to go — and Description is the one the web page also edits, the
+// one nobody changes from a phone, and the only one that is not a single line.
+func buildEditModalWithRoster(ev *Event, roster []Signup, zone string) map[string]any {
+	eventZone := ev.Timezone
+	if eventZone == "" {
+		eventZone = zone
 	}
-	modal["components"] = append([]any{summary}, modal["components"].([]any)...)
-	return modal
+	row := func(field map[string]any) map[string]any {
+		return map[string]any{"type": componentTypeActionRow, "components": []any{field}}
+	}
+	return map[string]any{
+		"custom_id": EditModalCustomID(ev.ID),
+		"title":     truncate("Edit "+ev.Name, 45),
+		"components": []any{
+			row(rosterField(ev, roster)),
+			row(modalTextInput(fieldName, "Name", ev.Name, "Friday playtest",
+				textInputStyleShort, true, 100)),
+			row(modalTextInput(fieldStartsAt, "Starts — "+eventZone,
+				FormatEventTime(ev.StartsAt, eventZone),
+				"9/29 3   or   9/29 3:00   or   9/29 3:00pm",
+				textInputStyleShort, true, 40)),
+			row(modalTextInput(fieldCapacity, "Max attendees — 0 for no limit",
+				fmt.Sprintf("%d", ev.Capacity), "20", textInputStyleShort, true, 6)),
+			row(modalTextInput(fieldLocation, "Location", ev.Location, "Where it happens",
+				textInputStyleShort, false, 100)),
+		},
+	}
+}
+
+// buildRosterOnlyModal is what somebody who may not edit sees: the roster, and
+// nothing to change.
+func buildRosterOnlyModal(ev *Event, roster []Signup) map[string]any {
+	return map[string]any{
+		"custom_id": DetailsModalCustomID(ev.ID),
+		"title":     truncate(ev.Name, 45),
+		"components": []any{
+			map[string]any{"type": componentTypeActionRow,
+				"components": []any{rosterField(ev, roster)}},
+		},
+	}
+}
+
+// labelWrapModalRows converts Action-Row-per-input into Label-per-input.
+//
+// The Label carries the wording and the input keeps everything else — a wrapped
+// Text Input does NOT keep its own "label" field, so it is moved rather than
+// copied, or the same words would be declared twice and one of them ignored.
+func labelWrapModalRows(rows []any) []any {
+	out := make([]any, 0, len(rows))
+	for _, row := range rows {
+		m, ok := row.(map[string]any)
+		if !ok || m["type"] != componentTypeActionRow {
+			out = append(out, row) // already a Label, or a Text Display
+			continue
+		}
+		inner, ok := m["components"].([]any)
+		if !ok || len(inner) != 1 {
+			out = append(out, row)
+			continue
+		}
+		field, ok := inner[0].(map[string]any)
+		if !ok {
+			out = append(out, row)
+			continue
+		}
+		label, _ := field["label"].(string)
+		delete(field, "label")
+		out = append(out, map[string]any{
+			"type":      componentTypeLabel,
+			"label":     label,
+			"component": field,
+		})
+	}
+	return out
 }
