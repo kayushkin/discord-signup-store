@@ -25,7 +25,7 @@ func TestMyEventsButtonActuallyRoutes(t *testing.T) {
 		"type": 3, "guild_id": "g1", "channel_id": "c1",
 		"data": {"custom_id": %q},
 		"member": {"permissions": "0", "user": {"id": "alice", "username": "alice"}}
-	}`, tableMyEventsButtonID)))
+	}`, myEventsButtonID)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
@@ -114,7 +114,7 @@ func TestDashboardShowsEditOnlyToWhoMayEdit(t *testing.T) {
 			"type": 3, "guild_id": "g1", "channel_id": "c1",
 			"data": {"custom_id": %q},
 			"member": {"permissions": %q, "user": {"id": %q, "username": %q}}
-		}`, tableMyEventsButtonID, permissions, userID, userID)))
+		}`, myEventsButtonID, permissions, userID, userID)))
 		return rec.Body.String()
 	}
 
@@ -149,7 +149,7 @@ func TestDashboardStaysInsideTheComponentBudget(t *testing.T) {
 		"type": 3, "guild_id": "g1", "channel_id": "c1",
 		"data": {"custom_id": %q},
 		"member": {"permissions": %q, "user": {"id": "boss", "username": "boss"}}
-	}`, tableMyEventsButtonID, permissionsWithManageEvents)))
+	}`, myEventsButtonID, permissionsWithManageEvents)))
 	var out map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode: %v", err)

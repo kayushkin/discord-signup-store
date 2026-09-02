@@ -389,6 +389,17 @@ func RenderHowToMessage(boardChannelID, timezone string) map[string]any {
 						"label":     "Create an event",
 						"custom_id": CreateCustomID(),
 					},
+					// A shared message cannot mark "you are in this one" per
+					// viewer — Discord renders it identically for everyone — so
+					// this button is how that question gets answered: an
+					// ephemeral reply, which IS per-viewer. It sits here rather
+					// than on the table because it is about the reader.
+					map[string]any{
+						"type":      componentTypeButton,
+						"style":     buttonStyleSecondary,
+						"label":     "My events",
+						"custom_id": myEventsButtonID,
+					},
 				},
 			},
 		},

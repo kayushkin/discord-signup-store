@@ -39,6 +39,11 @@ const (
 	dashboardEventLimit = 6
 )
 
+// myEventsButtonID opens the per-viewer dashboard. It sits on the standing
+// how-to message, which is the one place in the channel that is about starting
+// something rather than about one event.
+const myEventsButtonID = customIDPrefix + ":my-events:0"
+
 // renderMyEventsDashboard draws the per-viewer table.
 func (s *Server) renderMyEventsDashboard(in *Interaction) (map[string]any, error) {
 	userID, _ := in.actor()

@@ -175,10 +175,18 @@ cannot act is a trap, not an affordance.
 
 ## The personal dashboard
 
-`signup:my-events:0` (on the table's last page and the standing message in the
-dashboard channel) opens an **ephemeral** Components V2 view — the one surface
-that is genuinely per-viewer, because a channel message renders identically for
-everyone and Discord fires no event when someone opens a channel.
+`signup:my-events:0`, on the **standing how-to message**, opens an **ephemeral**
+Components V2 view — the one surface that is genuinely per-viewer, because a
+channel message renders identically for everyone and Discord fires no event when
+someone opens a channel.
+
+It used to sit on the table's last page, which put a control about the reader on
+a message about everybody. The table is about events now, and only events. ⚠️
+This paragraph previously claimed the button was on the table's last page *and*
+the standing message; it was only ever on the table, and the standing message
+carried nothing but **Create an event**. The button is the dashboard's only
+entry point, so moving it had to mean moving it somewhere — deleting it would
+have stranded the whole feature behind nothing.
 
 Each row conditions its buttons on the viewer: **Join** or **Leave** depending
 on whether they are in the event, their own state written on the row ("going",

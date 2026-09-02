@@ -286,17 +286,18 @@ const (
 	eventsPerPage = 5
 )
 
-const (
-	tableRebuildButtonID  = customIDPrefix + ":table-rebuild:0"
-	tableMyEventsButtonID = customIDPrefix + ":my-events:0"
-)
+const tableRebuildButtonID = customIDPrefix + ":table-rebuild:0"
 
 // RenderTablePage draws up to eventsPerPage events as one message: one line of
 // text and one row of buttons each, wrapped in a container.
 //
 // firstIndex numbers the rows continuously across pages, so the second message
 // starts at 7 rather than beginning again at 1.
-func RenderTablePage(events []Event, page, totalPages int, withMyEvents bool) map[string]any {
+//
+// The table is about events, and only events. "My events" used to hang off the
+// last page, which put a control about the viewer on a message about everybody;
+// it lives on the standing how-to message now.
+func RenderTablePage(events []Event, page, totalPages int) map[string]any {
 	body := []any{}
 	// No heading. The channel is called what it is, and a line saying how many
 	// events there are and how they are sorted is a component spent restating
@@ -320,22 +321,6 @@ func RenderTablePage(events []Event, page, totalPages int, withMyEvents bool) ma
 	if totalPages > 1 {
 		body = append(body, textBlock(fmt.Sprintf("-# Page %d of %d", page+1, totalPages)))
 	}
-	// On the last page only, because it is one control for the whole table.
-	// A shared message cannot mark "you are in this one" per viewer — Discord
-	// renders it identically for everyone — so this button is how the question
-	// gets answered: an ephemeral reply, which IS per-viewer.
-	//
-	// It fits the budget: a full page is 35 components and this costs two.
-	if withMyEvents {
-		body = append(body, map[string]any{
-			"type": componentTypeActionRow,
-			"components": []any{map[string]any{
-				"type": componentTypeButton, "style": buttonStyleSecondary,
-				"label": "My events", "custom_id": tableMyEventsButtonID,
-			}},
-		})
-	}
-
 	return map[string]any{
 		"flags": messageFlagComponentsV2,
 		"components": []any{map[string]any{
@@ -474,7 +459,7 @@ func (s *Server) RefreshEventTable(guildID string) error {
 	}
 
 	for i, chunk := range pages {
-		payload := RenderTablePage(chunk, i, len(pages), i == len(pages)-1)
+		payload := RenderTablePage(chunk, i, len(pages))
 		if messageID, ok := byPage[i]; ok {
 			if err := s.discord.EditMessage(table.ChannelID, messageID, payload); err != nil {
 				return fmt.Errorf("edit table page %d: %w", i, err)

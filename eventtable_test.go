@@ -28,7 +28,7 @@ func tableEvents(n int) []Event {
 // in a message. Six fit; seven is COMPONENT_MAX_TOTAL_COMPONENTS_EXCEEDED.
 func TestAPageStaysInsideDiscordsComponentBudget(t *testing.T) {
 	for _, n := range []int{1, 3, eventsPerPage} {
-		payload := RenderTablePage(tableEvents(n), 0, 1, true)
+		payload := RenderTablePage(tableEvents(n), 0, 1)
 		if got := countComponents(payload["components"].([]any)); got > 40 {
 			t.Errorf("%d events render %d components, over Discord's 40", n, got)
 		}
@@ -55,7 +55,7 @@ func countComponents(components []any) int {
 func TestOneTextBlockPerEvent(t *testing.T) {
 	events := tableEvents(3)
 	events[0].Description = "Bring dice."
-	body := RenderTablePage(events, 0, 1, false)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderTablePage(events, 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
 
 	var textBlocks, actionRows int
 	for _, c := range body {
@@ -78,7 +78,7 @@ func TestOneTextBlockPerEvent(t *testing.T) {
 // TestEveryEventCarriesAllFourButtons is what one message per event used to be
 // needed for, and no longer is.
 func TestEveryEventCarriesAllFourButtons(t *testing.T) {
-	body := RenderTablePage(tableEvents(1), 0, 1, false)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderTablePage(tableEvents(1), 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
 	for _, c := range body {
 		m := c.(map[string]any)
 		if m["type"] != componentTypeActionRow {
@@ -106,7 +106,7 @@ func TestEveryEventCarriesAllFourButtons(t *testing.T) {
 func TestClosedEventsLoseJoinAndLeave(t *testing.T) {
 	events := tableEvents(1)
 	events[0].Status = StatusClosed
-	body := RenderTablePage(events, 0, 1, false)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderTablePage(events, 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
 	for _, c := range body {
 		m := c.(map[string]any)
 		if m["type"] != componentTypeActionRow {
@@ -131,7 +131,7 @@ func TestPaginationSpillsPastSixAndNumbersContinuously(t *testing.T) {
 	}
 	// No page carries a heading, including the first.
 	for _, p := range []map[string]any{
-		RenderTablePage(pages[0], 0, 3, false), RenderTablePage(pages[1], 1, 3, true),
+		RenderTablePage(pages[0], 0, 3), RenderTablePage(pages[1], 1, 3),
 	} {
 		body := p["components"].([]any)[0].(map[string]any)["components"].([]any)
 		if strings.Contains(body[0].(map[string]any)["content"].(string), "## Events") {
@@ -349,7 +349,7 @@ func TestCompactWhenKeepsMinutesOnlyWhenTheyMatter(t *testing.T) {
 // TestSeparatorsSitBetweenEventsNotAround pins the divider placement: four
 // separators for five events, none leading or trailing.
 func TestSeparatorsSitBetweenEventsNotAround(t *testing.T) {
-	body := RenderTablePage(tableEvents(5), 0, 1, false)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderTablePage(tableEvents(5), 0, 1)["components"].([]any)[0].(map[string]any)["components"].([]any)
 	var kinds []int
 	for _, c := range body {
 		kinds = append(kinds, int(c.(map[string]any)["type"].(int)))
@@ -368,31 +368,34 @@ func TestSeparatorsSitBetweenEventsNotAround(t *testing.T) {
 	}
 }
 
-// TestMyEventsButtonSitsOnTheLastPageAndFitsTheBudget: a full page is 35
-// components and the button costs two, so even the fullest page carries it.
-func TestMyEventsButtonSitsOnTheLastPageAndFitsTheBudget(t *testing.T) {
-	full := RenderTablePage(tableEvents(eventsPerPage), 1, 2, true)
-	if got := countComponents(full["components"].([]any)); got > 40 {
-		t.Errorf("a full page with the button renders %d components, over 40", got)
-	}
-	var found bool
-	for _, c := range full["components"].([]any)[0].(map[string]any)["components"].([]any) {
-		m := c.(map[string]any)
-		if m["type"] != componentTypeActionRow {
-			continue
-		}
-		for _, b := range m["components"].([]any) {
-			if b.(map[string]any)["custom_id"] == tableMyEventsButtonID {
-				found = true
-			}
+// TestTheTableCarriesNoMyEventsButton. The table is about events; "My events"
+// is about the reader, and a control about the reader on a message everybody
+// sees was always in the wrong place. It lives on the standing how-to message,
+// which TestTheStandingMessageOpensTheDashboard covers.
+func TestTheTableCarriesNoMyEventsButton(t *testing.T) {
+	for _, page := range []map[string]any{
+		RenderTablePage(tableEvents(eventsPerPage), 0, 2),
+		RenderTablePage(tableEvents(eventsPerPage), 1, 2),
+		RenderTablePage(tableEvents(2), 0, 1),
+	} {
+		if strings.Contains(fmt.Sprint(page), myEventsButtonID) {
+			t.Error("a table page still carries the My events button")
 		}
 	}
-	if !found {
-		t.Error("the last page does not carry the My events button")
+}
+
+// TestTheStandingMessageOpensTheDashboard is the other half, and the reason
+// the button had to go somewhere rather than just go: the dashboard has no
+// entry point of its own, so deleting the only button that opens it would
+// strand the whole feature behind nothing.
+func TestTheStandingMessageOpensTheDashboard(t *testing.T) {
+	msg := RenderHowToMessage("board", "America/Los_Angeles")
+	rendered := fmt.Sprint(msg)
+	if !strings.Contains(rendered, myEventsButtonID) {
+		t.Error("the standing how-to message does not open the dashboard")
 	}
-	notLast := RenderTablePage(tableEvents(eventsPerPage), 0, 2, false)
-	if strings.Contains(fmt.Sprint(notLast), tableMyEventsButtonID) {
-		t.Error("a non-last page carries the My events button")
+	if !strings.Contains(rendered, CreateCustomID()) {
+		t.Error("the standing how-to message lost its Create button")
 	}
 }
 
