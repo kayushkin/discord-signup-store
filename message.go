@@ -346,35 +346,17 @@ func (s *Server) notifyPromoted(ev *Event, promoted *Signup) {
 // is broken.
 func RenderHowToMessage(boardChannelID, timezone string) map[string]any {
 	var b strings.Builder
-	b.WriteString("## Making an event\n")
-	b.WriteString("Press **Create an event** below. A form opens with five boxes:\n\n")
-	b.WriteString("**Name** · **Starts** · **Ends** · **Places** · **Location**\n\n")
-	fmt.Fprintf(&b, "Times are read in **%s** and typed however you like — `9/29 5pm`, "+
-		"`14:30`, `1730`, `sept 29 7pm`, `tomorrow 6pm`, `friday noon`. "+
-		"With no am/pm, 1 to 11 means pm, so type `9am` if you mean the morning.\n", timezone)
-	b.WriteString("**Places** is how many people fit — put `0` for no limit.\n\n")
+	b.WriteString("## Events\n")
+	fmt.Fprintf(&b, "**Create an event** — press the button and fill in the form. "+
+		"It appears in <#%s> with **Join** and **Leave**.\n\n", boardChannelID)
+	b.WriteString("**My events** — what you are signed up for, and a way off it.\n\n")
 
-	fmt.Fprintf(&b, "The event then appears in <#%s> with **Join** and **Leave** buttons.\n\n", boardChannelID)
+	b.WriteString("Full events keep a waitlist. If someone drops out, whoever has waited " +
+		"longest moves up and gets a message.\n\n")
 
-	b.WriteString("## What the buttons do\n")
-	b.WriteString("**Join** takes a place. If the event is full you go on the waitlist " +
-		"instead, and you are told your number. When someone drops out the person who has " +
-		"waited longest moves up automatically and gets a message.\n\n")
-	b.WriteString("**Leave** gives your place up. It goes to whoever is next in line.\n\n")
-	b.WriteString("**Edit** changes the event. Only the person who made it, or someone with " +
-		"Manage Events, can use it — everyone else gets a polite no.\n\n")
-
-	b.WriteString("## Discord's own events\n")
-	b.WriteString("An event made through Discord's normal event feature is picked up " +
-		"automatically and gets a card here too. Pressing **Interested** on one signs you up " +
-		"exactly like Join does.\n\n")
-	b.WriteString("⚠️ The two numbers will not match, and they cannot be made to. Discord " +
-		"counts everyone who asked to be notified; the card counts everyone who has a place. " +
-		"Discord has no way to cap its own list or to remove anyone from it, which is why " +
-		"the card exists. **The card is the real roster.**\n\n")
-
-	b.WriteString("Everything else — description, repeating events, roles — is on the web page, " +
-		"because a Discord form holds five boxes and no more.")
+	fmt.Fprintf(&b, "-# Times are in %s and can be typed `9/29 3`, `9/29 3:00`, "+
+		"`9/29 3:00pm`, `tomorrow 6pm` or `friday noon`. No am/pm means pm.\n", timezone)
+	b.WriteString("-# Description, repeating events and roles are on the web page.\n")
 
 	return map[string]any{
 		"content":          b.String(),

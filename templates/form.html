@@ -28,12 +28,13 @@
                placeholder="9/29 8pm" autocomplete="off">
       </div>
     </div>
-    <div class="hint">Typed however you like: <code>9/29 5pm</code>, <code>9/29 3:30am</code>,
-      <code>14:30</code>, <code>1730</code>, <code>sept 29 7pm</code>, <code>tomorrow 6pm</code>,
-      <code>friday noon</code>, <code>2026-09-29 19:00</code>. A time on its own means the next
-      time it comes round; a date on its own means midnight.
-      <strong>With no am/pm, 1 to 11 is read as pm</strong> — type <code>9am</code> if you mean
-      the morning.</div>
+    <div class="hint">Type it any way that reads naturally —
+      <code>9/29 3</code> or <code>9/29 3:00</code> or <code>9/29 3:00pm</code>.
+      Also <code>tomorrow 6pm</code>, <code>friday noon</code>, <code>14:30</code>,
+      <code>sept 29 7pm</code>. A time on its own means the next time it comes round;
+      a date on its own means midnight.
+      <strong>With no am/pm, 1 to 11 means pm</strong> — type <code>9am</code> for the
+      morning.</div>
 
     <label>Timezone <span style="color:var(--bad)">*</span></label>
     <input name="timezone" required list="zones" value="{{.TimezoneValue}}" placeholder="America/Los_Angeles">

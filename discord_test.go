@@ -390,10 +390,13 @@ func TestCreatingFromDiscordAlsoMakesANativeEvent(t *testing.T) {
 	if meta["location"].(string) == "" {
 		t.Error("no location sent; Discord refuses an EXTERNAL event without one")
 	}
-	// The description has to say that Interested does not hold a place, because
-	// the native event's own button cannot be capped or cleared.
-	if desc, _ := payload["description"].(string); !strings.Contains(desc, "does not hold you a place") {
-		t.Errorf("description = %q, want the warning about Interested", desc)
+	// Pressing Interested puts you on the roster — MarkInterested joins you,
+	// waitlisting you if the event is full — so the description has to say so.
+	// It said the opposite for months while the pinned how-to said this, which
+	// is two shipped messages contradicting each other about the one thing
+	// somebody reading a Discord event needs to know.
+	if desc, _ := payload["description"].(string); !strings.Contains(desc, "signs you up") {
+		t.Errorf("description = %q, want it to say Interested signs you up", desc)
 	}
 	if payload["scheduled_end_time"] == nil || payload["scheduled_end_time"] == "" {
 		t.Error("no end time sent; Discord requires one on an EXTERNAL event")

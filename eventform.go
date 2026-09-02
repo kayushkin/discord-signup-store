@@ -138,7 +138,7 @@ func buildEventModal(customID, title string, ev *Event, zone string) map[string]
 		"components": []any{
 			row(modalTextInput(fieldName, "Name", name, "Friday playtest",
 				textInputStyleShort, true, 100)),
-			row(modalTextInput(fieldStartsAt, "Starts — "+zone, starts, "9/29 5pm · 14:30 · tomorrow 6pm",
+			row(modalTextInput(fieldStartsAt, "Starts — "+zone, starts, "9/29 3   or   9/29 3:00   or   9/29 3:00pm",
 				textInputStyleShort, true, 40)),
 			row(modalTextInput(fieldCapacity, "Max attendees — 0 for no limit", capacity, "20",
 				textInputStyleShort, true, 6)),

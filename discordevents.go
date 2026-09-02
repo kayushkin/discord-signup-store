@@ -587,7 +587,7 @@ func signupPointer(ev *Event, boardChannelID string) string {
 		}
 		b.WriteString(")")
 	}
-	b.WriteString(". Pressing Interested here does not hold you a place.")
+	b.WriteString(". Pressing **Interested** here signs you up, same as Join.")
 	return b.String()
 }
 
