@@ -264,7 +264,7 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 	case "create":
 		s.handleCreateButton(w, in)
 	case "details":
-		s.handleDetailsButton(w, eventID)
+		s.handleDetailsButton(w, in, eventID)
 	case "my-events":
 		// The routing bug this fixes: "my-events" matched no case and no
 		// "table-" prefix, so the button shipped answering "Unknown signup
@@ -516,10 +516,11 @@ func (s *Server) handleModalSubmit(w http.ResponseWriter, in *Interaction) {
 	case "create-modal":
 		s.applyCreateForm(w, in, form)
 	case "details-modal":
-		// The details modal holds no inputs, so there is nothing to save. It
-		// still has a submit button — every modal does — and Discord requires
-		// an answer to it.
-		s.replyEphemeral(w, "Nothing to save there. Use **Edit** on the row to change the event.")
+		// A viewer's details modal holds no inputs, so there is nothing to
+		// save. It still has a submit button — every modal does — and Discord
+		// requires an answer to it. Somebody who may edit gets the edit form in
+		// the same modal, which submits as "edit-modal" and never lands here.
+		s.replyEphemeral(w, "Nothing to save — that was just the roster.")
 	default:
 		s.replyEphemeral(w, "That form is not one of mine.")
 	}

@@ -150,3 +150,44 @@ func buildEventModal(customID, title string, ev *Event, zone string) map[string]
 		},
 	}
 }
+
+// buildEditModalWithRoster is the edit form with the roster written above it.
+//
+// One modal instead of two. Somebody changing an event's capacity wants to see
+// who is already on it while they choose the number, and before this they had
+// to open Details, read it, dismiss it and press Edit.
+//
+// The roster is a single Text Display, not one per section. Discord documents
+// no total component limit for modals, and this one already spends five on the
+// inputs, so the summary stays at one rather than finding that limit live.
+func buildEditModalWithRoster(ev *Event, roster []Signup, zone string) map[string]any {
+	modal := buildEventModal(EditModalCustomID(ev.ID), "Edit "+ev.Name, ev, zone)
+
+	attending, waiting := splitRoster(roster)
+	var b strings.Builder
+	if ev.Capacity > 0 {
+		fmt.Fprintf(&b, "**Going — %d of %d**", ev.AttendingCount, ev.Capacity)
+	} else {
+		fmt.Fprintf(&b, "**Going — %d**, no limit", ev.AttendingCount)
+	}
+	if len(attending) == 0 {
+		b.WriteString("\n-# Nobody yet.")
+	} else {
+		b.WriteString("\n" + rosterNames(attending))
+	}
+	if len(waiting) > 0 {
+		fmt.Fprintf(&b, "\n\n**Waitlist — %d**\n%s", len(waiting), rosterNames(waiting))
+	}
+	// Lowering the limit never removes anyone, so somebody typing a smaller
+	// number needs to know it will not — said here, where the number is typed.
+	if ev.AttendingCount > 0 {
+		b.WriteString("\n\n-# Lowering the limit does not remove anyone. Raising it lets " +
+			"the waitlist in, oldest first.")
+	}
+
+	summary := map[string]any{
+		"type": componentTypeTextDisplay, "content": trimTo(b.String(), textDisplayLimit),
+	}
+	modal["components"] = append([]any{summary}, modal["components"].([]any)...)
+	return modal
+}

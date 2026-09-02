@@ -32,6 +32,33 @@ const (
 	rosterTableCharBudget = 3800
 )
 
+// rosterTableHeadline is the event's line, minus everything its forum post's
+// title already says.
+//
+// That title is "[3/8] Board game night — 8/29 4pm", and Discord renders
+// <#post> as exactly those words — so printing the badge, the name and the time
+// beside the link was saying all of it twice and spending the room this table
+// needs for names.
+//
+// Location stays: it is the one thing the title does not carry. An event with
+// no forum post gets the full line, because then there is nothing to click and
+// nothing else saying what it is.
+//
+// ⚠️ The count now reaches the reader through that title, and Discord
+// rate-limits thread renames to about two per ten minutes — so under fast
+// signups the badge can lag. The names below it cannot: they are written into
+// this message, which has no such limit.
+func rosterTableHeadline(ev *Event) string {
+	if ev.ForumPostID == "" {
+		return eventLine(ev)
+	}
+	line := fmt.Sprintf("💬 <#%s>", ev.ForumPostID)
+	if ev.Location != "" {
+		line += "  ·  " + ev.Location
+	}
+	return line
+}
+
 // rosterBlock is one event as it will appear: its text, and what that costs.
 type rosterBlock struct {
 	event      *Event
@@ -50,7 +77,7 @@ func buildRosterBlock(ev *Event, roster []Signup, first bool) rosterBlock {
 	attending, waiting := splitRoster(roster)
 
 	var b strings.Builder
-	b.WriteString(eventLine(ev))
+	b.WriteString(rosterTableHeadline(ev))
 	// Generous per-line budgets: the packer's job is to decide how many blocks
 	// fit in a message, and a single block only needs trimming when one event
 	// alone would fill one.
@@ -66,7 +93,7 @@ func buildRosterBlock(ev *Event, roster []Signup, first bool) rosterBlock {
 
 	// One text block, one action row, its buttons, and the separator that
 	// divides this block from the one above it.
-	components := 2 + len(eventButtons(ev))
+	components := 2 + len(rosterTableButtons(ev))
 	if !first {
 		components++
 	}
@@ -121,7 +148,7 @@ func RenderRosterTablePage(page []rosterBlock, index, total int) map[string]any 
 		}
 		body = append(body, textBlock(block.text))
 		body = append(body, map[string]any{
-			"type": componentTypeActionRow, "components": eventButtons(block.event),
+			"type": componentTypeActionRow, "components": rosterTableButtons(block.event),
 		})
 	}
 	if total > 1 {
@@ -138,6 +165,24 @@ func RenderRosterTablePage(page []rosterBlock, index, total int) map[string]any 
 		// ping anybody. This message is rewritten on every signup.
 		"allowed_mentions": map[string]any{"parse": []string{}},
 	}
+}
+
+// rosterTableButtons drops Edit, because Details is the edit form now for
+// anybody allowed to use it. One button fewer per row is also one component
+// fewer, which is more events per message.
+func rosterTableButtons(ev *Event) []any {
+	buttons := []any{}
+	if ev.Status == StatusOpen {
+		buttons = append(buttons,
+			map[string]any{"type": componentTypeButton, "style": buttonStylePrimary,
+				"label": "Join", "custom_id": JoinCustomID(ev.ID)},
+			map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+				"label": "Leave", "custom_id": LeaveCustomID(ev.ID)})
+	}
+	buttons = append(buttons,
+		map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+			"label": "Details", "custom_id": DetailsCustomID(ev.ID)})
+	return buttons
 }
 
 // RefreshRosterTable rewrites the roster table in place.

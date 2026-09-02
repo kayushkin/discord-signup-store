@@ -139,3 +139,58 @@ func TestTheWaitlistIsNamedSeparately(t *testing.T) {
 		t.Errorf("block = %q, want the waitlist named separately", text)
 	}
 }
+
+// TestARowSaysNothingItsThreadTitleAlreadySays. The forum post title is
+// "[3/8] Board game night — 8/29 4pm" and Discord renders <#post> as exactly
+// those words, so printing them beside the link said all of it twice and spent
+// the room this table needs for names.
+func TestARowSaysNothingItsThreadTitleAlreadySays(t *testing.T) {
+	ev := &Event{ID: 1, GuildID: "g1", Name: "Board game night", Status: StatusOpen,
+		Capacity: 8, AttendingCount: 3, Location: "The shed", ForumPostID: "post-9",
+		StartsAt: time.Now().Add(30 * time.Hour).Unix()}
+
+	block := buildRosterBlock(ev, rosterOf("Al", "Bo", "Cy"), true)
+	if !strings.Contains(block.text, "<#post-9>") {
+		t.Errorf("row = %q, want it to link the thread", block.text)
+	}
+	if strings.Contains(block.text, "Board game night") {
+		t.Errorf("row = %q, repeats the name the thread title already carries", block.text)
+	}
+	if strings.Contains(block.text, "3/8") {
+		t.Errorf("row = %q, repeats the badge the thread title already carries", block.text)
+	}
+	// Location is the one thing the title does not hold.
+	if !strings.Contains(block.text, "The shed") {
+		t.Errorf("row = %q, want the location kept", block.text)
+	}
+	if !strings.Contains(block.text, "Going: Al, Bo, Cy") {
+		t.Errorf("row = %q, want the names", block.text)
+	}
+}
+
+// TestAnEventWithNoThreadStillSaysWhatItIs: with nothing to click, the link
+// would be the only content and there would be none.
+func TestAnEventWithNoThreadStillSaysWhatItIs(t *testing.T) {
+	ev := &Event{ID: 1, GuildID: "g1", Name: "Unlinked", Status: StatusOpen,
+		Capacity: 4, AttendingCount: 1, StartsAt: time.Now().Add(30 * time.Hour).Unix()}
+	block := buildRosterBlock(ev, rosterOf("Al"), true)
+	if !strings.Contains(block.text, "Unlinked") {
+		t.Errorf("row = %q, want the full line when there is no thread to link", block.text)
+	}
+}
+
+// TestTheRosterTableHasNoEditButton. Details is the edit form now for anybody
+// allowed to use it, so a second button would open the same thing.
+func TestTheRosterTableHasNoEditButton(t *testing.T) {
+	ev := &Event{ID: 1, GuildID: "g1", Name: "Games", Status: StatusOpen}
+	labels := []string{}
+	for _, b := range rosterTableButtons(ev) {
+		labels = append(labels, b.(map[string]any)["label"].(string))
+	}
+	if strings.Contains(strings.Join(labels, ","), "Edit") {
+		t.Errorf("buttons = %v, want Details to cover editing", labels)
+	}
+	if len(labels) != 3 {
+		t.Errorf("buttons = %v, want Join, Leave and Details", labels)
+	}
+}

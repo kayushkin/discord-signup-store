@@ -207,7 +207,7 @@ func TestDetailsModalIsAllReadOnlyText(t *testing.T) {
 		{DiscordUserID: "2", DisplayName: "Bob", State: StateAttending},
 		{DiscordUserID: "3", DisplayName: "Carol", State: StateWaitlisted, WaitlistPlace: 1},
 	}
-	modal := buildDetailsModal(ev, roster)
+	modal := buildDetailsModal(ev, roster, false, "America/Los_Angeles")
 
 	components := modal["components"].([]any)
 	if len(components) == 0 || len(components) > 5 {
@@ -238,7 +238,7 @@ func TestDetailsModalReadsDescriptionThenGoingThenWaitlist(t *testing.T) {
 		{DiscordUserID: "2", DisplayName: "Bob", State: StateAttending},
 		{DiscordUserID: "3", DisplayName: "Carol", State: StateWaitlisted, WaitlistPlace: 1},
 	}
-	blocks := buildDetailsModal(ev, roster)["components"].([]any)
+	blocks := buildDetailsModal(ev, roster, false, "America/Los_Angeles")["components"].([]any)
 	var contents []string
 	for _, c := range blocks {
 		contents = append(contents, c.(map[string]any)["content"].(string))
@@ -263,7 +263,7 @@ func TestDetailsModalListsNamesNotMentions(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
 	roster := []Signup{{DiscordUserID: "110122051179687936", DisplayName: "Slava",
 		State: StateAttending}}
-	for _, c := range buildDetailsModal(ev, roster)["components"].([]any) {
+	for _, c := range buildDetailsModal(ev, roster, false, "America/Los_Angeles")["components"].([]any) {
 		content := c.(map[string]any)["content"].(string)
 		if strings.Contains(content, "<@") {
 			t.Errorf("a block contains a mention, which a modal shows as a raw id: %q", content)
@@ -274,7 +274,7 @@ func TestDetailsModalListsNamesNotMentions(t *testing.T) {
 // TestDetailsModalOmitsAnEmptyWaitlist keeps a permanently blank heading out.
 func TestDetailsModalOmitsAnEmptyWaitlist(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
-	for _, c := range buildDetailsModal(ev, nil)["components"].([]any) {
+	for _, c := range buildDetailsModal(ev, nil, false, "America/Los_Angeles")["components"].([]any) {
 		if strings.Contains(c.(map[string]any)["content"].(string), "Waitlist") {
 			t.Error("an empty waitlist still got a heading")
 		}
@@ -474,7 +474,7 @@ func TestTheDetailsListStartsOnItsOwnLine(t *testing.T) {
 	}
 
 	var going, waitlist string
-	for _, c := range buildDetailsModal(ev, roster)["components"].([]any) {
+	for _, c := range buildDetailsModal(ev, roster, false, "America/Los_Angeles")["components"].([]any) {
 		content := c.(map[string]any)["content"].(string)
 		switch {
 		case strings.HasPrefix(content, "**Going"):

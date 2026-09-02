@@ -139,7 +139,22 @@ const textDisplayLimit = 4000
 // buildDetailsModal deliberately carries NO forum reference, unlike every
 // other surface: a modal resolves neither <#…> mentions nor markdown links, so
 // the reference would render as dead text — a raw id in angle brackets.
-func buildDetailsModal(ev *Event, roster []Signup) map[string]any {
+// buildDetailsModal renders an event for somebody looking at it, and for
+// somebody about to change it.
+//
+// An editor gets ONE text block rather than the three a viewer gets. Discord
+// documents no total component limit for modals — only messages have the
+// documented 40 — so the editor's version, which must carry five text inputs
+// whatever else it holds, keeps everything else to a single block instead of
+// discovering that limit in production.
+func buildDetailsModal(ev *Event, roster []Signup, canEdit bool, zone string) map[string]any {
+	if canEdit {
+		return buildEditModalWithRoster(ev, roster, zone)
+	}
+	return buildViewOnlyDetailsModal(ev, roster)
+}
+
+func buildViewOnlyDetailsModal(ev *Event, roster []Signup) map[string]any {
 	text := func(content string) map[string]any {
 		return map[string]any{"type": componentTypeTextDisplay, "content": trimTo(content, textDisplayLimit)}
 	}
@@ -245,7 +260,20 @@ func trimTo(s string, max int) string {
 }
 
 // handleDetailsButton opens the details modal.
-func (s *Server) handleDetailsButton(w http.ResponseWriter, eventID int64) {
+// handleDetailsButton opens the one modal that both shows an event and edits
+// it.
+//
+// Two modals used to do this and the split was arbitrary from where somebody
+// was standing: Details said who is going, Edit changed the event, and anybody
+// allowed to do the second wanted the first in front of them while they did it.
+// Now there is one button. What it opens depends on whether the person pressing
+// may edit — Discord renders a component to everybody or nobody, so the check
+// has to happen on the press, and this is the press.
+//
+// Buttons cannot go in a modal at all (Discord lists Button as message-only),
+// which is why this merges the two modals rather than putting Edit inside
+// Details.
+func (s *Server) handleDetailsButton(w http.ResponseWriter, in *Interaction, eventID int64) {
 	ev, err := s.store.GetEvent(eventID)
 	if err != nil {
 		s.replyEphemeral(w, "That event no longer exists.")
@@ -255,9 +283,14 @@ func (s *Server) handleDetailsButton(w http.ResponseWriter, eventID int64) {
 	if err != nil {
 		log.Printf("[discord-signup] roster for details of %d: %v", ev.ID, err)
 	}
+	canEdit, _ := s.mayEdit(in, ev)
+	zone := ev.Timezone
+	if zone == "" {
+		zone = s.DefaultTimezone()
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"type": callbackTypeModal,
-		"data": buildDetailsModal(ev, roster),
+		"data": buildDetailsModal(ev, roster, canEdit, zone),
 	})
 }
 
