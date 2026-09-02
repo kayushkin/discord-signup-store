@@ -65,8 +65,18 @@ func NewDiscordClient(baseURL string, resolve TokenResolver) *DiscordClient {
 // is a static secret, not an OAuth grant, so there is nothing to refresh.
 func AuthStoreTokenResolver(authStoreURL, authStoreToken, provider, account string) TokenResolver {
 	return func() (string, error) {
-		url := fmt.Sprintf("%s/api/resolve/%s?account=%s", authStoreURL, provider, account)
-		req, err := http.NewRequest(http.MethodGet, url, nil)
+		// Two values in two positions, and they need different repairs.
+		// provider is a path segment, where an unescaped slash silently
+		// becomes a route rather than a name; account is a query value,
+		// where PathEscape would be the wrong repair because it leaves "&"
+		// alone and a second parameter appears. Both are operator-supplied
+		// through the environment today, which is a reason they are not
+		// urgent and not a reason to concatenate them.
+		target := fmt.Sprintf("%s/api/resolve/%s?%s",
+			authStoreURL,
+			url.PathEscape(provider),
+			url.Values{"account": {account}}.Encode())
+		req, err := http.NewRequest(http.MethodGet, target, nil)
 		if err != nil {
 			return "", err
 		}
