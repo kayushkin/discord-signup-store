@@ -230,7 +230,7 @@ func TestLeavingByButtonClearsTheReaction(t *testing.T) {
 		t.Fatalf("leave: %v", err)
 	}
 	fresh, _ := store.GetEvent(ev.ID)
-	srv.syncAfterChange(fresh, []stateChange{{UserID: "alice", State: StateWithdrawn}})
+	srv.syncAfterChange(fresh.ID, []stateChange{{UserID: "alice", State: StateWithdrawn}})
 
 	var cleared bool
 	for _, c := range fake.recorded() {

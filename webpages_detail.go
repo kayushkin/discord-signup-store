@@ -142,37 +142,21 @@ func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		AttendingRoleID: strPtr(r.FormValue("attending_role_id")),
 		WaitlistRoleID:  strPtr(r.FormValue("waitlist_role_id")),
 	}
-	if _, err := s.store.UpdateEvent(ev.ID, patch); err != nil {
+	// Raising the limit here does exactly what raising it from Discord does,
+	// because it is now the same function rather than a second copy of the
+	// rule. The copy is what went wrong: it promoted people and redrew the
+	// card, and never pushed the native scheduled event, so a name or a limit
+	// changed on this page left Discord's own title stale until the next
+	// signup happened to push it.
+	_, promoted, err := s.applyEventEdit(ev, patch, "web:"+session.DiscordUserID)
+	if err != nil {
 		s.webFormError(w, session, ev, err)
 		return
 	}
-
-	// Raising the limit here must do exactly what raising it from Discord does.
-	// Two surfaces onto the same rule, so the rule lives in one place and both
-	// call it rather than each growing its own version.
 	notice := "Saved."
-	if capacity == 0 || capacity > ev.Capacity {
-		promoted, err := s.store.PromoteToFillCapacity(ev.ID)
-		if err != nil {
-			log.Printf("[discord-signup] promote after web edit %d: %v", ev.ID, err)
-		}
-		if len(promoted) > 0 {
-			after, err := s.store.GetEvent(ev.ID)
-			if err == nil {
-				changes := make([]stateChange, 0, len(promoted))
-				for i := range promoted {
-					changes = append(changes, stateChange{
-						UserID: promoted[i].DiscordUserID, State: StateAttending})
-					go s.notifyPromoted(after, &promoted[i])
-				}
-				go s.syncAfterChange(after, changes)
-			}
-			notice = fmt.Sprintf("Saved. %d came off the waitlist and have been messaged.",
-				len(promoted))
-		}
-	}
-	if err := s.RefreshSignupMessage(ev.ID); err != nil {
-		log.Printf("[discord-signup] refresh after web edit %d: %v", ev.ID, err)
+	if len(promoted) > 0 {
+		notice = fmt.Sprintf("Saved. %d came off the waitlist and have been messaged.",
+			len(promoted))
 	}
 	s.redirectWithNotice(w, r, ev.ID, notice)
 }
@@ -227,7 +211,7 @@ func (s *Server) handleWebRosterRemove(w http.ResponseWriter, r *http.Request) {
 		notice = "Removed. The next person on the waitlist moved up and was messaged."
 		go s.notifyPromoted(ev, result.Promoted)
 	}
-	go s.syncAfterChange(ev, changes)
+	go s.syncAfterChange(ev.ID, changes)
 	s.redirectWithNotice(w, r, ev.ID, notice)
 }
 
@@ -251,7 +235,7 @@ func (s *Server) handleWebRosterAdd(w http.ResponseWriter, r *http.Request) {
 		s.redirectWithNotice(w, r, ev.ID, "Could not add them: "+err.Error())
 		return
 	}
-	go s.syncAfterChange(ev, []stateChange{{UserID: userID, State: result.Signup.State}})
+	go s.syncAfterChange(ev.ID, []stateChange{{UserID: userID, State: result.Signup.State}})
 	notice := "Added."
 	if result.Signup.State == StateWaitlisted {
 		notice = fmt.Sprintf("Event is full, so they went on the waitlist at number %d.",

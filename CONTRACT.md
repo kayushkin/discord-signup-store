@@ -103,6 +103,11 @@ separate requests and nothing stops the second arriving alone.
 Raising a limit promotes people off the waitlist in arrival order and messages
 each of them. Lowering it promotes nobody and removes nobody.
 
+That holds on **every** surface — the Discord form, the web page and
+`PATCH /api/events/{id}` — because all three run the same edit path. That path
+also republishes every copy of the event afterwards: the signup card, the table
+row, the forum post, and the count in the native scheduled event's title.
+
 ## The consolidated table
 
 **Five events per message**, each one line of text plus a row of

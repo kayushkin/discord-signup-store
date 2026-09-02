@@ -152,47 +152,59 @@ func (s *Server) SetCapacity(eventID int64, capacity int, actor string) (*Event,
 	if err != nil {
 		return nil, nil, err
 	}
-	if _, err := s.store.UpdateEvent(eventID, EventPatch{Capacity: &capacity}); err != nil {
+	log.Printf("[discord-signup] capacity of event %d set to %d by %s", eventID, capacity, actor)
+	return s.applyEventEdit(before, EventPatch{Capacity: &capacity}, actor)
+}
+
+// applyEventEdit saves a patch, settles whoever a raised capacity lets in, and
+// publishes the result to every copy of the event.
+//
+// The one path every edit takes. The three surfaces collect different fields —
+// the Discord modal has no end time, the web form has no recurrence box, the
+// capacity command has one number — so each builds its own patch, but what
+// happens after the save is identical for all of them and lives here.
+//
+// It lives in one function because the alternative was tried: the web form
+// carried its own partial copy that promoted people and redrew the card, and
+// silently never touched the native scheduled event. Its title kept whatever
+// count it had at the last signup, so raising a limit from the web page left
+// Discord telling the server "[3/8]" while the card underneath said 3/10.
+func (s *Server) applyEventEdit(before *Event, patch EventPatch, actor string) (*Event, []Signup, error) {
+	if _, err := s.store.UpdateEvent(before.ID, patch); err != nil {
 		return nil, nil, err
 	}
 
 	var promoted []Signup
 	// Only a raise can free places. Lowering never demotes anyone — see the
-	// note on UpdateEvent — so there is nothing to settle.
-	if capacity == 0 || capacity > before.Capacity {
-		promoted, err = s.store.PromoteToFillCapacity(eventID)
+	// note on UpdateEvent — so there is nothing to settle. A patch that does
+	// not carry a capacity at all has not changed one.
+	if patch.Capacity != nil && (*patch.Capacity == 0 || *patch.Capacity > before.Capacity) {
+		var err error
+		promoted, err = s.store.PromoteToFillCapacity(before.ID)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 
-	after, err := s.store.GetEvent(eventID)
+	after, err := s.store.GetEvent(before.ID)
 	if err != nil {
 		return nil, nil, err
 	}
-	log.Printf("[discord-signup] capacity of event %d set to %d by %s; %d promoted",
-		eventID, capacity, actor, len(promoted))
+	log.Printf("[discord-signup] event %d edited by %s; %d promoted", before.ID, actor, len(promoted))
 
 	changes := make([]stateChange, 0, len(promoted))
 	for _, sg := range promoted {
 		changes = append(changes, stateChange{UserID: sg.DiscordUserID, State: StateAttending})
 	}
-	// Roles and the card in one pass; the card refreshes even when nobody moved,
-	// because the number printed on it has changed.
-	// syncAfterChange refreshes the card AND the table, so an edit that moved
-	// nobody still redraws both.
-	go s.syncAfterChange(after, changes)
+	// One call covers the roles, the card, the table row, the forum post and
+	// the native event's title. It runs even when nobody moved, because a
+	// rename or a new limit changes what all five of them say. After the reply,
+	// like the DMs below: the person editing must not wait on Discord, and a
+	// copy failing to update must not make a saved edit look failed.
+	go s.syncAfterChange(after.ID, changes)
 	for i := range promoted {
 		go s.notifyPromoted(after, &promoted[i])
 	}
-	// Keep the native event in step. After the reply, like the roles and the
-	// card: the person editing must not wait on Discord, and a copy failing to
-	// update must not make a saved edit look failed.
-	go func() {
-		if err := s.PushEditToDiscord(after); err != nil {
-			log.Printf("[discord-signup] push edit of event %d to discord: %v", after.ID, err)
-		}
-	}()
 	return after, promoted, nil
 }
 
@@ -219,33 +231,7 @@ func (s *Server) ApplyEventForm(before *Event, values *EventFormResult, zone, ac
 	if before.Timezone == "" {
 		patch.Timezone = &zone
 	}
-	if _, err := s.store.UpdateEvent(before.ID, patch); err != nil {
-		return nil, nil, err
-	}
-
-	var promoted []Signup
-	if values.Capacity == 0 || values.Capacity > before.Capacity {
-		var err error
-		promoted, err = s.store.PromoteToFillCapacity(before.ID)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	after, err := s.store.GetEvent(before.ID)
-	if err != nil {
-		return nil, nil, err
-	}
-	log.Printf("[discord-signup] event %d edited by %s; %d promoted", before.ID, actor, len(promoted))
-
-	changes := make([]stateChange, 0, len(promoted))
-	for _, sg := range promoted {
-		changes = append(changes, stateChange{UserID: sg.DiscordUserID, State: StateAttending})
-	}
-	go s.syncAfterChange(after, changes)
-	for i := range promoted {
-		go s.notifyPromoted(after, &promoted[i])
-	}
-	return after, promoted, nil
+	return s.applyEventEdit(before, patch, actor)
 }
 
 // moveCardToPastEvents takes a finished event's card off the board and puts a

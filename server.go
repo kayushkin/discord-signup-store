@@ -330,22 +330,20 @@ func (s *Server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "malformed JSON: " + err.Error()})
 		return
 	}
-	ev, err := s.store.UpdateEvent(id, patch)
+	before, err := s.store.GetEvent(id)
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
-	// Capacity or status may have changed, so the public message is now stale —
-	// and so is the native event, which an API edit never used to reach: the
-	// modal and the web form pushed, this path silently did not.
-	go func() {
-		if err := s.RefreshSignupMessage(id); err != nil {
-			log.Printf("[discord-signup] refresh after update event=%d: %v", id, err)
-		}
-		if err := s.PushEditToDiscord(ev); err != nil {
-			log.Printf("[discord-signup] push after update event=%d: %v", id, err)
-		}
-	}()
+	// The third copy of the edit rule, and now the same one the Discord modal
+	// and the web form take. On its own it saved the row, refreshed the card
+	// and pushed the title — and promoted nobody, so raising a limit through
+	// the API left the waitlist sitting behind places that were already free.
+	ev, _, err := s.applyEventEdit(before, patch, "api")
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, ev)
 }
 
@@ -430,9 +428,7 @@ func (s *Server) handleAdminJoin(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	if ev, err := s.store.GetEvent(id); err == nil {
-		go s.syncAfterChange(ev, []stateChange{{UserID: in.DiscordUserID, State: result.Signup.State}})
-	}
+	go s.syncAfterChange(id, []stateChange{{UserID: in.DiscordUserID, State: result.Signup.State}})
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -457,7 +453,7 @@ func (s *Server) handleAdminLeave(w http.ResponseWriter, r *http.Request) {
 		if result.Promoted != nil {
 			changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
 		}
-		go s.syncAfterChange(ev, changes)
+		go s.syncAfterChange(id, changes)
 		if result.Promoted != nil {
 			go s.notifyPromoted(ev, result.Promoted)
 		}
