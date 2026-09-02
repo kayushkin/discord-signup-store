@@ -221,7 +221,9 @@ name once, and joined by id ever after. Every live event then gets a post.
 A forum post is a thread whose required first message **shares the thread's
 id**. That message is `RenderSignupMessage` verbatim — the same card and the
 same button custom_ids as the board, so one handler serves both surfaces. The
-post's title carries the capacity badge (`[3/8] Games — 8/29 4pm`) and its tag
+post's title carries `[Full]` when there is no room or the limit when there is
+(`Games — 8/29 4pm · 8 places`) — never a live count, since renames are
+rate-limited — and its tag
 flips with the roster; the sweep tags `finished` and archives.
 
 ⚠️ Discord rate-limits **thread renames** to roughly two per ten minutes per
