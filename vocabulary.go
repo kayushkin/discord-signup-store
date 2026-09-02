@@ -146,6 +146,9 @@ const (
 	JoinedViaInterested = "interested"
 	// JoinedViaOperator is a person added through the web page or the API.
 	JoinedViaOperator = "operator"
+	// JoinedViaOrganiser is the person who filled in the create form. They are
+	// put on their own roster automatically; they never pressed anything.
+	JoinedViaOrganiser = "organiser"
 	// JoinedViaReaction is the ✅ on a forum post — clickable from the forum's
 	// list view without opening the post, which is the point of it.
 	JoinedViaReaction = "reaction"
@@ -155,6 +158,7 @@ var validJoinedVia = map[string]bool{
 	JoinedViaButton:     true,
 	JoinedViaInterested: true,
 	JoinedViaOperator:   true,
+	JoinedViaOrganiser:  true,
 	JoinedViaReaction:   true,
 }
 

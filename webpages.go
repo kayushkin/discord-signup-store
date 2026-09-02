@@ -326,7 +326,7 @@ func (s *Server) handleWebCreateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	capacity, _ := strconv.Atoi(r.FormValue("capacity"))
 
-	ev, err := s.store.CreateEvent(Event{
+	ev, err := s.createEventAndJoinOrganiser(Event{
 		GuildID:         guildID,
 		ChannelID:       s.boardChannelID,
 		Name:            r.FormValue("name"),
@@ -341,7 +341,7 @@ func (s *Server) handleWebCreateEvent(w http.ResponseWriter, r *http.Request) {
 		WaitlistRoleID:  r.FormValue("waitlist_role_id"),
 		Origin:          OriginLocal,
 		CreatedBy:       session.DiscordUserID,
-	})
+	}, session.DisplayName)
 	if err != nil {
 		s.renderFormError(w, session, nil, err)
 		return

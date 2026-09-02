@@ -115,6 +115,14 @@ saving it unchanged would move it. That pairing is the contract between the
 parser and the renderer, and `TestEveryRenderedTimeSurvivesBeingReadBack` holds
 it.
 
+Whoever fills in the form is **put on their own roster** as they create it,
+`joined_via = organiser` — they are going to their own event, and an organiser
+who forgets to press Join leaves a card reading "0 places taken" under an event
+they are running. It applies to the Discord form and the web form, and
+deliberately not to an event imported from a native Discord one (its creator
+made a Discord event, not a roster) nor to `POST /api/events` (`created_by`
+there is whatever a script sent, and a script is not going).
+
 `signup:capacity:{id}` is still accepted, because cards posted before the button
 was widened are sitting in channels and their button must keep working.
 

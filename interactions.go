@@ -571,8 +571,8 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 		s.replyEphemeral(w, plainError(err))
 		return
 	}
-	userID, _ := in.actor()
-	ev, err := s.store.CreateEvent(Event{
+	userID, displayName := in.actor()
+	ev, err := s.createEventAndJoinOrganiser(Event{
 		GuildID:     in.GuildID,
 		ChannelID:   s.BoardChannelID(),
 		Name:        values.Name,
@@ -583,7 +583,7 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 		Timezone:    zone,
 		Origin:      OriginLocal,
 		CreatedBy:   userID,
-	})
+	}, displayName)
 	if err != nil {
 		log.Printf("[discord-signup] create from discord: %v", err)
 		s.replyEphemeral(w, plainError(err))
