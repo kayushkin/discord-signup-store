@@ -78,6 +78,10 @@ type pageData struct {
 }
 
 var templates = template.Must(template.New("").Funcs(template.FuncMap{
+	// add turns a zero-based range index into a place in line. The roster comes
+	// back in arrival order, so the number IS the row's position and does not
+	// need storing beside it.
+	"add": func(a, b int) int { return a + b },
 	// localTime emits the instant and lets the browser format it.
 	//
 	// The server does not know the reader's timezone and must not guess: an

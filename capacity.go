@@ -61,9 +61,9 @@ func (s *Store) PromoteToFillCapacity(eventID int64) ([]Signup, error) {
 		}
 	}
 
-	query := `SELECT id, event_id, discord_user_id, display_name, position, state, signed_up_at,
+	query := `SELECT id, event_id, discord_user_id, display_name, state, signed_up_at,
 	                 state_changed_at, joined_via, discord_interested
-	          FROM signups WHERE event_id = ? AND state = ? ORDER BY position ASC`
+	          FROM signups WHERE event_id = ? AND state = ? ORDER BY signed_up_at ASC, id ASC`
 	args := []any{eventID, StateWaitlisted}
 	if free >= 0 {
 		query += ` LIMIT ?`
@@ -77,7 +77,7 @@ func (s *Store) PromoteToFillCapacity(eventID int64) ([]Signup, error) {
 	for rows.Next() {
 		var sg Signup
 		if err := rows.Scan(&sg.ID, &sg.EventID, &sg.DiscordUserID, &sg.DisplayName,
-			&sg.Position, &sg.State, &sg.SignedUpAt, &sg.StateChangedAt,
+			&sg.State, &sg.SignedUpAt, &sg.StateChangedAt,
 			&sg.JoinedVia, &sg.DiscordInterested); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("scan waitlisted: %w", err)
@@ -96,7 +96,7 @@ func (s *Store) PromoteToFillCapacity(eventID int64) ([]Signup, error) {
 			return nil, fmt.Errorf("promote signup %d: %w", promoting[i].ID, err)
 		}
 		if err := logSignupUpdate(tx, eventID, promoting[i].DiscordUserID, ActionPromoted,
-			StateWaitlisted, StateAttending, promoting[i].Position, ActorPromotion, ts); err != nil {
+			StateWaitlisted, StateAttending, ActorPromotion, ts); err != nil {
 			return nil, err
 		}
 		promoting[i].State = StateAttending

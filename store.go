@@ -101,7 +101,6 @@ type Signup struct {
 	DiscordUserID string `json:"discord_user_id"`
 	// DisplayName is display only. Never join on it.
 	DisplayName    string `json:"display_name"`
-	Position       int    `json:"position"`
 	State          string `json:"state"`
 	SignedUpAt     int64  `json:"signed_up_at"`
 	StateChangedAt int64  `json:"state_changed_at"`
@@ -131,7 +130,6 @@ type SignupUpdate struct {
 	Action        string `json:"action"`
 	FromState     string `json:"from_state"`
 	ToState       string `json:"to_state"`
-	Position      int    `json:"position"`
 	Actor         string `json:"actor"`
 	At            int64  `json:"at"`
 	// DisplayName is joined on read from the signup row, never stored on this
@@ -208,6 +206,10 @@ func Open(dataDir string) (*Store, error) {
 		return nil, err
 	}
 	if err := ensureColumns(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := dropRetiredColumns(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -366,6 +368,51 @@ func tableExists(db *sql.DB, name string) (bool, error) {
 		return false, fmt.Errorf("look for table %s: %w", name, err)
 	}
 	return n > 0, nil
+}
+
+// columnsRetired are columns this service used to keep and no longer reads.
+//
+// Each names the indexes that mention it, because SQLite refuses to drop a
+// column an index depends on. They are dropped first and the schema recreates
+// them on the next boot — or rather, has already recreated them, since
+// schema.sql runs before this does and its CREATE INDEX IF NOT EXISTS is a
+// no-op only while the old index still exists. So the order here matters: drop
+// the index, drop the column, create the index back.
+var columnsRetired = []struct {
+	table, column string
+	indexes       []struct{ name, definition string }
+}{
+	{"signups", "position", []struct{ name, definition string }{
+		{"idx_signups_roster", "CREATE INDEX idx_signups_roster ON signups(event_id, state, signed_up_at, id)"},
+	}},
+	{"signup_updates", "position", nil},
+}
+
+func dropRetiredColumns(db *sql.DB) error {
+	for _, c := range columnsRetired {
+		have, err := columnExists(db, c.table, c.column)
+		if err != nil {
+			return err
+		}
+		if !have {
+			continue
+		}
+		for _, idx := range c.indexes {
+			if _, err := db.Exec("DROP INDEX IF EXISTS " + idx.name); err != nil {
+				return fmt.Errorf("drop index %s: %w", idx.name, err)
+			}
+		}
+		if _, err := db.Exec("ALTER TABLE " + c.table + " DROP COLUMN " + c.column); err != nil {
+			return fmt.Errorf("drop column %s.%s: %w", c.table, c.column, err)
+		}
+		for _, idx := range c.indexes {
+			if _, err := db.Exec(idx.definition); err != nil {
+				return fmt.Errorf("recreate index %s: %w", idx.name, err)
+			}
+		}
+		log.Printf("[discord-signup] dropped column %s.%s", c.table, c.column)
+	}
+	return nil
 }
 
 func dropRetiredTables(db *sql.DB) error {

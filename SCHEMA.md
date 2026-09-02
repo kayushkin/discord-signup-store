@@ -75,16 +75,31 @@ computed at read time and never stored.
 | `event_id` | INTEGER | → `events(id)`, **ON DELETE CASCADE**. |
 | `discord_user_id` | TEXT | The person. The only thing joined on. |
 | `display_name` | TEXT | Carried for display only, never read back to find a row. Names collide; ids do not. |
-| `position` | INTEGER | **Arrival order, and it exists nowhere else.** Discord's `/scheduled-events/{id}/users` returns users ascending by snowflake — account-creation order — so a waitlist rebuilt from Discord would sort the oldest accounts to the front. |
 | `state` | TEXT | `attending`, `waitlisted` or `withdrawn`. A withdrawn row is kept, not deleted, so rejoining is distinguishable from never having left. |
-| `signed_up_at` | INTEGER | First arrival. |
+| `signed_up_at` | INTEGER | Arrival, and **half the ordering key**: the roster is `ORDER BY signed_up_at, id`. Reset on a rejoin, which is what sends a rejoiner to the back. |
 | `state_changed_at` | INTEGER | Last move between states. |
 | `joined_via` | TEXT | How they got on: `button`, `interested`, `reaction`, `operator` or `organiser`. Not cosmetic — it is what makes an un-marked Interested readable as leaving rather than as noise. |
 | `discord_interested` | INTEGER | Whether Discord currently lists them as Interested. Recorded even when the roster does not move, because without it un-marking and re-marking is indistinguishable from a duplicate event. |
 
 **`UNIQUE(event_id, discord_user_id)`** — one row per person per event, enforced
 by the database rather than by the code that inserts. Index
-`(event_id, state, position)` is the roster read.
+`(event_id, state, signed_up_at, id)` is the roster read.
+
+⚠️ **There is no `position` column** — dropped 2026-09-02. It held arrival order
+as a number, which was a second copy of what `signed_up_at` already said and
+able to disagree with it; the rule that rejoining sends you to the back was
+written twice, bumping the position *and* resetting the timestamp. Order is now
+`(signed_up_at, id)`. Checked against every event in the live database before
+the column went: **15 events, 0 where the derived order differed from the stored
+one.**
+
+`id` is not decoration. `signed_up_at` is accurate to the second and two rows on
+one event already share a second here, so the id breaks the tie. That is also
+why a **rejoin deletes its row and inserts a new one** rather than updating in
+place: an updated row keeps its old, lower id and would sort a rejoiner *ahead*
+of somebody who never left whenever both landed in the same second — which is
+the common case, a leave and a rejoin being two clicks. `discord_interested` is
+carried across, being a fact about Discord's list rather than about the row.
 
 ---
 
@@ -100,7 +115,6 @@ Append-only. Never updated, never deleted except by cascade.
 | `action` | TEXT | `joined`, `waitlisted`, `withdrew`, `promoted`, `rejoined`. |
 | `from_state` | TEXT | `''` when there was no prior row. |
 | `to_state` | TEXT | Where they landed. |
-| `position` | INTEGER | Their place at the time. |
 | `actor` | TEXT | Who caused it: `user` for a press, `promotion` for an automatic move, `reaction`, or an operator's own id. Without this an automatic promotion and an admin's manual add are the same row. |
 | `at` | INTEGER | When. |
 

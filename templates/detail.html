@@ -46,16 +46,20 @@
   {{if .Roster}}
   <table>
     <tr><th>#</th><th>Who</th><th>State</th><th>Signed up</th>{{if $canManage}}<th></th>{{end}}</tr>
-    {{range .Roster}}
+    {{range $i, $s := .Roster}}
     <tr>
-      <td class="count">{{if eq .State "waitlisted"}}<span class="muted">wait {{.WaitlistPlace}}</span>{{else}}{{.Position}}{{end}}</td>
-      <td>{{who .DisplayName .DiscordUserID}}</td>
-      <td><span class="pill {{if eq .State "attending"}}open{{else}}closed{{end}}">{{.State}}</span></td>
-      <td class="meta">{{localTime .SignedUpAt}}</td>
+      {{/* The number is the row's place in arrival order, counted here rather than
+           stored: the roster comes back ordered by when people signed up, so a
+           stored number would be a second copy of that order able to disagree
+           with it. */}}
+      <td class="count">{{if eq $s.State "waitlisted"}}<span class="muted">wait {{$s.WaitlistPlace}}</span>{{else}}{{add $i 1}}{{end}}</td>
+      <td>{{who $s.DisplayName $s.DiscordUserID}}</td>
+      <td><span class="pill {{if eq $s.State "attending"}}open{{else}}closed{{end}}">{{$s.State}}</span></td>
+      <td class="meta">{{localTime $s.SignedUpAt}}</td>
       {{if $canManage}}
       <td style="text-align:right">
         <form method="post" action="/events/{{$.Event.ID}}/roster/remove" style="margin:0">
-          <input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
+          <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
           <button class="danger">Remove</button></form>
       </td>{{end}}
     </tr>

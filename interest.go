@@ -138,10 +138,6 @@ func (s *Store) MarkInterested(eventID int64, discordUserID, displayName string)
 	}
 
 	ts := now()
-	position, err := nextPosition(tx, eventID)
-	if err != nil {
-		return nil, err
-	}
 	var signupID int64
 	fromState := ""
 	if found {
@@ -151,20 +147,20 @@ func (s *Store) MarkInterested(eventID int64, discordUserID, displayName string)
 			action = ActionWaitlisted
 		}
 		_, err = tx.Exec(`
-			UPDATE signups SET display_name = ?, position = ?, state = ?, signed_up_at = ?,
+			UPDATE signups SET display_name = ?, state = ?, signed_up_at = ?,
 			       state_changed_at = ?, joined_via = ?, discord_interested = 1
 			WHERE id = ?`,
-			displayName, position, newState, ts, ts, JoinedViaInterested, existing.ID)
+			displayName, newState, ts, ts, JoinedViaInterested, existing.ID)
 		if err != nil {
 			return nil, fmt.Errorf("reactivate signup: %w", err)
 		}
 		signupID = existing.ID
 	} else {
 		res, err := tx.Exec(`
-			INSERT INTO signups (event_id, discord_user_id, display_name, position, state,
+			INSERT INTO signups (event_id, discord_user_id, display_name, state,
 			                     signed_up_at, state_changed_at, joined_via, discord_interested)
-			VALUES (?,?,?,?,?,?,?,?,1)`,
-			eventID, discordUserID, displayName, position, newState, ts, ts, JoinedViaInterested)
+			VALUES (?,?,?,?,?,?,?,1)`,
+			eventID, discordUserID, displayName, newState, ts, ts, JoinedViaInterested)
 		if err != nil {
 			return nil, fmt.Errorf("insert signup: %w", err)
 		}
@@ -173,7 +169,7 @@ func (s *Store) MarkInterested(eventID int64, discordUserID, displayName string)
 		}
 	}
 	if err := logSignupUpdate(tx, eventID, discordUserID, action, fromState, newState,
-		position, ActorInterested, ts); err != nil {
+		ActorInterested, ts); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -182,7 +178,7 @@ func (s *Store) MarkInterested(eventID int64, discordUserID, displayName string)
 
 	out := &Signup{
 		ID: signupID, EventID: eventID, DiscordUserID: discordUserID, DisplayName: displayName,
-		Position: position, State: newState, SignedUpAt: ts, StateChangedAt: ts,
+		State: newState, SignedUpAt: ts, StateChangedAt: ts,
 		JoinedVia: JoinedViaInterested, DiscordInterested: true,
 	}
 	if err := s.fillWaitlistPlace(out); err != nil {
@@ -251,10 +247,10 @@ func (s *Store) MarkNotInterested(eventID int64, discordUserID string) (*Interes
 func loadSignupTx(tx *sql.Tx, eventID int64, discordUserID string) (*Signup, bool, error) {
 	var sg Signup
 	err := tx.QueryRow(`
-		SELECT id, event_id, discord_user_id, display_name, position, state, signed_up_at,
+		SELECT id, event_id, discord_user_id, display_name, state, signed_up_at,
 		       state_changed_at, joined_via, discord_interested
 		FROM signups WHERE event_id = ? AND discord_user_id = ?`, eventID, discordUserID).
-		Scan(&sg.ID, &sg.EventID, &sg.DiscordUserID, &sg.DisplayName, &sg.Position, &sg.State,
+		Scan(&sg.ID, &sg.EventID, &sg.DiscordUserID, &sg.DisplayName, &sg.State,
 			&sg.SignedUpAt, &sg.StateChangedAt, &sg.JoinedVia, &sg.DiscordInterested)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil

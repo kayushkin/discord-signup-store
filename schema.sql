@@ -43,13 +43,19 @@ CREATE INDEX IF NOT EXISTS idx_events_message ON events(message_id);
 
 -- signups: one row per user per event, for the life of the event.
 --
--- position is arrival order and the ONLY ordering that exists. It is not
--- recoverable from anywhere else: Discord's own subscriber endpoint returns
+-- (signed_up_at, id) is arrival order and the ONLY ordering that exists. It is
+-- not recoverable from anywhere else: Discord's own subscriber endpoint returns
 -- users ascending by user_id, which is snowflake order — account creation date
 -- — so rebuilding a waitlist from Discord would sort the oldest accounts to the
--- front. Assigned once, monotonic per event, never reused, never renumbered.
+-- front.
 --
--- state is STORED rather than derived from position < capacity, and that is not
+-- There was a `position` column holding that order as a number. It was a second
+-- copy of what signed_up_at already said, able to disagree with it, and the
+-- rule that rejoining sends you to the back was written twice: the position was
+-- bumped AND signed_up_at was reset. The id breaks ties, and ties are not
+-- hypothetical — two rows on one event already share a second on this host.
+--
+-- state is STORED rather than derived from arrival order and capacity, and that is not
 -- redundancy. It records a decision that was made and then communicated to a
 -- person. Lower the capacity from 20 to 15 and the five people already told
 -- they were in stay attending; a derived view would silently demote them and
@@ -62,13 +68,12 @@ CREATE TABLE IF NOT EXISTS signups (
     event_id         INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     discord_user_id  TEXT NOT NULL,
     display_name     TEXT NOT NULL DEFAULT '',
-    position         INTEGER NOT NULL,
     state            TEXT NOT NULL,               -- 'attending' | 'waitlisted' | 'withdrawn'
     signed_up_at     INTEGER NOT NULL,
     state_changed_at INTEGER NOT NULL,
     UNIQUE(event_id, discord_user_id)
 );
-CREATE INDEX IF NOT EXISTS idx_signups_roster ON signups(event_id, state, position);
+CREATE INDEX IF NOT EXISTS idx_signups_roster ON signups(event_id, state, signed_up_at, id);
 
 -- signup_updates: append-only. Every state change, with the time this service
 -- received it.
@@ -84,7 +89,6 @@ CREATE TABLE IF NOT EXISTS signup_updates (
     action          TEXT NOT NULL,               -- see action.go for the vocabulary
     from_state      TEXT NOT NULL DEFAULT '',    -- '' when there was no prior row
     to_state        TEXT NOT NULL,
-    position        INTEGER NOT NULL,
     -- Who caused it: 'user' for a button click, 'promotion' for an automatic
     -- move off the waitlist, or an operator name for an API override. Without
     -- this, an automatic promotion and an admin's manual add are the same row.

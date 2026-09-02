@@ -281,18 +281,21 @@ func TestDetailsModalOmitsAnEmptyWaitlist(t *testing.T) {
 	}
 }
 
-// TestWaitlistIsNumberedByPlaceNotPosition means the next person up reads as
-// "1.", not their internal arrival number.
-func TestWaitlistIsNumberedByPlaceNotPosition(t *testing.T) {
-	got := rosterNames([]Signup{
-		{DisplayName: "Carol", State: StateWaitlisted, Position: 17, WaitlistPlace: 1},
-		{DisplayName: "Dan", State: StateWaitlisted, Position: 22, WaitlistPlace: 2},
-	})
-	if !strings.HasPrefix(got, "1. Carol") {
-		t.Errorf("waitlist = %q, want it numbered by place", got)
+// TestWaitlistIsNumberedByItsPlaceInLine means the next person up reads as
+// "1.", not their arrival number.
+//
+// Arrival order is now the order the roster comes back in — signed_up_at, then
+// the row id to break a tie — and WaitlistPlace is counted from it. The number
+// shown on a waitlisted row is their place in the queue, which is what somebody
+// waiting wants to know.
+func TestWaitlistIsNumberedByItsPlaceInLine(t *testing.T) {
+	roster := []Signup{
+		{DisplayName: "Carol", State: StateWaitlisted, WaitlistPlace: 1},
+		{DisplayName: "Dan", State: StateWaitlisted, WaitlistPlace: 2},
 	}
-	if strings.Contains(got, "17") {
-		t.Errorf("waitlist = %q, leaking the internal arrival position", got)
+	got := rosterNames(roster)
+	if !strings.Contains(got, "1. Carol") || !strings.Contains(got, "2. Dan") {
+		t.Errorf("waitlist rendered as %q, want places 1 and 2", got)
 	}
 }
 

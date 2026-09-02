@@ -264,3 +264,72 @@ func TestHistoryRecordsWhoCausedEachChange(t *testing.T) {
 		t.Error("the automatic promotion is not distinguishable in the log")
 	}
 }
+
+// TestArrivalOrderHoldsWithinASingleSecond is why the row id is part of the
+// ordering and not decoration.
+//
+// signed_up_at is accurate to the second, and three button presses land inside
+// one. Ordering on the timestamp alone would leave those three in whatever
+// order SQLite felt like returning them.
+func TestArrivalOrderHoldsWithinASingleSecond(t *testing.T) {
+	store := testStore(t)
+	ev := testEvent(t, store, 0)
+
+	want := []string{"alice", "bob", "carol", "dan", "erin"}
+	for _, user := range want {
+		if _, err := store.Join(ev.ID, user, user, JoinedViaButton); err != nil {
+			t.Fatalf("join %s: %v", user, err)
+		}
+	}
+	roster, err := store.Roster(ev.ID, false)
+	if err != nil {
+		t.Fatalf("roster: %v", err)
+	}
+	if len(roster) != len(want) {
+		t.Fatalf("%d on the roster, want %d", len(roster), len(want))
+	}
+	stamps := map[int64]bool{}
+	for i, sg := range roster {
+		stamps[sg.SignedUpAt] = true
+		if sg.DiscordUserID != want[i] {
+			t.Errorf("position %d is %s, want %s", i+1, sg.DiscordUserID, want[i])
+		}
+	}
+	if len(stamps) > 1 {
+		t.Logf("note: the joins spanned %d seconds, so this run did not exercise the tie",
+			len(stamps))
+	}
+}
+
+// TestARejoinerGoesBehindEveryoneEvenInTheSameSecond is the case that made a
+// delete-and-insert necessary. An updated row keeps its old, lower id, so a
+// rejoiner would sort ahead of somebody who never left whenever both landed in
+// the same second — which is the common case, since a leave and a rejoin are
+// two clicks.
+func TestARejoinerGoesBehindEveryoneEvenInTheSameSecond(t *testing.T) {
+	store := testStore(t)
+	ev := testEvent(t, store, 0)
+
+	for _, user := range []string{"alice", "bob", "carol"} {
+		if _, err := store.Join(ev.ID, user, user, JoinedViaButton); err != nil {
+			t.Fatalf("join %s: %v", user, err)
+		}
+	}
+	if _, err := store.Leave(ev.ID, "alice", ActorUser); err != nil {
+		t.Fatalf("leave: %v", err)
+	}
+	if _, err := store.Join(ev.ID, "alice", "alice", JoinedViaButton); err != nil {
+		t.Fatalf("rejoin: %v", err)
+	}
+	roster, err := store.Roster(ev.ID, false)
+	if err != nil {
+		t.Fatalf("roster: %v", err)
+	}
+	if got := roster[len(roster)-1].DiscordUserID; got != "alice" {
+		var order []string
+		for _, sg := range roster {
+			order = append(order, sg.DiscordUserID)
+		}
+		t.Errorf("roster order is %v, want alice last", order)
+	}
+}

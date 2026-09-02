@@ -230,7 +230,7 @@ func eventPublishSignature(ev *Event, roster []Signup) string {
 		ev.Location, ev.Timezone, ev.MessageID, ev.ChannelID,
 		ev.ForumPostID, ev.DiscordScheduledEventID)
 	for _, sg := range roster {
-		fmt.Fprintf(&b, "\x01%s\x00%s\x00%s\x00%d", sg.DiscordUserID, sg.DisplayName, sg.State, sg.Position)
+		fmt.Fprintf(&b, "\x01%s\x00%s\x00%s", sg.DiscordUserID, sg.DisplayName, sg.State)
 	}
 	sum := sha256.Sum256([]byte(b.String()))
 	return hex.EncodeToString(sum[:])

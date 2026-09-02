@@ -58,11 +58,11 @@ func (s *Store) Join(eventID int64, discordUserID, displayName, via string) (*Jo
 	// Does this person already have a row on this roster?
 	var existing Signup
 	err = tx.QueryRow(`
-		SELECT id, event_id, discord_user_id, display_name, position, state, signed_up_at,
+		SELECT id, event_id, discord_user_id, display_name, state, signed_up_at,
 		       state_changed_at, joined_via, discord_interested
 		FROM signups WHERE event_id = ? AND discord_user_id = ?`, eventID, discordUserID).
 		Scan(&existing.ID, &existing.EventID, &existing.DiscordUserID, &existing.DisplayName,
-			&existing.Position, &existing.State, &existing.SignedUpAt, &existing.StateChangedAt,
+			&existing.State, &existing.SignedUpAt, &existing.StateChangedAt,
 			&existing.JoinedVia, &existing.DiscordInterested)
 	hasExisting := !errors.Is(err, sql.ErrNoRows)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -96,38 +96,45 @@ func (s *Store) Join(eventID int64, discordUserID, displayName, via string) (*Jo
 	}
 
 	ts := now()
-	var position int
 	var signupID int64
 
 	if hasExisting {
-		// Re-joining after withdrawing costs you your old position and puts you
-		// at the back. Keeping it would let someone hold a place in a full
-		// event by leaving and rejoining ahead of people who waited.
-		position, err = nextPosition(tx, eventID)
-		if err != nil {
-			return nil, err
-		}
+		// Re-joining after withdrawing puts you at the back. Keeping your old
+		// arrival would let someone hold a place in a full event by leaving and
+		// rejoining ahead of people who waited.
+		//
+		// The old row is DELETED and a new one inserted, rather than updated in
+		// place, and that is what makes arrival order derivable at all. Order is
+		// (signed_up_at, id): signed_up_at is only accurate to the second, so id
+		// breaks ties — and an updated row keeps its old, lower id, which would
+		// sort a rejoiner AHEAD of somebody who never left when both land in the
+		// same second. A new arrival gets a new id, so the tiebreak points the
+		// right way. discord_interested is carried across because it is a fact
+		// about Discord's list, not about this row.
 		if action == ActionJoined {
 			action = ActionRejoined
 		}
-		_, err = tx.Exec(`
-			UPDATE signups SET display_name = ?, position = ?, state = ?, signed_up_at = ?,
-			       state_changed_at = ?, joined_via = ?
-			WHERE id = ?`, displayName, position, newState, ts, ts, via, existing.ID)
+		if _, err = tx.Exec(`DELETE FROM signups WHERE id = ?`, existing.ID); err != nil {
+			return nil, fmt.Errorf("clear withdrawn signup: %w", err)
+		}
+		res, err := tx.Exec(`
+			INSERT INTO signups (event_id, discord_user_id, display_name, state,
+			                     signed_up_at, state_changed_at, joined_via, discord_interested)
+			VALUES (?,?,?,?,?,?,?,?)`,
+			eventID, discordUserID, displayName, newState, ts, ts, via,
+			boolToInt(existing.DiscordInterested))
 		if err != nil {
 			return nil, fmt.Errorf("reactivate signup: %w", err)
 		}
-		signupID = existing.ID
-	} else {
-		position, err = nextPosition(tx, eventID)
-		if err != nil {
-			return nil, err
+		if signupID, err = res.LastInsertId(); err != nil {
+			return nil, fmt.Errorf("read reactivated id: %w", err)
 		}
+	} else {
 		res, err := tx.Exec(`
-			INSERT INTO signups (event_id, discord_user_id, display_name, position, state,
+			INSERT INTO signups (event_id, discord_user_id, display_name, state,
 			                     signed_up_at, state_changed_at, joined_via)
-			VALUES (?,?,?,?,?,?,?,?)`,
-			eventID, discordUserID, displayName, position, newState, ts, ts, via)
+			VALUES (?,?,?,?,?,?,?)`,
+			eventID, discordUserID, displayName, newState, ts, ts, via)
 		if err != nil {
 			return nil, fmt.Errorf("insert signup: %w", err)
 		}
@@ -141,7 +148,7 @@ func (s *Store) Join(eventID int64, discordUserID, displayName, via string) (*Jo
 	if hasExisting {
 		fromState = existing.State
 	}
-	if err := logSignupUpdate(tx, eventID, discordUserID, action, fromState, newState, position, ActorUser, ts); err != nil {
+	if err := logSignupUpdate(tx, eventID, discordUserID, action, fromState, newState, ActorUser, ts); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -150,7 +157,7 @@ func (s *Store) Join(eventID int64, discordUserID, displayName, via string) (*Jo
 
 	out := Signup{
 		ID: signupID, EventID: eventID, DiscordUserID: discordUserID, DisplayName: displayName,
-		Position: position, State: newState, SignedUpAt: ts, StateChangedAt: ts, JoinedVia: via,
+		State: newState, SignedUpAt: ts, StateChangedAt: ts, JoinedVia: via,
 	}
 	if err := s.fillWaitlistPlace(&out); err != nil {
 		return nil, err
@@ -189,11 +196,11 @@ func (s *Store) Leave(eventID int64, discordUserID, actor string) (*LeaveResult,
 
 	var leaver Signup
 	err = tx.QueryRow(`
-		SELECT id, event_id, discord_user_id, display_name, position, state, signed_up_at,
+		SELECT id, event_id, discord_user_id, display_name, state, signed_up_at,
 		       state_changed_at, joined_via, discord_interested
 		FROM signups WHERE event_id = ? AND discord_user_id = ?`, eventID, discordUserID).
 		Scan(&leaver.ID, &leaver.EventID, &leaver.DiscordUserID, &leaver.DisplayName,
-			&leaver.Position, &leaver.State, &leaver.SignedUpAt, &leaver.StateChangedAt,
+			&leaver.State, &leaver.SignedUpAt, &leaver.StateChangedAt,
 			&leaver.JoinedVia, &leaver.DiscordInterested)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -213,7 +220,7 @@ func (s *Store) Leave(eventID int64, discordUserID, actor string) (*LeaveResult,
 		return nil, fmt.Errorf("withdraw signup: %w", err)
 	}
 	if err := logSignupUpdate(tx, eventID, discordUserID, ActionWithdrew, leaver.State, StateWithdrawn,
-		leaver.Position, actor, ts); err != nil {
+		actor, ts); err != nil {
 		return nil, err
 	}
 	leaver.State = StateWithdrawn
@@ -226,12 +233,12 @@ func (s *Store) Leave(eventID int64, discordUserID, actor string) (*LeaveResult,
 	if wasAttending && capacity > 0 {
 		var next Signup
 		err := tx.QueryRow(`
-			SELECT id, event_id, discord_user_id, display_name, position, state, signed_up_at,
+			SELECT id, event_id, discord_user_id, display_name, state, signed_up_at,
 			       state_changed_at, joined_via, discord_interested
 			FROM signups WHERE event_id = ? AND state = ?
-			ORDER BY position ASC LIMIT 1`, eventID, StateWaitlisted).
+			ORDER BY signed_up_at ASC, id ASC LIMIT 1`, eventID, StateWaitlisted).
 			Scan(&next.ID, &next.EventID, &next.DiscordUserID, &next.DisplayName,
-				&next.Position, &next.State, &next.SignedUpAt, &next.StateChangedAt,
+				&next.State, &next.SignedUpAt, &next.StateChangedAt,
 				&next.JoinedVia, &next.DiscordInterested)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("find next in line: %w", err)
@@ -242,7 +249,7 @@ func (s *Store) Leave(eventID int64, discordUserID, actor string) (*LeaveResult,
 				return nil, fmt.Errorf("promote signup: %w", err)
 			}
 			if err := logSignupUpdate(tx, eventID, next.DiscordUserID, ActionPromoted, StateWaitlisted,
-				StateAttending, next.Position, ActorPromotion, ts); err != nil {
+				StateAttending, ActorPromotion, ts); err != nil {
 				return nil, err
 			}
 			next.State = StateAttending
@@ -262,7 +269,7 @@ func (s *Store) Leave(eventID int64, discordUserID, actor string) (*LeaveResult,
 // includeWithdrawn is set.
 func (s *Store) Roster(eventID int64, includeWithdrawn bool) ([]Signup, error) {
 	query := `
-		SELECT id, event_id, discord_user_id, display_name, position, state, signed_up_at,
+		SELECT id, event_id, discord_user_id, display_name, state, signed_up_at,
 		       state_changed_at, joined_via, discord_interested
 		FROM signups WHERE event_id = ?`
 	args := []any{eventID}
@@ -275,7 +282,7 @@ func (s *Store) Roster(eventID int64, includeWithdrawn bool) ([]Signup, error) {
 	// to sort correctly today and would break the moment a state is renamed.
 	query += `
 		ORDER BY CASE state WHEN 'attending' THEN 0 WHEN 'waitlisted' THEN 1 ELSE 2 END,
-		         position ASC`
+		         signed_up_at ASC, id ASC`
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
@@ -288,7 +295,7 @@ func (s *Store) Roster(eventID int64, includeWithdrawn bool) ([]Signup, error) {
 	for rows.Next() {
 		var sg Signup
 		if err := rows.Scan(&sg.ID, &sg.EventID, &sg.DiscordUserID, &sg.DisplayName,
-			&sg.Position, &sg.State, &sg.SignedUpAt, &sg.StateChangedAt,
+			&sg.State, &sg.SignedUpAt, &sg.StateChangedAt,
 			&sg.JoinedVia, &sg.DiscordInterested); err != nil {
 			return nil, fmt.Errorf("scan signup: %w", err)
 		}
@@ -316,7 +323,7 @@ func (s *Store) History(eventID int64, limit int) ([]SignupUpdate, error) {
 	// than one with an ugly name in it.
 	rows, err := s.db.Query(`
 		SELECT t.id, t.event_id, t.discord_user_id, t.action, t.from_state, t.to_state,
-		       t.position, t.actor, t.at, COALESCE(s.display_name, '')
+		       t.actor, t.at, COALESCE(s.display_name, '')
 		FROM signup_updates t
 		LEFT JOIN signups s ON s.event_id = t.event_id AND s.discord_user_id = t.discord_user_id
 		WHERE t.event_id = ? ORDER BY t.at ASC, t.id ASC LIMIT ?`, eventID, limit)
@@ -329,7 +336,7 @@ func (s *Store) History(eventID int64, limit int) ([]SignupUpdate, error) {
 	for rows.Next() {
 		var t SignupUpdate
 		if err := rows.Scan(&t.ID, &t.EventID, &t.DiscordUserID, &t.Action, &t.FromState,
-			&t.ToState, &t.Position, &t.Actor, &t.At, &t.DisplayName); err != nil {
+			&t.ToState, &t.Actor, &t.At, &t.DisplayName); err != nil {
 			return nil, fmt.Errorf("scan signup update: %w", err)
 		}
 		out = append(out, t)
@@ -349,8 +356,9 @@ func (s *Store) fillWaitlistPlace(sg *Signup) error {
 	var ahead int
 	err := s.db.QueryRow(`
 		SELECT COUNT(*) FROM signups
-		WHERE event_id = ? AND state = ? AND position < ?`,
-		sg.EventID, StateWaitlisted, sg.Position).Scan(&ahead)
+		WHERE event_id = ? AND state = ?
+		  AND (signed_up_at < ? OR (signed_up_at = ? AND id < ?))`,
+		sg.EventID, StateWaitlisted, sg.SignedUpAt, sg.SignedUpAt, sg.ID).Scan(&ahead)
 	if err != nil {
 		return fmt.Errorf("count waitlist ahead: %w", err)
 	}
@@ -358,25 +366,13 @@ func (s *Store) fillWaitlistPlace(sg *Signup) error {
 	return nil
 }
 
-// nextPosition hands out the next arrival number for an event. MAX+1 rather
-// than COUNT+1: a withdrawn row keeps its position, so counting live rows would
-// hand the same number out twice.
-func nextPosition(tx *sql.Tx, eventID int64) (int, error) {
-	var maxPos int
-	if err := tx.QueryRow(`SELECT COALESCE(MAX(position), 0) FROM signups WHERE event_id = ?`, eventID).
-		Scan(&maxPos); err != nil {
-		return 0, fmt.Errorf("read max position: %w", err)
-	}
-	return maxPos + 1, nil
-}
-
-func logSignupUpdate(tx *sql.Tx, eventID int64, userID, action, from, to string, position int, actor string, at int64) error {
+func logSignupUpdate(tx *sql.Tx, eventID int64, userID, action, from, to, actor string, at int64) error {
 	if !validActions[action] {
 		return fmt.Errorf("refusing to log unknown action %q (known: %v)", action, ValidActions())
 	}
 	_, err := tx.Exec(`
-		INSERT INTO signup_updates (event_id, discord_user_id, action, from_state, to_state, position, actor, at)
-		VALUES (?,?,?,?,?,?,?,?)`, eventID, userID, action, from, to, position, actor, at)
+		INSERT INTO signup_updates (event_id, discord_user_id, action, from_state, to_state, actor, at)
+		VALUES (?,?,?,?,?,?,?)`, eventID, userID, action, from, to, actor, at)
 	if err != nil {
 		return fmt.Errorf("log signup update: %w", err)
 	}
@@ -436,7 +432,7 @@ type UserSignup struct {
 func (s *Store) UserSignupsInGuild(guildID, discordUserID string) ([]UserSignup, error) {
 	rows, err := s.db.Query(`
 		SELECT e.id, e.name, e.capacity, e.status, e.starts_at, e.timezone,
-		       sg.id, sg.position, sg.state
+		       sg.id, sg.state
 		FROM signups sg
 		JOIN events e ON e.id = sg.event_id
 		WHERE e.guild_id = ? AND sg.discord_user_id = ?
@@ -453,7 +449,7 @@ func (s *Store) UserSignupsInGuild(guildID, discordUserID string) ([]UserSignup,
 		var u UserSignup
 		if err := rows.Scan(&u.Event.ID, &u.Event.Name, &u.Event.Capacity, &u.Event.Status,
 			&u.Event.StartsAt, &u.Event.Timezone,
-			&u.Signup.ID, &u.Signup.Position, &u.Signup.State); err != nil {
+			&u.Signup.ID, &u.Signup.State); err != nil {
 			return nil, fmt.Errorf("scan user signup: %w", err)
 		}
 		u.Signup.EventID = u.Event.ID
@@ -478,4 +474,12 @@ func (s *Store) UserSignupsInGuild(guildID, discordUserID string) ([]UserSignup,
 		live = append(live, u)
 	}
 	return live, nil
+}
+
+// boolToInt writes a Go bool into the integer column SQLite keeps it in.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
