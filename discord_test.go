@@ -471,7 +471,7 @@ func TestEditingPushesThroughToTheNativeEvent(t *testing.T) {
 	}
 	ev.Name = "After"
 	ev.Location = "The new place"
-	if err := srv.PushEditToDiscord(ev, nil); err != nil {
+	if err := srv.PushEditToDiscord(ev, nil, true); err != nil {
 		t.Fatalf("push: %v", err)
 	}
 
@@ -487,7 +487,7 @@ func TestEditingPushesThroughToTheNativeEvent(t *testing.T) {
 	// The decoration is part of what gets pushed, and the stored name stays
 	// clean — that separation is what stops the title compounding. An empty
 	// capped event carries its limit, not a live count.
-	if patched["name"].(string) != "After · 4 places" {
+	if patched["name"].(string) != "After [0/4]" {
 		t.Errorf("name = %v, want the name with its limit", patched["name"])
 	}
 	meta := patched["entity_metadata"].(map[string]any)
@@ -503,7 +503,7 @@ func TestUnpublishedEventsPushNothing(t *testing.T) {
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
 
-	if err := srv.PushEditToDiscord(&Event{ID: 1, GuildID: "g1", Name: "Local only"}, nil); err != nil {
+	if err := srv.PushEditToDiscord(&Event{ID: 1, GuildID: "g1", Name: "Local only"}, nil, true); err != nil {
 		t.Fatalf("push: %v", err)
 	}
 	if calls := fake.recorded(); len(calls) != 0 {
@@ -650,10 +650,9 @@ func TestTheTitleIsPushedOnEveryRosterChange(t *testing.T) {
 			pushed, _ = c.Body["name"].(string)
 		}
 	}
-	// One of three places taken: not full, so the title carries the limit and
-	// no count — a count in a rename is two renames stale under signups.
-	if pushed != "Games · 3 places" {
-		t.Errorf("pushed name = %q, want the limit, never the live count", pushed)
+	// First publish ever, one of three places taken: the count goes out.
+	if pushed != "Games [1/3]" {
+		t.Errorf("pushed name = %q, want the count on a first publish", pushed)
 	}
 }
 
@@ -868,18 +867,18 @@ func TestTitlesCarryFullOrTheLimitNeverTheLiveCount(t *testing.T) {
 		capacity, attending int
 		want                string
 	}{
-		{8, 3, "Board game night · 8 places"},
+		{8, 3, "Board game night [3/8]"},
 		{8, 8, "[Full] Board game night"},
 		{8, 9, "[Full] Board game night"}, // over, after a lowered cap
 		{0, 12, "Board game night"},
-		{1, 0, "Board game night · 1 place"},
+		{1, 0, "Board game night [0/1]"},
 	} {
 		ev := &Event{Name: "Board game night", Capacity: c.capacity, AttendingCount: c.attending}
 		if got := nativeEventName(ev); got != c.want {
 			t.Errorf("capacity %d, %d attending: %q, want %q", c.capacity, c.attending, got, c.want)
 		}
-		if strings.Contains(nativeEventName(ev), fmt.Sprintf("%d/%d", c.attending, c.capacity)) {
-			t.Errorf("capacity %d, %d attending: the live count is back in the title", c.capacity, c.attending)
+		if titleIsFull(c.want) && strings.Contains(c.want, "/") {
+			t.Errorf("%q carries both Full and a count; Full replaces it", c.want)
 		}
 	}
 }
@@ -890,11 +889,12 @@ func TestTitlesCarryFullOrTheLimitNeverTheLiveCount(t *testing.T) {
 // decorates a name that already carries last week's decoration.
 func TestEveryTitleFormEverWrittenIsStripped(t *testing.T) {
 	for _, decorated := range []string{
-		"[3/8] Games",            // the retired live badge
-		"[Full] Games",           // full now
-		"Games · 8 places",       // room now
-		"Games · 1 place",        // singular
-		"[3/8] Games · 8 places", // never written, but strip it anyway
+		"[3/8] Games",       // the retired live badge
+		"[Full] Games",      // full now
+		"Games [3/8]",       // room now
+		"Games · 8 places",  // the form written for one evening
+		"Games · 1 place",   // singular of that form
+		"[3/8] Games [3/8]", // never written, but strip it anyway
 	} {
 		if got := stripTitleDecorations(decorated); got != "Games" {
 			t.Errorf("stripTitleDecorations(%q) = %q, want %q", decorated, got, "Games")
@@ -928,7 +928,7 @@ func TestDecorationsSurviveALongName(t *testing.T) {
 	if n := len([]rune(got)); n > discordEventNameLimit {
 		t.Errorf("name is %d runes, over Discord's %d", n, discordEventNameLimit)
 	}
-	if !strings.HasSuffix(got, " · 8 places") {
+	if !strings.HasSuffix(got, " [3/8]") {
 		t.Errorf("name = %q, want the limit kept at the end", got)
 	}
 }
@@ -938,10 +938,97 @@ func TestDecorationsSurviveALongName(t *testing.T) {
 func TestStripTitleDecorationsLeavesRealNamesAlone(t *testing.T) {
 	for _, name := range []string{
 		"Games", "[Board] games", "3/8 of the way there", "Full house", "Games · 8 people",
-		"[Full]Games", "Games · places",
+		"[Full]Games", "Games · places", "Games [3 of 8]", "Games[3/8]",
 	} {
 		if got := stripTitleDecorations(name); got != name {
 			t.Errorf("stripTitleDecorations(%q) = %q, want it untouched", name, got)
 		}
+	}
+}
+
+// TestACountRenameWaitsFiveMinutesButFullDoesNot is the budget. Discord allows
+// a thread about two renames per ten minutes; a count change alone spends one
+// every five, and becoming full — or stopping being full — spends the other
+// at once, because that is the change a reader most needs and it is rare.
+func TestACountRenameWaitsFiveMinutesButFullDoesNot(t *testing.T) {
+	const at = int64(1_000_000)
+	base := func(attending int) *Event {
+		return &Event{Name: "Games", Capacity: 4, AttendingCount: attending,
+			NativeTitleWritten: "Games [1/4]", TitleWrittenAt: at}
+	}
+	renamed := base(1)
+	renamed.Name = "Board games"
+	for _, c := range []struct {
+		name string
+		ev   *Event
+		now  int64
+		want bool
+	}{
+		{"never written", &Event{Name: "Games", Capacity: 4, AttendingCount: 1}, at, true},
+		{"same title", base(1), at + 10, false},
+		{"count moved, 10s later", base(2), at + 10, false},
+		{"count moved, 4m59s later", base(2), at + 299, false},
+		{"count moved, 5m later", base(2), at + 300, true},
+		{"became full, at once", base(4), at + 1, true},
+		{"renamed by the organiser, at once", renamed, at + 1, true},
+		{"was full, someone left, at once", &Event{Name: "Games", Capacity: 4, AttendingCount: 3,
+			NativeTitleWritten: "[Full] Games", TitleWrittenAt: at}, at + 1, true},
+		{"uncapped, nothing to rename", &Event{Name: "Open", AttendingCount: 9,
+			NativeTitleWritten: "Open", TitleWrittenAt: at}, at + 9999, false},
+	} {
+		if got := titleRenameDue(c.ev, nativeEventName(c.ev), c.now); got != c.want {
+			t.Errorf("%s: due=%v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// TestASecondSignupWithinTheWindowSendsNoName is the throttle end to end: the
+// description goes every time, the name does not.
+func TestASecondSignupWithinTheWindowSendsNoName(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+	ev, err := store.CreateEvent(Event{
+		GuildID: "g1", ChannelID: "board", Name: "Games", Capacity: 4,
+		StartsAt:                time.Now().Add(48 * time.Hour).Unix(),
+		DiscordScheduledEventID: "native-5",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	patches := func() (names []any, count int) {
+		for _, c := range fake.recorded() {
+			if c.Method == http.MethodPatch && c.Path == "/guilds/g1/scheduled-events/native-5" {
+				count++
+				names = append(names, c.Body["name"])
+			}
+		}
+		return
+	}
+
+	store.Join(ev.ID, "alice", "Alice", JoinedViaButton)
+	srv.syncAfterChange(ev.ID, nil) // first ever: the name goes
+	names, n := patches()
+	if n != 1 || names[0] != "Games [1/4]" {
+		t.Fatalf("first publish: %d patches, names %v; want one carrying Games [1/4]", n, names)
+	}
+
+	store.Join(ev.ID, "bob", "Bob", JoinedViaButton)
+	srv.syncAfterChange(ev.ID, nil) // seconds later: description yes, name no
+	names, n = patches()
+	if n != 2 {
+		t.Fatalf("second publish: %d patches, want 2 — the description must still go", n)
+	}
+	if names[1] != nil {
+		t.Errorf("second publish sent name %v inside the five-minute window", names[1])
+	}
+
+	store.Join(ev.ID, "carol", "Carol", JoinedViaButton)
+	store.Join(ev.ID, "dan", "Dan", JoinedViaButton)
+	srv.syncAfterChange(ev.ID, nil) // full: the name goes at once
+	names, n = patches()
+	if n != 3 || names[2] != "[Full] Games" {
+		t.Errorf("full publish: %d patches, names %v; want the third carrying [Full] Games", n, names)
 	}
 }

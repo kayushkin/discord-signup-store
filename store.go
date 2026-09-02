@@ -85,8 +85,13 @@ type Event struct {
 	// when it was written off as too late. Zero means still owed.
 	RemindedBeforeAt int64 `json:"reminded_before_at"`
 	RemindedStartAt  int64 `json:"reminded_start_at"`
-	CreatedAt        int64 `json:"created_at"`
-	UpdatedAt        int64 `json:"updated_at"`
+	// TitleWrittenAt, NativeTitleWritten and ForumTitleWritten are what the
+	// titles last said and when, so a throttled rename knows whether it is due.
+	TitleWrittenAt     int64  `json:"title_written_at"`
+	NativeTitleWritten string `json:"native_title_written"`
+	ForumTitleWritten  string `json:"forum_title_written"`
+	CreatedAt          int64  `json:"created_at"`
+	UpdatedAt          int64  `json:"updated_at"`
 
 	// AttendingCount and WaitlistCount are computed by the read path. They are
 	// never stored, so they can never disagree with the signups table.
@@ -267,6 +272,16 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// "still owed".
 	{"events", "reminded_before_at", "INTEGER NOT NULL DEFAULT 0"},
 	{"events", "reminded_start_at", "INTEGER NOT NULL DEFAULT 0"},
+
+	// What the titles last said, and when. A title is a rename, and Discord
+	// rate-limits thread renames to about two per ten minutes, so a count
+	// change alone renames at most every five; becoming or ceasing to be Full
+	// renames at once. Deciding that needs the last title written and when,
+	// which nothing else records. Bookkeeping, like published_signature:
+	// written by the publisher, read only by the publisher.
+	{"events", "title_written_at", "INTEGER NOT NULL DEFAULT 0"},
+	{"events", "native_title_written", "TEXT NOT NULL DEFAULT ''"},
+	{"events", "forum_title_written", "TEXT NOT NULL DEFAULT ''"},
 
 	// The discussion thread hanging off the signup card. Discord gives a
 	// message thread the SAME id as its parent message, but it is stored
@@ -542,7 +557,8 @@ const eventColumns = `id, guild_id, channel_id, message_id, discord_scheduled_ev
 	name, description, capacity, status, attending_role_id, waitlist_role_id,
 	starts_at, ends_at, location, entity_type, recurrence_rule, timezone, origin,
 	thread_id, forum_post_id, discord_interested_count, discord_synced_at, created_by,
-	published_signature, reminded_before_at, reminded_start_at, created_at, updated_at`
+	published_signature, reminded_before_at, reminded_start_at,
+	title_written_at, native_title_written, forum_title_written, created_at, updated_at`
 
 func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 	var e Event
@@ -551,6 +567,7 @@ func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 		&e.StartsAt, &e.EndsAt, &e.Location, &e.EntityType, &e.RecurrenceRule, &e.Timezone,
 		&e.Origin, &e.ThreadID, &e.ForumPostID, &e.DiscordInterestedCount, &e.DiscordSyncedAt, &e.CreatedBy,
 		&e.PublishedSignature, &e.RemindedBeforeAt, &e.RemindedStartAt,
+		&e.TitleWrittenAt, &e.NativeTitleWritten, &e.ForumTitleWritten,
 		&e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -891,6 +908,19 @@ func (s *Store) StampReminder(id int64, stage string) error {
 		`UPDATE events SET `+column+` = ? WHERE id = ? AND `+column+` = 0`, now(), id)
 	if err != nil {
 		return fmt.Errorf("stamp %s reminder: %w", stage, err)
+	}
+	return nil
+}
+
+// SetTitlesWritten records what the two titles now say on Discord and when.
+//
+// updated_at is deliberately left alone, for the same reason as the publish
+// signature: this is the publisher noting what it did, not an edit.
+func (s *Store) SetTitlesWritten(id int64, native, forum string) error {
+	_, err := s.db.Exec(`UPDATE events SET title_written_at = ?, native_title_written = ?,
+		forum_title_written = ? WHERE id = ?`, now(), native, forum, id)
+	if err != nil {
+		return fmt.Errorf("set titles written: %w", err)
 	}
 	return nil
 }

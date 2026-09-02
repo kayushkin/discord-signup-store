@@ -147,8 +147,8 @@ func TestSavingTheEditFormPushesTheNativeTitle(t *testing.T) {
 	if len(names) == 0 {
 		t.Fatal("the edit pushed nothing to the native event; its title still shows the old limit")
 	}
-	if got := names[len(names)-1]; got != "Games · 10 places" {
-		t.Errorf("pushed name = %q, want %q", got, "Games · 10 places")
+	if got := names[len(names)-1]; got != "Games [3/10]" {
+		t.Errorf("pushed name = %q, want %q", got, "Games [3/10]")
 	}
 }
 
@@ -166,8 +166,8 @@ func TestRenamingOnTheWebPageReachesDiscord(t *testing.T) {
 	if len(names) == 0 {
 		t.Fatal("the rename pushed nothing to the native event")
 	}
-	if got := names[len(names)-1]; got != "Board game night · 8 places" {
-		t.Errorf("pushed name = %q, want %q", got, "Board game night · 8 places")
+	if got := names[len(names)-1]; got != "Board game night [1/8]" {
+		t.Errorf("pushed name = %q, want %q", got, "Board game night [1/8]")
 	}
 }
 

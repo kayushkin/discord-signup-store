@@ -522,9 +522,16 @@ func stripLocationPlaceholder(location string) string {
 // What stays in the title is what changes rarely: whether it is full, and if
 // it is not, how many places there are at all.
 //
-//	Board game night — 8/29 4pm · 8 places      capped, room left
+//	Board game night — 8/29 4pm [3/8]           capped, room left
 //	[Full] Board game night — 8/29 4pm          capped, no room
 //	Open house — 8/29 4pm                       no limit
+//
+// The count IS in the title again — at the end — but a title is a rename and
+// renames are rate-limited, so the count is only renamed every five minutes.
+// Becoming full, or stopping being full, renames at once: that is the change a
+// reader most needs and it is rare, so the budget of about two renames per ten
+// minutes is spent as one scheduled count and one flip. titleRenameDue is the
+// whole of that decision.
 //
 // Every form this service has ever written is stripped on the way back,
 // because a name read from Discord is stored as the event's own: miss one and
@@ -536,8 +543,14 @@ func stripLocationPlaceholder(location string) string {
 // a title. The numeric badge is retired but still sitting on Discord.
 var titleDecorationPrefixes = regexp.MustCompile(`^(\[\d+/\d+\]|\[Full\])\s+`)
 
-// titleDecorationSuffix matches the place count at the END of a title.
-var titleDecorationSuffix = regexp.MustCompile(`\s+·\s+\d+ places?$`)
+// titleDecorationSuffix matches anything this service has put at the END of a
+// title: the current "[3/8]", and the " · 8 places" form it briefly wrote.
+var titleDecorationSuffix = regexp.MustCompile(`(\s+·\s+\d+ places?|\s+\[\d+/\d+\])$`)
+
+// titleRenameInterval is how often a title is renamed for a count change alone.
+// Five minutes spends one of the roughly two renames Discord allows a thread
+// per ten minutes, leaving the other for becoming full.
+const titleRenameInterval = 5 * 60
 
 // discordEventNameLimit is Discord's cap on a scheduled event name and a
 // thread name alike.
@@ -551,14 +564,40 @@ func titlePrefix(ev *Event) string {
 	return ""
 }
 
-// titleSuffix is " · 8 places" for a capped event with room, else empty. A full
-// event does not need its limit spelled out — "[Full]" already says it — and
-// an uncapped one has no number worth putting in a title.
+// titleSuffix is " [3/8]" for a capped event with room, else empty. A full
+// event carries "[Full]" at the front instead, and an uncapped one has no
+// number worth putting in a title.
 func titleSuffix(ev *Event) string {
 	if ev.Capacity > 0 && ev.AttendingCount < ev.Capacity {
-		return " · " + pluralise(ev.Capacity, "place")
+		return fmt.Sprintf(" [%d/%d]", ev.AttendingCount, ev.Capacity)
 	}
 	return ""
+}
+
+// titleIsFull reports whether a title, as written or as wanted, says Full.
+func titleIsFull(title string) bool { return strings.HasPrefix(title, "[Full] ") }
+
+// titleRenameDue decides whether the native title is renamed on this publish.
+//
+// A title is renamed when it has never been written, when the words changed
+// (a rename, a moved date), when it flipped into or out of Full, or — for a
+// count change and nothing else — when the last rename was at least
+// titleRenameInterval ago. Everything else keeps the title Discord already
+// has, and the card and table carry the live number meanwhile.
+func titleRenameDue(ev *Event, want string, at int64) bool {
+	written := ev.NativeTitleWritten
+	switch {
+	case written == "":
+		return true
+	case want == written:
+		return false
+	case titleIsFull(want) != titleIsFull(written):
+		return true
+	case stripTitleDecorations(want) != stripTitleDecorations(written):
+		return true
+	default:
+		return at-ev.TitleWrittenAt >= titleRenameInterval
+	}
 }
 
 // decorateTitle wraps a title in its decorations inside a length limit.
@@ -878,7 +917,7 @@ func (s *Server) finishEventEverywhere(id int64) {
 // event that was never published has nothing to push to. A failure is returned
 // rather than swallowed, but callers treat it as non-fatal — the roster is the
 // source of truth and the native event is a copy of it.
-func (s *Server) PushEditToDiscord(ev *Event, roster []Signup) error {
+func (s *Server) PushEditToDiscord(ev *Event, roster []Signup, rename bool) error {
 	if s.discord == nil || ev.DiscordScheduledEventID == "" {
 		return nil
 	}
@@ -891,11 +930,15 @@ func (s *Server) PushEditToDiscord(ev *Event, roster []Signup) error {
 		location = locationPlaceholder
 	}
 	payload := map[string]any{
-		"name":                 nativeEventName(ev),
 		"description":          nativeEventDescription(ev, roster, s.boardChannelID),
 		"scheduled_start_time": time.Unix(ev.StartsAt, 0).UTC().Format(time.RFC3339),
 		"scheduled_end_time":   time.Unix(endsAt, 0).UTC().Format(time.RFC3339),
 		"entity_metadata":      map[string]any{"location": location},
+	}
+	// The name is a rename and renames are throttled; the description carries
+	// the live count and names and is not, so it goes every time.
+	if rename {
+		payload["name"] = nativeEventName(ev)
 	}
 	return s.discord.ModifyScheduledEvent(ev.GuildID, ev.DiscordScheduledEventID, payload)
 }

@@ -21,7 +21,7 @@ different positions. Every read in the code names its columns — there is no
 
 ## `events` — an event, and every id needed to find its copies on Discord
 
-The row everything else hangs off. 29 columns, of which about a third are not
+The row everything else hangs off. 32 columns, of which about a third are not
 the event at all but the addresses of messages this service has written about it.
 
 | column | type | description |
@@ -52,6 +52,9 @@ the event at all but the addresses of messages this service has written about it
 | `published_signature` | TEXT | Fingerprint of everything that feeds a Discord copy, written only when a publish fully succeeds. `''` means never published, or the last publish failed part way. The minute sweep republishes anything that does not match. |
 | `reminded_before_at` | INTEGER | When the hour-before reminder went out, **or** when it was written off as too late. `0` means still owed. |
 | `reminded_start_at` | INTEGER | The same for the starting reminder. |
+| `title_written_at` | INTEGER | When the titles were last renamed. A title is a rename, rate-limited to about two per ten minutes, so a count change alone renames at most every five; this is how the publisher knows whether one is due. |
+| `native_title_written` | TEXT | What the native event's name last said, e.g. `Games [3/8]` or `[Full] Games`. Compared to what it *should* say to spot a Full flip or an organiser's rename, both of which go at once. |
+| `forum_title_written` | TEXT | The same for the forum post's title. |
 | `created_at` / `updated_at` | INTEGER | `updated_at` deliberately does **not** move when a publish signature or a reminder stamp is written — those are the service noting what it did, not somebody editing the event. |
 | `deleted_at` | INTEGER | Soft delete. `0` is live. |
 

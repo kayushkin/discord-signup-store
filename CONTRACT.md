@@ -221,9 +221,9 @@ name once, and joined by id ever after. Every live event then gets a post.
 A forum post is a thread whose required first message **shares the thread's
 id**. That message is `RenderSignupMessage` verbatim — the same card and the
 same button custom_ids as the board, so one handler serves both surfaces. The
-post's title carries `[Full]` when there is no room or the limit when there is
-(`Games — 8/29 4pm · 8 places`) — never a live count, since renames are
-rate-limited — and its tag
+post's title carries the count at the end (`Games — 8/29 4pm [3/8]`), renamed
+at most every five minutes, or `[Full]` at the front the moment it fills — and
+its tag
 flips with the roster; the sweep tags `finished` and archives.
 
 ⚠️ Discord rate-limits **thread renames** to roughly two per ten minutes per
@@ -288,22 +288,29 @@ too.
 
 ## The native event's title, and the forum post's
 
-Neither carries a live count any more. Both are **renames**, and Discord
-rate-limits thread renames to about two per ten minutes, so under signups
-"[3/8]" was the number from two renames ago — a count that is usually wrong is
-worse than none. The live count lives in the table row and the card, which are
-message edits and have no such limit.
+Both carry the count — at the **end**, as `[3/8]` — and both are **renames**,
+which Discord rate-limits to about two per ten minutes per thread. So the count
+is renamed at most **every five minutes**, and the live number lives on the card
+and the table row meanwhile, which are message edits and have no such limit.
 
-What a title carries is what changes rarely:
+Two changes rename at once, because they are rare and they are what a reader
+most needs: becoming **Full**, which replaces the count with `[Full]` at the
+**front**, and ceasing to be Full, which puts the count back. A rename by the
+organiser or a moved date is also immediate. That spends the budget as one
+scheduled count and one flip.
 
-    Board game night — 8/29 4pm · 8 places      capped, room left
+    Board game night — 8/29 4pm [3/8]           capped, room left
     [Full] Board game night — 8/29 4pm          capped, no room
     Open house — 8/29 4pm                       no limit
 
-The name is trimmed to fit Discord's 100 characters, never the decorations.
-Every form this service has ever written — the retired `[3/8]` badge included,
-since it is still sitting on Discord — is stripped on import, or a name read back
-would round-trip and grow a decoration per publish.
+`title_written_at`, `native_title_written` and `forum_title_written` on the
+event row are what makes the decision possible; `titleRenameDue` is the whole
+of it. A due-but-throttled rename is picked up by the minute sweep, which wakes
+an event for that alone even when nothing else about it has changed.
+
+Every form this service has ever written — `[3/8]` at the front, `· 8 places` at
+the end — is still stripped on import, or a name read back would round-trip and
+grow a decoration per publish.
 
 ## Conventions
 

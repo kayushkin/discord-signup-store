@@ -152,11 +152,31 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 		}
 	}
 
-	// Nothing a reader can see has changed since the last successful publish,
-	// so there is nothing to write. This is what makes the reconcile sweep
-	// affordable: re-checking every live event costs one query each.
+	// Two separate questions. Has anything a reader can see changed since the
+	// last successful publish? And, separately, is a throttled title rename now
+	// due? The second can be yes while the first is no: five minutes pass with
+	// nobody joining, and the count the title shows is still the one from
+	// before the last three signups.
 	signature := eventPublishSignature(ev, roster)
+	wantNative := nativeEventName(ev)
+	rename := titleRenameDue(ev, wantNative, now())
+	if signature == ev.PublishedSignature && !rename {
+		return
+	}
 	if signature == ev.PublishedSignature {
+		// Title only. The card, the table and the description are already
+		// current; only the two renames go, and only the titles are recorded.
+		if err := s.renameForumPostOnly(ev); err != nil {
+			log.Printf("[discord-signup] rename forum post for event %d: %v", ev.ID, err)
+			return
+		}
+		if err := s.PushEditToDiscord(ev, roster, true); err != nil {
+			log.Printf("[discord-signup] rename native event %d: %v", ev.ID, err)
+			return
+		}
+		if err := s.store.SetTitlesWritten(ev.ID, wantNative, forumPostTitle(ev)); err != nil {
+			log.Printf("[discord-signup] record titles for event %d: %v", ev.ID, err)
+		}
 		return
 	}
 
@@ -168,15 +188,16 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 	// The table row is a second view of the same roster. One message, not the
 	// whole table: this runs on every signup.
 	s.refreshEventTableQuietly(ev.GuildID)
-	if err := s.refreshForumPost(ev); err != nil {
+	if err := s.refreshForumPost(ev, rename); err != nil {
 		log.Printf("[discord-signup] refresh forum post for event %d: %v", ev.ID, err)
 		published = false
 	}
-	// The native event's title carries the count, so it goes stale on every
-	// signup. Pushed through the same function an edit uses rather than a
-	// second, lighter one: two paths that both write the native event would
-	// eventually disagree about what they write.
-	if err := s.PushEditToDiscord(ev, roster); err != nil {
+	// The native event's description carries the live count and names and
+	// goes every time; its title goes only when titleRenameDue says so. Pushed
+	// through the same function an edit uses rather than a second, lighter
+	// one: two paths that both write the native event would eventually
+	// disagree about what they write.
+	if err := s.PushEditToDiscord(ev, roster, rename); err != nil {
 		log.Printf("[discord-signup] push title for event %d: %v", ev.ID, err)
 		published = false
 	}
@@ -189,6 +210,11 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 	}
 	if err := s.store.SetPublishedSignature(ev.ID, signature); err != nil {
 		log.Printf("[discord-signup] record published signature for event %d: %v", ev.ID, err)
+	}
+	if rename {
+		if err := s.store.SetTitlesWritten(ev.ID, wantNative, forumPostTitle(ev)); err != nil {
+			log.Printf("[discord-signup] record titles for event %d: %v", ev.ID, err)
+		}
 	}
 }
 
@@ -211,7 +237,9 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	6  Edit off the roster table rows: Details is the edit form
 //	7  one table, with the count in the row; titles carry [Full] or the limit
 //	   instead of a live count
-const publishFormatVersion = 7
+//	8  titles carry [X/Y] at the end again, renamed at most every five minutes,
+//	   and [Full] at the front at once
+const publishFormatVersion = 8
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //
@@ -267,7 +295,16 @@ func (s *Server) RepublishStaleEvents(guildID string) {
 			log.Printf("[discord-signup] sweep event=%d: roster: %v", ev.ID, err)
 			continue
 		}
-		if eventPublishSignature(ev, roster) == ev.PublishedSignature {
+		stale := eventPublishSignature(ev, roster) != ev.PublishedSignature
+		renameDue := titleRenameDue(ev, nativeEventName(ev), now())
+		if !stale && !renameDue {
+			continue
+		}
+		if !stale {
+			// Not a discrepancy — a throttled count rename has come due, which
+			// is the sweep doing its other job. Quiet, because it happens every
+			// five minutes on every busy event and would drown the line below.
+			s.syncAfterChange(ev.ID, nil)
 			continue
 		}
 		// The one line worth reading in this log. Reaching here means a write

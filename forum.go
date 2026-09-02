@@ -224,7 +224,7 @@ func forumTagFor(ev *Event, f *GuildForum) string {
 // two per ten minutes per thread. So the thread PATCH is skipped unless the
 // title or tag actually changed; under signup churn the title badge may lag,
 // and the card inside (edited freely) stays current.
-func (s *Server) refreshForumPost(ev *Event) error {
+func (s *Server) refreshForumPost(ev *Event, rename bool) error {
 	if s.discord == nil {
 		return nil
 	}
@@ -269,7 +269,18 @@ func (s *Server) refreshForumPost(ev *Event) error {
 	if err := s.discord.EditMessage(ev.ForumPostID, ev.ForumPostID, card); err != nil {
 		return fmt.Errorf("edit forum card: %w", err)
 	}
-	patch := map[string]any{"name": title, "applied_tags": []string{tag}}
+	return s.patchForumThread(ev, title, tag, rename)
+}
+
+// patchForumThread writes the thread's tag, its archived flag, and — only
+// when a rename is due — its name. The tag flips only with the Full state
+// and is not a rename; the name is, and renames are rate-limited to about two
+// per ten minutes per thread, so it goes out on titleRenameDue's say-so.
+func (s *Server) patchForumThread(ev *Event, title, tag string, rename bool) error {
+	patch := map[string]any{"applied_tags": []string{tag}}
+	if rename {
+		patch["name"] = title
+	}
 	if IsArchived(ev.Status) {
 		patch["archived"] = true
 	}
@@ -279,8 +290,27 @@ func (s *Server) refreshForumPost(ev *Event) error {
 	return nil
 }
 
+// renameForumPostOnly is the title-only publish: nothing about the roster has
+// changed since the last full publish, but a throttled count rename has come
+// due. The card inside the post is already current, so only the thread moves.
+func (s *Server) renameForumPostOnly(ev *Event) error {
+	if s.discord == nil || ev.ForumPostID == "" {
+		return nil
+	}
+	forum, err := s.store.GuildForum(ev.GuildID)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.patchForumThread(ev, forumPostTitle(ev), forumTagFor(ev, forum), true)
+}
+
+// refreshForumPostQuietly always renames: its callers are a finish, a cancel
+// and the adopt-forum rebuild, each a real change to what the title says.
 func (s *Server) refreshForumPostQuietly(ev *Event) {
-	if err := s.refreshForumPost(ev); err != nil {
+	if err := s.refreshForumPost(ev, true); err != nil {
 		log.Printf("[discord-signup] refresh forum post for event %d: %v", ev.ID, err)
 	}
 }

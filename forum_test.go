@@ -34,7 +34,7 @@ func TestForumPostCarriesTheSameCardAndButtons(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := srv.refreshForumPost(ev); err != nil {
+	if err := srv.refreshForumPost(ev, true); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	var created map[string]any
@@ -68,14 +68,14 @@ func TestForumTagFlipsWhenTheEventFills(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := srv.refreshForumPost(ev); err != nil {
+	if err := srv.refreshForumPost(ev, true); err != nil {
 		t.Fatalf("first refresh: %v", err)
 	}
 	if _, err := store.Join(ev.ID, "alice", "Alice", JoinedViaButton); err != nil {
 		t.Fatalf("join: %v", err)
 	}
 	full, _ := store.GetEvent(ev.ID)
-	if err := srv.refreshForumPost(full); err != nil {
+	if err := srv.refreshForumPost(full, true); err != nil {
 		t.Fatalf("second refresh: %v", err)
 	}
 	var patch map[string]any
@@ -107,7 +107,7 @@ func TestFinishedEventsArchiveTheirForumPost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := srv.refreshForumPost(ev); err != nil {
+	if err := srv.refreshForumPost(ev, true); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	withPost, _ := store.GetEvent(ev.ID)
@@ -140,7 +140,7 @@ func TestFinishedEventsArchiveTheirForumPost(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 	before := len(fake.recorded())
-	if err := srv.refreshForumPost(gone); err != nil {
+	if err := srv.refreshForumPost(gone, true); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	for _, c := range fake.recorded()[before:] {
@@ -155,7 +155,7 @@ func TestForumPostTitle(t *testing.T) {
 	ev := &Event{Name: "Board games", Capacity: 8, AttendingCount: 3,
 		Timezone: "America/Los_Angeles",
 		StartsAt: time.Date(2026, 8, 29, 16, 0, 0, 0, zone).Unix()}
-	if got := forumPostTitle(ev); got != "Board games — 8/29 4pm · 8 places" {
+	if got := forumPostTitle(ev); got != "Board games — 8/29 4pm [3/8]" {
 		t.Errorf("forumPostTitle = %q", got)
 	}
 	uncapped := &Event{Name: "Open house", StartsAt: ev.StartsAt, Timezone: ev.Timezone}
@@ -198,7 +198,7 @@ func TestNewForumPostsAreSeededWithTheJoinReaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := srv.refreshForumPost(ev); err != nil {
+	if err := srv.refreshForumPost(ev, true); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	var seeded bool
@@ -222,7 +222,7 @@ func TestLeavingByButtonClearsTheReaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := srv.refreshForumPost(ev); err != nil {
+	if err := srv.refreshForumPost(ev, true); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	if _, err := store.Join(ev.ID, "alice", "Alice", JoinedViaReaction); err != nil {
