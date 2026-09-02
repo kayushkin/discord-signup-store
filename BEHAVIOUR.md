@@ -8,6 +8,9 @@ be checked against one description instead of against itself.
 
 **The `signups` table in SQLite is the roster. Nothing else is.**
 
+Its history is `signup_updates`; an event's own history of edits is
+`event_updates`. Both append-only, both named for what they are an update to.
+
 One row per person per event, carrying their state (`attending`, `waitlisted`,
 `withdrawn`), their arrival `position`, and how they got there. Everything a
 human ever sees is a projection of those rows.
@@ -77,7 +80,8 @@ title and description. They are kept true by three rules:
 
 **Reminders** are the exception to everything above: not a copy of anything, and
 the only messages this service sends that deliberately ping. One an hour before
-an event, one when it starts, naming everyone who has a place. Each is sent once
+an event, one when it starts, naming everyone who has a place, in the reminders channel and nowhere else.
+Each is sent once
 and stamped on the event row, and one that missed its moment by more than 15
 minutes is written off rather than sent — coming back from an outage must not
 ping everybody about events that already happened.
