@@ -172,7 +172,7 @@ func (s *Store) MarkInterested(eventID int64, discordUserID, displayName string)
 			return nil, fmt.Errorf("read inserted id: %w", err)
 		}
 	}
-	if err := logTransition(tx, eventID, discordUserID, action, fromState, newState,
+	if err := logSignupUpdate(tx, eventID, discordUserID, action, fromState, newState,
 		position, ActorInterested, ts); err != nil {
 		return nil, err
 	}

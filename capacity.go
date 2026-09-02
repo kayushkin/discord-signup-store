@@ -95,7 +95,7 @@ func (s *Store) PromoteToFillCapacity(eventID int64) ([]Signup, error) {
 			StateAttending, ts, promoting[i].ID); err != nil {
 			return nil, fmt.Errorf("promote signup %d: %w", promoting[i].ID, err)
 		}
-		if err := logTransition(tx, eventID, promoting[i].DiscordUserID, ActionPromoted,
+		if err := logSignupUpdate(tx, eventID, promoting[i].DiscordUserID, ActionPromoted,
 			StateWaitlisted, StateAttending, promoting[i].Position, ActorPromotion, ts); err != nil {
 			return nil, err
 		}
@@ -189,6 +189,13 @@ func (s *Server) applyEventEdit(before *Event, patch EventPatch, actor string) (
 	after, err := s.store.GetEvent(before.ID)
 	if err != nil {
 		return nil, nil, err
+	}
+	// Logged here because this is the one function every edit passes through —
+	// the Discord form, the web form, the capacity command and the machine API
+	// all end up on this line, so there is no surface that can change an event
+	// and leave no trace.
+	if err := s.store.LogEventUpdates(before, after, actor); err != nil {
+		log.Printf("[discord-signup] log edits to event %d: %v", before.ID, err)
 	}
 	log.Printf("[discord-signup] event %d edited by %s; %d promoted", before.ID, actor, len(promoted))
 

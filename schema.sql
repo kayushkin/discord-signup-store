@@ -70,14 +70,14 @@ CREATE TABLE IF NOT EXISTS signups (
 );
 CREATE INDEX IF NOT EXISTS idx_signups_roster ON signups(event_id, state, position);
 
--- transitions: append-only. Every state change, with the time this service
+-- signup_updates: append-only. Every state change, with the time this service
 -- received it.
 --
 -- This table is the durable record Discord does not keep. Its own gateway tells
 -- you a subscription happened *now* and its REST endpoint tells you the current
 -- set; neither carries a timestamp, and someone who joins and leaves between
 -- two reads leaves no trace at all. Nothing updates or deletes a row here.
-CREATE TABLE IF NOT EXISTS transitions (
+CREATE TABLE IF NOT EXISTS signup_updates (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     discord_user_id TEXT NOT NULL,
@@ -91,8 +91,8 @@ CREATE TABLE IF NOT EXISTS transitions (
     actor           TEXT NOT NULL DEFAULT 'user',
     at              INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_transitions_event ON transitions(event_id, at);
-CREATE INDEX IF NOT EXISTS idx_transitions_user  ON transitions(discord_user_id, at);
+CREATE INDEX IF NOT EXISTS idx_signup_updates_event ON signup_updates(event_id, at);
+CREATE INDEX IF NOT EXISTS idx_signup_updates_user  ON signup_updates(discord_user_id, at);
 
 -- web_sessions: browser logins on YOUR_DOMAIN.
 --
@@ -206,3 +206,28 @@ CREATE TABLE IF NOT EXISTS standing_messages (
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (kind, channel_id)
 );
+
+-- event_updates: append-only. Every change to what an event IS, beside
+-- signup_updates which is every change to who is on it.
+--
+-- One row per field per edit, so "who moved this to Tuesday" is a question with
+-- an answer. Nothing here recorded that before: an event's name, time, place
+-- and limit could all change and the only trace was the new value.
+--
+-- Bookkeeping is deliberately not logged — message ids, thread and forum ids,
+-- the publish signature, reminder stamps. Those are this service noting what it
+-- did, not somebody editing the event, and mixing them in would bury the four
+-- rows a person cares about under a hundred nobody does.
+CREATE TABLE IF NOT EXISTS event_updates (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id   INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    field      TEXT NOT NULL,
+    from_value TEXT NOT NULL DEFAULT '',
+    to_value   TEXT NOT NULL DEFAULT '',
+    -- Who did it, by Discord id where there is one: 'web:<id>' from the page,
+    -- the raw id from a Discord form, 'api' from the machine API.
+    actor      TEXT NOT NULL DEFAULT '',
+    at         INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_updates_event ON event_updates(event_id, at);

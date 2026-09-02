@@ -228,7 +228,7 @@ func TestClosedEventRefusesJoins(t *testing.T) {
 	}
 }
 
-// TestHistoryRecordsWhoCausedEachChange covers the reason the transitions table
+// TestHistoryRecordsWhoCausedEachChange covers the reason the signup updates table
 // exists: telling an automatic promotion apart from a person's own decision.
 func TestHistoryRecordsWhoCausedEachChange(t *testing.T) {
 	store := testStore(t)

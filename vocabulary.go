@@ -12,7 +12,7 @@ const (
 	// StateWaitlisted means they signed up after the cap was reached and hold
 	// a position in line. Promotion is automatic when a place frees up.
 	StateWaitlisted = "waitlisted"
-	// StateWithdrawn means they left. The row stays so the transition history
+	// StateWithdrawn means they left. The row stays so the signup update history
 	// stays joinable and so a re-join can be told from a first join.
 	StateWithdrawn = "withdrawn"
 )
@@ -23,7 +23,7 @@ var validStates = map[string]bool{
 	StateWithdrawn:  true,
 }
 
-// Transition actions, written to the append-only log.
+// SignupUpdate actions, written to the append-only log.
 const (
 	ActionJoined     = "joined"     // signed up and got a place
 	ActionWaitlisted = "waitlisted" // signed up and went into line
@@ -82,7 +82,7 @@ var archivedStatuses = map[string]bool{
 // IsArchived reports whether an event belongs in the collapsed archive.
 func IsArchived(status string) bool { return archivedStatuses[status] }
 
-// ActorUser is the actor recorded when the transition came from someone
+// ActorUser is the actor recorded when the signup update came from someone
 // pressing a button themselves.
 const ActorUser = "user"
 
@@ -109,7 +109,7 @@ func sortedKeys(set map[string]bool) []string {
 // ValidStates returns the accepted signup states, sorted, for error messages.
 func ValidStates() []string { return sortedKeys(validStates) }
 
-// ValidActions returns the accepted transition actions, sorted.
+// ValidActions returns the accepted signup update actions, sorted.
 func ValidActions() []string { return sortedKeys(validActions) }
 
 // ValidStatuses returns the accepted event statuses, sorted.

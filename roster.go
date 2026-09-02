@@ -141,7 +141,7 @@ func (s *Store) Join(eventID int64, discordUserID, displayName, via string) (*Jo
 	if hasExisting {
 		fromState = existing.State
 	}
-	if err := logTransition(tx, eventID, discordUserID, action, fromState, newState, position, ActorUser, ts); err != nil {
+	if err := logSignupUpdate(tx, eventID, discordUserID, action, fromState, newState, position, ActorUser, ts); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -212,7 +212,7 @@ func (s *Store) Leave(eventID int64, discordUserID, actor string) (*LeaveResult,
 		StateWithdrawn, ts, leaver.ID); err != nil {
 		return nil, fmt.Errorf("withdraw signup: %w", err)
 	}
-	if err := logTransition(tx, eventID, discordUserID, ActionWithdrew, leaver.State, StateWithdrawn,
+	if err := logSignupUpdate(tx, eventID, discordUserID, ActionWithdrew, leaver.State, StateWithdrawn,
 		leaver.Position, actor, ts); err != nil {
 		return nil, err
 	}
@@ -241,7 +241,7 @@ func (s *Store) Leave(eventID int64, discordUserID, actor string) (*LeaveResult,
 				StateAttending, ts, next.ID); err != nil {
 				return nil, fmt.Errorf("promote signup: %w", err)
 			}
-			if err := logTransition(tx, eventID, next.DiscordUserID, ActionPromoted, StateWaitlisted,
+			if err := logSignupUpdate(tx, eventID, next.DiscordUserID, ActionPromoted, StateWaitlisted,
 				StateAttending, next.Position, ActorPromotion, ts); err != nil {
 				return nil, err
 			}
@@ -304,20 +304,20 @@ func (s *Store) Roster(eventID int64, includeWithdrawn bool) ([]Signup, error) {
 	return out, nil
 }
 
-// History returns the append-only transition log for an event, oldest first.
+// History returns the append-only signup update log for an event, oldest first.
 // This is the record Discord does not keep.
-func (s *Store) History(eventID int64, limit int) ([]Transition, error) {
+func (s *Store) History(eventID int64, limit int) ([]SignupUpdate, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 500
 	}
-	// LEFT JOIN, not JOIN: every transition is written alongside a signup row
+	// LEFT JOIN, not JOIN: every signup update is written alongside a signup row
 	// today, but a missing one must show the id rather than drop the row out of
 	// the history entirely. An audit log that silently omits entries is worse
 	// than one with an ugly name in it.
 	rows, err := s.db.Query(`
 		SELECT t.id, t.event_id, t.discord_user_id, t.action, t.from_state, t.to_state,
 		       t.position, t.actor, t.at, COALESCE(s.display_name, '')
-		FROM transitions t
+		FROM signup_updates t
 		LEFT JOIN signups s ON s.event_id = t.event_id AND s.discord_user_id = t.discord_user_id
 		WHERE t.event_id = ? ORDER BY t.at ASC, t.id ASC LIMIT ?`, eventID, limit)
 	if err != nil {
@@ -325,12 +325,12 @@ func (s *Store) History(eventID int64, limit int) ([]Transition, error) {
 	}
 	defer rows.Close()
 
-	out := []Transition{}
+	out := []SignupUpdate{}
 	for rows.Next() {
-		var t Transition
+		var t SignupUpdate
 		if err := rows.Scan(&t.ID, &t.EventID, &t.DiscordUserID, &t.Action, &t.FromState,
 			&t.ToState, &t.Position, &t.Actor, &t.At, &t.DisplayName); err != nil {
-			return nil, fmt.Errorf("scan transition: %w", err)
+			return nil, fmt.Errorf("scan signup update: %w", err)
 		}
 		out = append(out, t)
 	}
@@ -370,15 +370,15 @@ func nextPosition(tx *sql.Tx, eventID int64) (int, error) {
 	return maxPos + 1, nil
 }
 
-func logTransition(tx *sql.Tx, eventID int64, userID, action, from, to string, position int, actor string, at int64) error {
+func logSignupUpdate(tx *sql.Tx, eventID int64, userID, action, from, to string, position int, actor string, at int64) error {
 	if !validActions[action] {
 		return fmt.Errorf("refusing to log unknown action %q (known: %v)", action, ValidActions())
 	}
 	_, err := tx.Exec(`
-		INSERT INTO transitions (event_id, discord_user_id, action, from_state, to_state, position, actor, at)
+		INSERT INTO signup_updates (event_id, discord_user_id, action, from_state, to_state, position, actor, at)
 		VALUES (?,?,?,?,?,?,?,?)`, eventID, userID, action, from, to, position, actor, at)
 	if err != nil {
-		return fmt.Errorf("log transition: %w", err)
+		return fmt.Errorf("log signup update: %w", err)
 	}
 	return nil
 }

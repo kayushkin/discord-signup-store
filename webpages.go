@@ -61,7 +61,7 @@ type pageData struct {
 	Event    *Event
 
 	Roster  []Signup
-	History []Transition
+	History []SignupUpdate
 
 	CanManage        bool
 	DiscordEventURL  string
@@ -97,10 +97,10 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 		return template.HTML(fmt.Sprintf(`<time class="ts" datetime="%s">%s</time>`,
 			t.Format(time.RFC3339), t.Format("Mon 2 Jan 2006, 15:04")+" UTC"))
 	},
-	// transitionText drops the resulting state when the action already names
+	// signupUpdateText drops the resulting state when the action already names
 	// it, so "waitlisted → waitlisted" reads as "waitlisted". Where the two
 	// differ the arrow carries real information and stays.
-	"transitionText": func(action, toState string) string {
+	"signupUpdateText": func(action, toState string) string {
 		if action == toState {
 			return action
 		}

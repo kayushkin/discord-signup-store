@@ -1,7 +1,7 @@
 # Every table, every column
 
 SQLite at `~/.config/discord-signup-store/discord-signup-store.db` (WAL, foreign
-keys on). Nine tables, plus SQLite's own `sqlite_sequence`. Taken from the live database on 2026-09-02 and checked
+keys on). Ten tables of ours, plus SQLite's own `sqlite_sequence`. Taken from the live database on 2026-09-02 and checked
 against a database built fresh from `schema.sql` plus the migrations — every
 table's column *set* matches.
 
@@ -108,6 +108,28 @@ Indexed by `(event_id, at)` and `(discord_user_id, at)` — the two questions
 anyone asks of a history.
 
 ---
+
+## `event_updates` — 7 columns · append-only, new 2026-09-02
+
+Every change to what an event **is**, beside `signup_updates` which is every
+change to who is on it. Nothing recorded this before: an event's name, time,
+place and limit could all change and the only trace was the new value.
+
+| column | type | description |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `event_id` | INTEGER | → `events(id)` ON DELETE CASCADE. |
+| `field` | TEXT | Which one changed: `name`, `description`, `capacity`, `status`, `starts_at`, `ends_at`, `location`, `timezone`, `recurrence_rule`, `attending_role_id`, `waitlist_role_id`. |
+| `from_value` | TEXT | The old value, raw — a time as the integer it is stored as, not a rendering of it. Presentation belongs at the edge. |
+| `to_value` | TEXT | The new one. |
+| `actor` | TEXT | `web:<discord id>`, a raw Discord id from a form, or `api`. |
+| `at` | INTEGER | When. |
+
+Written from `applyEventEdit`, which is the one function every edit passes
+through, so no surface can change an event and leave no trace. **Bookkeeping is
+deliberately not logged** — message ids, thread and forum ids,
+`published_signature`, the reminder stamps. Those change without anybody editing
+anything, and recording them would bury the rows somebody cares about.
 
 ## The address book
 

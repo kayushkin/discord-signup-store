@@ -119,8 +119,12 @@ type Signup struct {
 	WaitlistPlace int `json:"waitlist_place"`
 }
 
-// Transition is one row of the append-only history.
-type Transition struct {
+// SignupUpdate is one row of the append-only history of a roster.
+//
+// Named for what it is an update TO. "Transition" said what the rows are in
+// the abstract and nothing about what they are of, so beside a table called
+// signups it read as a separate concept rather than that table's history.
+type SignupUpdate struct {
 	ID            int64  `json:"id"`
 	EventID       int64  `json:"event_id"`
 	DiscordUserID string `json:"discord_user_id"`
@@ -131,7 +135,7 @@ type Transition struct {
 	Actor         string `json:"actor"`
 	At            int64  `json:"at"`
 	// DisplayName is joined on read from the signup row, never stored on this
-	// one. A transition is a fact about an id; the name is how that id looked
+	// one. An update is a fact about an id; the name is how that id looked
 	// when somebody last saw it, and copying it here would freeze a stale
 	// spelling into an append-only table that can never be corrected.
 	DisplayName string `json:"display_name"`
@@ -187,6 +191,14 @@ func Open(dataDir string) (*Store, error) {
 	if err := db.Ping(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("ping database: %w", err)
+	}
+	// Before the schema, not after. schema.sql creates the new table with IF
+	// NOT EXISTS, so running it first would make an empty one, the rename would
+	// then find its destination already present and skip, and every row of
+	// history would be stranded in a table nothing reads.
+	if err := renameRetiredTables(db); err != nil {
+		db.Close()
+		return nil, err
 	}
 	if _, err := db.Exec(schemaSQL); err != nil {
 		db.Close()
@@ -303,6 +315,57 @@ var tablesRetired = []string{
 	// deleted when that change shipped, so none of them addressed anything that
 	// still existed.
 	"event_table_rows",
+}
+
+// tablesRenamed are tables that kept their contents and changed their name.
+//
+// "transitions" said what the rows are in the abstract and nothing about what
+// they are OF. Beside a table called signups it read as a separate concept
+// rather than that table's history, which is exactly what it is.
+var tablesRenamed = []struct{ from, to string }{
+	{"transitions", "signup_updates"},
+}
+
+// renameRetiredTables moves a table's contents under its new name, once.
+//
+// Guarded on the destination not existing, so it is a no-op on every boot after
+// the first and on a database created fresh. The old indexes go with it: SQLite
+// keeps index names across a table rename, so leaving them would mean
+// idx_transitions_event pointing at signup_updates.
+func renameRetiredTables(db *sql.DB) error {
+	for _, r := range tablesRenamed {
+		from, err := tableExists(db, r.from)
+		if err != nil {
+			return err
+		}
+		to, err := tableExists(db, r.to)
+		if err != nil {
+			return err
+		}
+		if !from || to {
+			continue
+		}
+		if _, err := db.Exec("ALTER TABLE " + r.from + " RENAME TO " + r.to); err != nil {
+			return fmt.Errorf("rename %s to %s: %w", r.from, r.to, err)
+		}
+		for _, idx := range []string{"idx_" + r.from + "_event", "idx_" + r.from + "_user"} {
+			if _, err := db.Exec("DROP INDEX IF EXISTS " + idx); err != nil {
+				return fmt.Errorf("drop stale index %s: %w", idx, err)
+			}
+		}
+		log.Printf("[discord-signup] renamed table %s to %s", r.from, r.to)
+	}
+	return nil
+}
+
+func tableExists(db *sql.DB, name string) (bool, error) {
+	var n int
+	err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, name).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("look for table %s: %w", name, err)
+	}
+	return n > 0, nil
 }
 
 func dropRetiredTables(db *sql.DB) error {

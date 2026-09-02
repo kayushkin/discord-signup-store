@@ -137,6 +137,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/events/{id}/signups", s.handleAdminJoin)
 	mux.HandleFunc("DELETE /api/events/{id}/signups/{userID}", s.handleAdminLeave)
 	mux.HandleFunc("GET /api/events/{id}/history", s.handleHistory)
+	mux.HandleFunc("GET /api/events/{id}/updates", s.handleEventUpdates)
 	mux.HandleFunc("POST /api/guilds/{guildID}/sync", s.handleSyncGuild)
 	mux.HandleFunc("POST /api/sync", s.handleSyncAllGuilds)
 	mux.HandleFunc("POST /api/channels/{channelID}/how-to", s.handlePostHowTo)
@@ -286,6 +287,24 @@ func (s *Server) handleRebuildGuildTable(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleEventUpdates returns what has been changed about an event, and by whom.
+//
+// Separate from /history, which is the roster's: one answers "who is going and
+// how did that change", the other "what is this event and how did that change".
+func (s *Server) handleEventUpdates(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id must be an integer"})
+		return
+	}
+	updates, err := s.store.EventUpdates(id)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"event_updates": updates})
 }
 
 // handleSendReminders posts whichever event reminders have come due.
@@ -581,5 +600,5 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"transitions": history})
+	writeJSON(w, http.StatusOK, map[string]any{"signup_updates": history})
 }

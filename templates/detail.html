@@ -84,7 +84,7 @@
     {{range .History}}
     <tr><td class="meta">{{localTime .At}}</td>
         <td>{{who .DisplayName .DiscordUserID}}</td>
-        <td>{{transitionText .Action .ToState}}</td>
+        <td>{{signupUpdateText .Action .ToState}}</td>
         <td class="meta">{{.Actor}}</td></tr>
     {{end}}
   </table>
