@@ -261,7 +261,7 @@ instantly; the poll is the backstop for socket downtime. Deleting a native
 event is how a person cancels in Discord's own UI, and it now means that here
 too.
 
-## Conventions## The native event's title
+## The native event's title
 
 When a linked event has a capacity, its Discord title carries a badge:
 `[3/8] Board game night`. Pushed on every roster change, since the count is
@@ -278,93 +278,38 @@ that round-trips twenty times.
 The name is trimmed to fit, never the badge: `[3/8] Board game ni` still says
 what the badge is for.
 
-## The personal dashboard
+## Publishing, and why anything can be stale at all
 
-`signup:my-events:0` (on the table's last page and the standing message in the
-dashboard channel) opens an **ephemeral** Components V2 view — the one surface
-that is genuinely per-viewer, because a channel message renders identically for
-everyone and Discord fires no event when someone opens a channel.
+Discord **stores** message text. There is no live rendering: a bot writes words
+and Discord shows those words until different ones are written. So every public
+surface here — the signup card, the forum post and its title, the table line,
+the native event's title — is a copy of the roster that is exactly as current as
+the last write. The surfaces that cannot go stale are the ones built per
+interaction (the details modal, the ephemeral replies) and the web pages, which
+render from SQLite on every request. **Nothing here is cached**: the counts are
+a `COUNT(*)` at read time and are never stored.
 
-Each row conditions its buttons on the viewer: **Join** or **Leave** depending
-on whether they are in the event, their own state written on the row ("going",
-"waitlist #2"), and **Edit** only with `MANAGE_EVENTS`/`ADMINISTRATOR` or for
-the event's creator. `signup:dash-join:{id}` and `signup:dash-leave:{id}`
-answer with callback type 7 (**UPDATE_MESSAGE**), re-rendering the dashboard in
-place so the row flips under the cursor.
+Three rules keep the copies true:
 
-Capped at six events: a row costs up to five components plus a separator, so
-six is 37 of the 40 budget — seven measured out at 43.
+1. **One writer per event.** `syncAfterChange` takes an event id and goes
+   through `eventSyncQueue`. A change arriving while a publish is in flight does
+   not start a second publish; it marks the run dirty and the writer does one
+   more pass when it finishes. The event is re-read at the top of each pass, so
+   the write that lands last always carries the newest committed state, and a
+   burst of clicks costs two passes rather than one per click.
+2. **Write only what changed.** `published_signature` fingerprints every input
+   to a stored surface and is recorded only when a publish fully succeeds. A
+   pass whose signature already matches makes no Discord calls at all.
+3. **Sweep and repair.** The ten-minute reconcile (`POST /api/sync`, scheduler
+   job 65) ends by re-checking every live event and rewriting any whose copies
+   disagree. A partial publish deliberately leaves the old signature in place,
+   so a write lost to a 500 or a restart is repaired within ten minutes rather
+   than sitting wrong until the next person happens to join.
 
-## Discussion threads
-
-Every open event's signup card grows a public thread, named after the event and
-seeded with one line saying what it is for. Created from `RefreshSignupMessage`
-— the choke point every maintained card passes through — so events that predate
-the feature grow a thread on their next activity, with no backfill pass to
-write or forget. Idempotent via `thread_id`, which is stored even though Discord
-gives a message thread the same id as its parent: a reposted card gets a new
-message id while the old thread lives on.
-
-When the event completes, the sweep archives the thread (not locked — a
-late "how did it go?" reopens it, and locking would turn that into a
-permission error).
-
-## The forum surface
-
-`PUT /api/guilds/{guildID}/forum {"channel_id"}` adopts a forum channel: the
-managed tags (`open`, `full`, `finished`, `cancelled` — the last two moderated,
-since they state facts this service asserts) are created if missing, matched by
-name once, and joined by id ever after. Every live event then gets a post.
-
-A forum post is a thread whose required first message **shares the thread's
-id**. That message is `RenderSignupMessage` verbatim — the same card and the
-same button custom_ids as the board, so one handler serves both surfaces. The
-post's title carries the capacity badge (`[3/8] Games — 8/29 4pm`) and its tag
-flips with the roster; the sweep tags `finished` and archives.
-
-⚠️ Discord rate-limits **thread renames** to roughly two per ten minutes per
-thread — far harder than message edits. Under signup churn the title badge may
-lag; the card inside stays current.
-
-## The ✅ reaction
-
-React ✅ on a forum post to join; remove it to leave. The forum's
-`default_reaction_emoji` makes ✅ a click target on the **list view**, so
-joining needs neither opening the post nor scrolling past its discussion.
-
-The "only this emoji" restriction is permissions, not filtering: the channel
-denies `ADD_REACTIONS` to `@everyone`, and a denied user can still click a
-reaction that already exists — so the bot seeds ✅ on every post and that seed
-is the only reaction there is. The bot's own role carries a counter-allow,
-because a channel deny on `@everyone` binds the bot too (measured: the seeding
-403'd until the allow was added).
-
-Removing ✅ leaves **however the person joined**, matching the Interested rule.
-Leaving by any other door clears the person's ✅ (needs `MANAGE_MESSAGES`), so
-the reaction stays truthful; the bot's own removals echo back through the
-gateway, land on an already-withdrawn row, and no-op — that is what breaks the
-loop. A reaction carries no interaction token, so a waitlisted clicker is told
-by DM, with the card as fallback.
-
-## Native-event reconciliation
-
-The sync's reconcile pass keeps this store and Discord's event list from
-drifting, in both directions, within one sync interval:
-
-| Local | Native | Action |
-|---|---|---|
-| live, unlinked, starts in the future | — | publish |
-| live | **gone** (direct GET 404) | cancel locally, everywhere |
-| live | CANCELED | cancel locally |
-| live | COMPLETED | left to the time sweep, which owns completion |
-| cancelled | still listed | delete the native event |
-
-Absence from the LIST endpoint proves nothing — completed events drop out of it
-too — so a missing id is checked with a direct GET, where a 404 is unambiguous.
-The gateway's GUILD_SCHEDULED_EVENT_DELETE handler does the same cancellation
-instantly; the poll is the backstop for socket downtime. Deleting a native
-event is how a person cancels in Discord's own UI, and it now means that here
-too.
+Rules 1 and 3 were both missing on 2 September: four Interested clicks in
+thirty-three seconds started four overlapping publishes, the one that had read
+three people finished after the one that had read two, and every Discord surface
+said 3/7 while the database and both web pages said 2/7.
 
 ## Conventions
 
