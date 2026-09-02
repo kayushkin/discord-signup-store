@@ -192,6 +192,21 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 	}
 }
 
+// publishFormatVersion is what the surfaces LOOK like, as opposed to what they
+// say. Bump it in the same commit as any change to a renderer that writes to
+// Discord — the card, the forum title, the native title or description.
+//
+// Without it a wording change never reaches anybody. The signature is taken
+// over the event's inputs, so improving a sentence leaves every signature
+// matching, every publish skipped, and the old words sitting on Discord until
+// somebody happens to join. That is not hypothetical: the description rewrite
+// that added the roster shipped, deployed, and would have changed nothing.
+//
+//	1  the original card, title badge and "Signups are in …" pointer
+//	2  the roster listed in the native description, and the pointer reworded to
+//	   stop calling the forum the place to sign up
+const publishFormatVersion = 2
+
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //
 // Deliberately taken over the INPUTS rather than the rendered output. A
@@ -209,6 +224,7 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 // every card for a number no card carries.
 func eventPublishSignature(ev *Event, roster []Signup) string {
 	var b strings.Builder
+	fmt.Fprintf(&b, "v%d\x00", publishFormatVersion)
 	fmt.Fprintf(&b, "%s\x00%s\x00%s\x00%d\x00%d\x00%d\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s",
 		ev.Name, ev.Description, ev.Status, ev.Capacity, ev.StartsAt, ev.EndsAt,
 		ev.Location, ev.Timezone, ev.MessageID, ev.ChannelID,
