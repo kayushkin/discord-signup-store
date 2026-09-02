@@ -153,7 +153,7 @@ func TestForumPostTitle(t *testing.T) {
 	ev := &Event{Name: "Board games", Capacity: 8, AttendingCount: 3,
 		Timezone: "America/Los_Angeles",
 		StartsAt: time.Date(2026, 8, 29, 16, 0, 0, 0, zone).Unix()}
-	if got := forumPostTitle(ev); got != "[3/8] Board games — 8/29 4pm" {
+	if got := forumPostTitle(ev); got != "Board games — 8/29 4pm · 8 places" {
 		t.Errorf("forumPostTitle = %q", got)
 	}
 	uncapped := &Event{Name: "Open house", StartsAt: ev.StartsAt, Timezone: ev.Timezone}

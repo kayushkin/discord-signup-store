@@ -317,6 +317,11 @@ var tablesRetired = []string{
 	// deleted when that change shipped, so none of them addressed anything that
 	// still existed.
 	"event_table_rows",
+	// roster_table_pages: a second table that ran for one evening beside the
+	// first so their shapes could be compared. The comparison settled it and
+	// the first table took the second's shape. Its one message is deleted by
+	// hand at the same deploy; nothing else ever pointed at it.
+	"roster_table_pages",
 }
 
 // tablesRenamed are tables that kept their contents and changed their name.

@@ -75,6 +75,29 @@ func nativeNamesPushed(t *testing.T, fake *fakeDiscord, nativeEventID string) []
 	}
 }
 
+// nativeDescriptionsPushed collects the descriptions sent to one native
+// scheduled event, in order. The description carries the live count and the
+// names; the title deliberately does not (a rename is rate-limited, an edit is
+// not), so this is where a stale-snapshot bug shows.
+func nativeDescriptionsPushed(t *testing.T, fake *fakeDiscord, nativeEventID string) []string {
+	t.Helper()
+	path := "/guilds/g1/scheduled-events/" + nativeEventID
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		var out []string
+		for _, c := range fake.recorded() {
+			if c.Method == http.MethodPatch && c.Path == path {
+				d, _ := c.Body["description"].(string)
+				out = append(out, d)
+			}
+		}
+		if len(out) > 0 || time.Now().After(deadline) {
+			return out
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // publishedEvent is an event that already exists on Discord, which is the only
 // kind with a title to go stale.
 func publishedEvent(t *testing.T, store *Store, capacity int, joiners ...string) *Event {
@@ -124,8 +147,8 @@ func TestSavingTheEditFormPushesTheNativeTitle(t *testing.T) {
 	if len(names) == 0 {
 		t.Fatal("the edit pushed nothing to the native event; its title still shows the old limit")
 	}
-	if got := names[len(names)-1]; got != "[3/10] Games" {
-		t.Errorf("pushed name = %q, want %q", got, "[3/10] Games")
+	if got := names[len(names)-1]; got != "Games · 10 places" {
+		t.Errorf("pushed name = %q, want %q", got, "Games · 10 places")
 	}
 }
 
@@ -143,8 +166,8 @@ func TestRenamingOnTheWebPageReachesDiscord(t *testing.T) {
 	if len(names) == 0 {
 		t.Fatal("the rename pushed nothing to the native event")
 	}
-	if got := names[len(names)-1]; got != "[1/8] Board game night" {
-		t.Errorf("pushed name = %q, want %q", got, "[1/8] Board game night")
+	if got := names[len(names)-1]; got != "Board game night · 8 places" {
+		t.Errorf("pushed name = %q, want %q", got, "Board game night · 8 places")
 	}
 }
 
@@ -158,12 +181,13 @@ func TestAddingSomeoneFromTheWebPagePushesTheNewCount(t *testing.T) {
 
 	postForm(t, mux, token, eventPath(ev)+"/roster/add", url.Values{"discord_user_id": {"bob"}})
 
-	names := nativeNamesPushed(t, fake, "native-9")
-	if len(names) == 0 {
+	descs := nativeDescriptionsPushed(t, fake, "native-9")
+	if len(descs) == 0 {
 		t.Fatal("adding someone pushed nothing to the native event")
 	}
-	if got := names[len(names)-1]; got != "[2/3] Games" {
-		t.Errorf("pushed name = %q, want %q — the count is one behind", got, "[2/3] Games")
+	got := descs[len(descs)-1]
+	if !strings.Contains(got, "2 of 3 places taken") || !strings.Contains(got, "Going: alice, bob") {
+		t.Errorf("pushed description = %q, want 2 of 3 with both names — the count is one behind", got)
 	}
 }
 
@@ -176,12 +200,13 @@ func TestRemovingSomeoneFromTheWebPagePushesTheNewCount(t *testing.T) {
 
 	postForm(t, mux, token, eventPath(ev)+"/roster/remove", url.Values{"discord_user_id": {"alice"}})
 
-	names := nativeNamesPushed(t, fake, "native-9")
-	if len(names) == 0 {
+	descs := nativeDescriptionsPushed(t, fake, "native-9")
+	if len(descs) == 0 {
 		t.Fatal("removing someone pushed nothing to the native event")
 	}
-	if got := names[len(names)-1]; got != "[1/3] Games" {
-		t.Errorf("pushed name = %q, want %q — the count is one behind", got, "[1/3] Games")
+	got := descs[len(descs)-1]
+	if !strings.Contains(got, "1 of 3 places taken") || strings.Contains(got, "alice") {
+		t.Errorf("pushed description = %q, want 1 of 3 without alice — the count is one behind", got)
 	}
 }
 
@@ -234,9 +259,11 @@ func TestRaisingTheLimitThroughTheAPIPromotesTheWaitlist(t *testing.T) {
 		t.Errorf("%d attending after the limit went to 3, want 3 — the waitlist was not promoted",
 			after.AttendingCount)
 	}
+	// Three places, three attending: the cap was raised to exactly the
+	// attendance, so the title flips to Full — the one change a title is for.
 	if names := nativeNamesPushed(t, fake, "native-9"); len(names) == 0 ||
-		names[len(names)-1] != "[3/3] Games" {
-		t.Errorf("pushed names = %v, want the last to be %q", names, "[3/3] Games")
+		names[len(names)-1] != "[Full] Games" {
+		t.Errorf("pushed names = %v, want the last to be %q", names, "[Full] Games")
 	}
 }
 

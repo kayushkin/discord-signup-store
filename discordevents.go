@@ -295,7 +295,7 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 			GuildID:                 r.GuildID,
 			ChannelID:               channelID,
 			DiscordScheduledEventID: r.ID,
-			Name:                    stripCapacityPrefix(r.Name),
+			Name:                    stripTitleDecorations(r.Name),
 			Description:             stripSignupPointer(r.Description),
 			// Discord had no cap, so the imported event starts uncapped. Adding
 			// one is a decision a person makes on the web page; inventing a
@@ -327,7 +327,7 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 	// and must survive a sync — overwriting them here would reset the cap to
 	// unlimited every few minutes.
 	patch := EventPatch{}
-	if incoming := stripCapacityPrefix(r.Name); existing.Name != incoming {
+	if incoming := stripTitleDecorations(r.Name); existing.Name != incoming {
 		patch.Name = &incoming
 	}
 	if incoming := stripSignupPointer(r.Description); existing.Description != incoming {
@@ -509,47 +509,79 @@ func stripLocationPlaceholder(location string) string {
 	return location
 }
 
-// capacityPrefixPattern matches the badge this service puts at the front of a
-// native event's name, and nothing else.
+// Decorating a title with its capacity — and, since 2026-09-02, doing it as
+// rarely as the surfaces can bear.
 //
-// Anchored, and specific about the digits, because it is used to REMOVE the
-// badge from a name read back from Discord. Miss it and the name round-trips:
-// we push "[3/8] Games", the importer stores that as the name, and the next
-// push produces "[4/8] [3/8] Games" — the same accumulating corruption the
-// description pointer had, in a field capped at 100 characters, so it breaks
-// sooner and louder.
-var capacityPrefixPattern = regexp.MustCompile(`^\[\d+/\d+\]\s+`)
+// The title used to carry "[3/8]": a live count, at the front of the forum
+// post's name and the native event's name. Both are renames, and Discord
+// rate-limits thread renames to about two per ten minutes — so under signups
+// the number in the title was the number from two renames ago, and a count
+// that is usually wrong is worse than none. The live count lives in the table
+// row and the card, which are message edits and have no such limit.
+//
+// What stays in the title is what changes rarely: whether it is full, and if
+// it is not, how many places there are at all.
+//
+//	Board game night — 8/29 4pm · 8 places      capped, room left
+//	[Full] Board game night — 8/29 4pm          capped, no room
+//	Open house — 8/29 4pm                       no limit
+//
+// Every form this service has ever written is stripped on the way back,
+// because a name read from Discord is stored as the event's own: miss one and
+// it round-trips, and the next publish decorates a name already carrying last
+// week's decoration. The same failure the description pointer had, in a field
+// capped at 100 characters, so it breaks sooner and louder.
 
-// discordEventNameLimit is Discord's cap on a scheduled event name.
+// titleDecorationPrefixes match anything this service has put at the FRONT of
+// a title. The numeric badge is retired but still sitting on Discord.
+var titleDecorationPrefixes = regexp.MustCompile(`^(\[\d+/\d+\]|\[Full\])\s+`)
+
+// titleDecorationSuffix matches the place count at the END of a title.
+var titleDecorationSuffix = regexp.MustCompile(`\s+·\s+\d+ places?$`)
+
+// discordEventNameLimit is Discord's cap on a scheduled event name and a
+// thread name alike.
 const discordEventNameLimit = 100
 
-// capacityPrefix is the "[3/8] " badge, or empty when the event has no limit.
-//
-// Only when there is a capacity: "[7/∞]" would be noise, and an event without a
-// limit has no number worth putting in a title.
-func capacityPrefix(ev *Event) string {
-	if ev.Capacity <= 0 {
-		return ""
+// titlePrefix is "[Full] " for a capped event with no room, else empty.
+func titlePrefix(ev *Event) string {
+	if ev.Capacity > 0 && ev.AttendingCount >= ev.Capacity {
+		return "[Full] "
 	}
-	return fmt.Sprintf("[%d/%d] ", ev.AttendingCount, ev.Capacity)
+	return ""
 }
 
-// stripCapacityPrefix removes this service's own badge from a name read back
-// from Discord, so what is stored is the name a person actually gave it.
-func stripCapacityPrefix(name string) string {
-	return capacityPrefixPattern.ReplaceAllString(name, "")
+// titleSuffix is " · 8 places" for a capped event with room, else empty. A full
+// event does not need its limit spelled out — "[Full]" already says it — and
+// an uncapped one has no number worth putting in a title.
+func titleSuffix(ev *Event) string {
+	if ev.Capacity > 0 && ev.AttendingCount < ev.Capacity {
+		return " · " + pluralise(ev.Capacity, "place")
+	}
+	return ""
 }
 
-// nativeEventName is the name to send Discord: the badge, then as much of the
-// real name as fits.
+// decorateTitle wraps a title in its decorations inside a length limit.
 //
-// The name is trimmed rather than the whole string, so the badge always
-// survives — a title truncated to "[3/8] Board game ni" is still readable,
-// whereas one truncated the other way loses the number the badge exists for.
+// The core is trimmed, never the decorations: a title cut to "[Full] Board
+// game ni" still says the one thing the prefix exists for, whereas one cut the
+// other way loses it.
+func decorateTitle(core string, ev *Event, limit int) string {
+	prefix, suffix := titlePrefix(ev), titleSuffix(ev)
+	room := limit - len([]rune(prefix)) - len([]rune(suffix))
+	return prefix + truncate(core, room) + suffix
+}
+
+// stripTitleDecorations removes everything this service has ever added to a
+// title, so what is stored is the name a person actually gave it.
+func stripTitleDecorations(name string) string {
+	name = titleDecorationPrefixes.ReplaceAllString(name, "")
+	return titleDecorationSuffix.ReplaceAllString(name, "")
+}
+
+// nativeEventName is the name to send Discord for the scheduled event.
 func nativeEventName(ev *Event) string {
-	prefix := capacityPrefix(ev)
-	room := discordEventNameLimit - len([]rune(prefix))
-	return prefix + truncate(ev.Name, room)
+	return decorateTitle(ev.Name, ev, discordEventNameLimit)
 }
 
 // signupPointerMarker begins the line this service appends to a native event's
@@ -830,7 +862,6 @@ func (s *Server) finishEventEverywhere(id int64) {
 		return
 	}
 	s.refreshEventTableQuietly(ev.GuildID)
-	s.refreshRosterTableQuietly(ev.GuildID)
 	// The forum post gets its finished tag and archives.
 	s.refreshForumPostQuietly(ev)
 	if ev.ThreadID != "" {

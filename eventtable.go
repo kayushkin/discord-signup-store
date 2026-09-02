@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 )
@@ -326,49 +325,6 @@ const (
 
 const tableRebuildButtonID = customIDPrefix + ":table-rebuild:0"
 
-// RenderTablePage draws up to eventsPerPage events as one message: one line of
-// text and one row of buttons each, wrapped in a container.
-//
-// firstIndex numbers the rows continuously across pages, so the second message
-// starts at 7 rather than beginning again at 1.
-//
-// The table is about events, and only events. "My events" used to hang off the
-// last page, which put a control about the viewer on a message about everybody;
-// it lives on the standing how-to message now.
-func RenderTablePage(events []Event, page, totalPages int) map[string]any {
-	body := []any{}
-	// No heading. The channel is called what it is, and a line saying how many
-	// events there are and how they are sorted is a component spent restating
-	// what the rows already show.
-	if len(events) == 0 && page == 0 {
-		body = append(body, textBlock("-# Nothing coming up."))
-	}
-
-	for i := range events {
-		ev := &events[i]
-		if i > 0 {
-			body = append(body, map[string]any{
-				"type": componentTypeSeparator, "divider": true, "spacing": 1,
-			})
-		}
-		body = append(body, textBlock(eventLine(ev)))
-		body = append(body, map[string]any{
-			"type": componentTypeActionRow, "components": eventButtons(ev),
-		})
-	}
-	if totalPages > 1 {
-		body = append(body, textBlock(fmt.Sprintf("-# Page %d of %d", page+1, totalPages)))
-	}
-	return map[string]any{
-		"flags": messageFlagComponentsV2,
-		"components": []any{map[string]any{
-			"type": componentTypeContainer, "accent_color": panelAccentColour,
-			"components": body,
-		}},
-		"allowed_mentions": map[string]any{"parse": []string{}},
-	}
-}
-
 func textBlock(content string) map[string]any {
 	return map[string]any{"type": componentTypeTextDisplay, "content": trimTo(content, textDisplayLimit)}
 }
@@ -446,94 +402,6 @@ func eventButtons(ev *Event) []any {
 	return buttons
 }
 
-// paginate splits events into messages of eventsPerPage.
-func paginate(events []Event) [][]Event {
-	if len(events) == 0 {
-		return [][]Event{nil} // one page, saying there is nothing
-	}
-	var pages [][]Event
-	for start := 0; start < len(events); start += eventsPerPage {
-		end := start + eventsPerPage
-		if end > len(events) {
-			end = len(events)
-		}
-		pages = append(pages, events[start:end])
-	}
-	return pages
-}
-
-// RefreshEventTable redraws a guild's whole table, editing each page in place.
-//
-// Every page is rewritten, which is what keeps the table sorted without ever
-// reposting: events move BETWEEN pages while the messages stay where they are.
-// A page is only ever posted when the table grows past its current page count,
-// and a new message goes to the bottom, which is exactly where a new last page
-// belongs.
-func (s *Server) RefreshEventTable(guildID string) error {
-	if s.discord == nil {
-		return nil
-	}
-	table, err := s.store.GuildTable(guildID)
-	if errors.Is(err, ErrNotFound) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	events, err := s.liveEventsFor(guildID)
-	if err != nil {
-		return err
-	}
-	sort.SliceStable(events, func(i, j int) bool { return events[i].StartsAt < events[j].StartsAt })
-	pages := paginate(events)
-
-	existing, err := s.store.TablePages(guildID)
-	if err != nil {
-		return err
-	}
-	byPage := map[int]string{}
-	for _, p := range existing {
-		byPage[p.Page] = p.MessageID
-	}
-
-	for i, chunk := range pages {
-		payload := RenderTablePage(chunk, i, len(pages))
-		if messageID, ok := byPage[i]; ok {
-			if err := s.discord.EditMessage(table.ChannelID, messageID, payload); err != nil {
-				return fmt.Errorf("edit table page %d: %w", i, err)
-			}
-			continue
-		}
-		messageID, err := s.discord.CreateMessage(table.ChannelID, payload)
-		if err != nil {
-			return fmt.Errorf("post table page %d: %w", i, err)
-		}
-		if err := s.store.SetTablePage(guildID, i, messageID); err != nil {
-			return err
-		}
-	}
-
-	// Pages that are no longer needed. Deleted from the end so the remaining
-	// ones keep their positions.
-	for i := len(existing) - 1; i >= len(pages); i-- {
-		if err := s.discord.DeleteMessage(table.ChannelID, existing[i].MessageID); err != nil {
-			log.Printf("[discord-signup] could not delete surplus table page %d: %v", i, err)
-		}
-		if err := s.store.DeleteTablePage(guildID, existing[i].Page); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// refreshEventTableQuietly redraws the table as a side effect of something that
-// already succeeded, so a failure is logged rather than propagated.
-func (s *Server) refreshEventTableQuietly(guildID string) {
-	if err := s.RefreshEventTable(guildID); err != nil {
-		log.Printf("[discord-signup] refresh event table for %s: %v", guildID, err)
-	}
-}
-
 // liveEventsFor returns a guild's current events, archived ones excluded.
 func (s *Server) liveEventsFor(guildID string) ([]Event, error) {
 	events, err := s.store.ListEvents(guildID, "", 200)
@@ -597,20 +465,5 @@ func (s *Server) RebuildEventTable(guildID string) error {
 			return err
 		}
 	}
-	pages, err = s.store.RosterTablePages(guildID)
-	if err != nil {
-		return err
-	}
-	for _, p := range pages {
-		if err := s.discord.DeleteMessage(table.ChannelID, p.MessageID); err != nil {
-			log.Printf("[discord-signup] rebuild: could not delete roster page %d: %v", p.Page, err)
-		}
-		if err := s.store.DeleteRosterTablePage(guildID, p.Page); err != nil {
-			return err
-		}
-	}
-	if err := s.RefreshEventTable(guildID); err != nil {
-		return err
-	}
-	return s.RefreshRosterTable(guildID)
+	return s.RefreshEventTable(guildID)
 }

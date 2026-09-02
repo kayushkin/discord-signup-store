@@ -484,10 +484,11 @@ func TestEditingPushesThroughToTheNativeEvent(t *testing.T) {
 	if patched == nil {
 		t.Fatal("the native event was not updated")
 	}
-	// The badge is part of what gets pushed now, and the stored name stays
-	// clean — that separation is what stops the title compounding.
-	if patched["name"].(string) != "[0/4] After" {
-		t.Errorf("name = %v, want the badge plus the name", patched["name"])
+	// The decoration is part of what gets pushed, and the stored name stays
+	// clean — that separation is what stops the title compounding. An empty
+	// capped event carries its limit, not a live count.
+	if patched["name"].(string) != "After · 4 places" {
+		t.Errorf("name = %v, want the name with its limit", patched["name"])
 	}
 	meta := patched["entity_metadata"].(map[string]any)
 	if meta["location"].(string) != "The new place" {
@@ -618,75 +619,6 @@ func TestStripSignupPointerLeavesOtherTextAlone(t *testing.T) {
 	}
 }
 
-// TestTheCapacityBadgeDoesNotRoundTrip is the same failure the description
-// pointer had, in a field capped at 100 characters — so it breaks sooner.
-//
-// We push "[3/8] Games" as the native event's name; the importer reads that
-// name back as the event's own; the next push prefixes it again. Without
-// stripping, the title grows a badge per signup until Discord refuses it.
-func TestTheCapacityBadgeDoesNotRoundTrip(t *testing.T) {
-	ev := &Event{Name: "Board game night", Capacity: 8, AttendingCount: 3}
-
-	if got := nativeEventName(ev); got != "[3/8] Board game night" {
-		t.Fatalf("nativeEventName = %q", got)
-	}
-	// Twenty signups, each pushing a new badge and each read back by a sync.
-	current := ev.Name
-	for i := 0; i < 20; i++ {
-		ev.AttendingCount = i % 9
-		pushed := capacityPrefix(ev) + current
-		current = stripCapacityPrefix(pushed)
-	}
-	if current != "Board game night" {
-		t.Errorf("after twenty round trips the name is %q (%d chars), want %q",
-			current, len(current), "Board game night")
-	}
-}
-
-func TestCapacityBadgeOnlyAppearsWhenThereIsALimit(t *testing.T) {
-	uncapped := &Event{Name: "Open house", Capacity: 0, AttendingCount: 12}
-	if got := nativeEventName(uncapped); got != "Open house" {
-		t.Errorf("nativeEventName = %q, want no badge on an uncapped event", got)
-	}
-	full := &Event{Name: "Full one", Capacity: 4, AttendingCount: 4}
-	if got := nativeEventName(full); got != "[4/4] Full one" {
-		t.Errorf("nativeEventName = %q", got)
-	}
-}
-
-// TestTheBadgeSurvivesALongName covers Discord's 100-character cap. The name is
-// trimmed, never the badge — a title cut to "[3/8] Board game ni" still says
-// what the badge is for, one cut the other way does not.
-func TestTheBadgeSurvivesALongName(t *testing.T) {
-	ev := &Event{Name: strings.Repeat("long name ", 20), Capacity: 8, AttendingCount: 3}
-	got := nativeEventName(ev)
-	if len([]rune(got)) > discordEventNameLimit {
-		t.Errorf("name is %d runes, over Discord's %d", len([]rune(got)), discordEventNameLimit)
-	}
-	if !strings.HasPrefix(got, "[3/8] ") {
-		t.Errorf("name = %q, want the badge kept at the front", got)
-	}
-}
-
-// TestStripCapacityPrefixLeavesRealNamesAlone keeps the pattern from eating
-// something a person actually typed.
-func TestStripCapacityPrefixLeavesRealNamesAlone(t *testing.T) {
-	for _, name := range []string{
-		"Board game night", "3/8 people", "[draft] Planning", "[3 of 8] Games",
-		"Games [3/8]", "[a/b] Games", "",
-	} {
-		if got := stripCapacityPrefix(name); got != name {
-			t.Errorf("stripCapacityPrefix(%q) = %q, want it untouched", name, got)
-		}
-	}
-	// And it does remove the real thing, including odd spacing.
-	for _, badged := range []string{"[3/8] Games", "[12/100]  Games", "[0/1]\tGames"} {
-		if got := stripCapacityPrefix(badged); got != "Games" {
-			t.Errorf("stripCapacityPrefix(%q) = %q, want %q", badged, got, "Games")
-		}
-	}
-}
-
 // TestTheTitleIsPushedOnEveryRosterChange covers the reason this needs pushing
 // at all: the count in the title is stale the moment somebody joins.
 func TestTheTitleIsPushedOnEveryRosterChange(t *testing.T) {
@@ -718,8 +650,10 @@ func TestTheTitleIsPushedOnEveryRosterChange(t *testing.T) {
 			pushed, _ = c.Body["name"].(string)
 		}
 	}
-	if pushed != "[1/3] Games" {
-		t.Errorf("pushed name = %q, want the badge to reflect the new count", pushed)
+	// One of three places taken: not full, so the title carries the limit and
+	// no count — a count in a rename is two renames stale under signups.
+	if pushed != "Games · 3 places" {
+		t.Errorf("pushed name = %q, want the limit, never the live count", pushed)
 	}
 }
 
@@ -921,6 +855,93 @@ func TestTheLocationPlaceholderDoesNotRoundTrip(t *testing.T) {
 	for _, real := range []string{"The pub", "See the signup card please", ""} {
 		if got := stripLocationPlaceholder(real); got != real {
 			t.Errorf("stripLocationPlaceholder(%q) = %q, want untouched", real, got)
+		}
+	}
+}
+
+// TestTitlesCarryFullOrTheLimitNeverTheLiveCount. A thread rename is
+// rate-limited to about two per ten minutes, so a live count in a title was
+// the count from two renames ago. What is in a title now changes only when the
+// event fills, empties back below its cap, or has its cap changed.
+func TestTitlesCarryFullOrTheLimitNeverTheLiveCount(t *testing.T) {
+	for _, c := range []struct {
+		capacity, attending int
+		want                string
+	}{
+		{8, 3, "Board game night · 8 places"},
+		{8, 8, "[Full] Board game night"},
+		{8, 9, "[Full] Board game night"}, // over, after a lowered cap
+		{0, 12, "Board game night"},
+		{1, 0, "Board game night · 1 place"},
+	} {
+		ev := &Event{Name: "Board game night", Capacity: c.capacity, AttendingCount: c.attending}
+		if got := nativeEventName(ev); got != c.want {
+			t.Errorf("capacity %d, %d attending: %q, want %q", c.capacity, c.attending, got, c.want)
+		}
+		if strings.Contains(nativeEventName(ev), fmt.Sprintf("%d/%d", c.attending, c.capacity)) {
+			t.Errorf("capacity %d, %d attending: the live count is back in the title", c.capacity, c.attending)
+		}
+	}
+}
+
+// TestEveryTitleFormEverWrittenIsStripped is the round-trip guard. Names read
+// back from Discord are stored as the event's own, and titles decorated by
+// earlier versions are sitting there now — miss one and the next publish
+// decorates a name that already carries last week's decoration.
+func TestEveryTitleFormEverWrittenIsStripped(t *testing.T) {
+	for _, decorated := range []string{
+		"[3/8] Games",            // the retired live badge
+		"[Full] Games",           // full now
+		"Games · 8 places",       // room now
+		"Games · 1 place",        // singular
+		"[3/8] Games · 8 places", // never written, but strip it anyway
+	} {
+		if got := stripTitleDecorations(decorated); got != "Games" {
+			t.Errorf("stripTitleDecorations(%q) = %q, want %q", decorated, got, "Games")
+		}
+	}
+	// Twenty round trips through every state must never grow the name.
+	ev := &Event{Name: "Board game night", Capacity: 8}
+	current := ev.Name
+	for i := 0; i < 20; i++ {
+		ev.AttendingCount = i % 9
+		ev.Name = current
+		current = stripTitleDecorations(nativeEventName(ev))
+	}
+	if current != "Board game night" {
+		t.Errorf("after twenty round trips the name is %q", current)
+	}
+}
+
+// TestDecorationsSurviveALongName: the name is trimmed, never the decorations.
+func TestDecorationsSurviveALongName(t *testing.T) {
+	ev := &Event{Name: strings.Repeat("long name ", 20), Capacity: 8, AttendingCount: 8}
+	got := nativeEventName(ev)
+	if n := len([]rune(got)); n > discordEventNameLimit {
+		t.Errorf("name is %d runes, over Discord's %d", n, discordEventNameLimit)
+	}
+	if !strings.HasPrefix(got, "[Full] ") {
+		t.Errorf("name = %q, want [Full] kept at the front", got)
+	}
+	ev.AttendingCount = 3
+	got = nativeEventName(ev)
+	if n := len([]rune(got)); n > discordEventNameLimit {
+		t.Errorf("name is %d runes, over Discord's %d", n, discordEventNameLimit)
+	}
+	if !strings.HasSuffix(got, " · 8 places") {
+		t.Errorf("name = %q, want the limit kept at the end", got)
+	}
+}
+
+// TestStripTitleDecorationsLeavesRealNamesAlone keeps the patterns from eating
+// something a person typed.
+func TestStripTitleDecorationsLeavesRealNamesAlone(t *testing.T) {
+	for _, name := range []string{
+		"Games", "[Board] games", "3/8 of the way there", "Full house", "Games · 8 people",
+		"[Full]Games", "Games · places",
+	} {
+		if got := stripTitleDecorations(name); got != name {
+			t.Errorf("stripTitleDecorations(%q) = %q, want it untouched", name, got)
 		}
 	}
 }

@@ -168,9 +168,6 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 	// The table row is a second view of the same roster. One message, not the
 	// whole table: this runs on every signup.
 	s.refreshEventTableQuietly(ev.GuildID)
-	// The roster table is the same events with the names on. Same trigger, so
-	// the two cannot drift apart and be compared against each other wrongly.
-	s.refreshRosterTableQuietly(ev.GuildID)
 	if err := s.refreshForumPost(ev); err != nil {
 		log.Printf("[discord-signup] refresh forum post for event %d: %v", ev.ID, err)
 		published = false
@@ -212,7 +209,9 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	4  roster table rows link their thread instead of restating its title
 //	5  Edit back on those rows: the merged Details+Edit modal was rejected
 //	6  Edit off the roster table rows: Details is the edit form
-const publishFormatVersion = 6
+//	7  one table, with the count in the row; titles carry [Full] or the limit
+//	   instead of a live count
+const publishFormatVersion = 7
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //

@@ -43,26 +43,26 @@ func TestEveryPageStaysInsideDiscordsBudgets(t *testing.T) {
 		rosters[events[i].ID] = rosterOf(names...)
 	}
 
-	pages := packRosterTable(events, rosters)
+	pages := packEventTable(events, rosters)
 	if len(pages) < 2 {
 		t.Fatalf("%d pages for twelve events with big rosters, want the packer to overflow", len(pages))
 	}
 	seen := 0
 	for i, page := range pages {
 		seen += len(page)
-		payload := RenderRosterTablePage(page, i, len(pages))
+		payload := RenderEventTablePage(page, i, len(pages))
 		components := countComponents(payload["components"].([]any))
-		if components > rosterTableComponentBudget {
+		if components > eventTableComponentBudget {
 			t.Errorf("page %d renders %d components, over Discord's %d",
-				i, components, rosterTableComponentBudget)
+				i, components, eventTableComponentBudget)
 		}
 		chars := 0
 		for _, block := range page {
 			chars += len([]rune(block.text))
 		}
-		if chars > rosterTableCharBudget {
+		if chars > eventTableCharBudget {
 			t.Errorf("page %d holds %d characters, over the %d budget",
-				i, chars, rosterTableCharBudget)
+				i, chars, eventTableCharBudget)
 		}
 	}
 	if seen != len(events) {
@@ -79,7 +79,7 @@ func TestSmallRostersPackMoreEventsPerMessage(t *testing.T) {
 	for i := range events {
 		rosters[events[i].ID] = rosterOf("Al", "Bo")
 	}
-	pages := packRosterTable(events, rosters)
+	pages := packEventTable(events, rosters)
 	if len(pages[0]) < 5 {
 		t.Errorf("first page holds %d events with tiny rosters, want at least 5", len(pages[0]))
 	}
@@ -92,7 +92,7 @@ func TestTheRosterTableNamesPeopleWithoutPingingThem(t *testing.T) {
 	events := rosterTableEvents(1)
 	rosters := map[int64][]Signup{events[0].ID: rosterOf("Domonation", "Twili Midna")}
 
-	payload := RenderRosterTablePage(packRosterTable(events, rosters)[0], 0, 1)
+	payload := RenderEventTablePage(packEventTable(events, rosters)[0], 0, 1)
 	rendered := fmt.Sprint(payload)
 	if !strings.Contains(rendered, "Domonation") || !strings.Contains(rendered, "Twili Midna") {
 		t.Errorf("the roster table does not name who is going: %q", rendered)
@@ -112,11 +112,11 @@ func TestTheRosterTableNamesPeopleWithoutPingingThem(t *testing.T) {
 // TestAnEmptyGuildStillGetsAPage. Otherwise the last thing posted stays up
 // saying something that stopped being true.
 func TestAnEmptyGuildStillGetsAPage(t *testing.T) {
-	pages := packRosterTable(nil, nil)
+	pages := packEventTable(nil, nil)
 	if len(pages) != 1 {
 		t.Fatalf("%d pages for no events, want 1", len(pages))
 	}
-	rendered := fmt.Sprint(RenderRosterTablePage(pages[0], 0, 1))
+	rendered := fmt.Sprint(RenderEventTablePage(pages[0], 0, 1))
 	if !strings.Contains(rendered, "Nothing coming up") {
 		t.Errorf("an empty roster table says %q", rendered)
 	}
@@ -129,7 +129,7 @@ func TestTheWaitlistIsNamedSeparately(t *testing.T) {
 	roster := rosterOf("Al", "Bo")
 	roster = append(roster, Signup{DiscordUserID: "u-cy", DisplayName: "Cy",
 		State: StateWaitlisted, WaitlistPlace: 1})
-	pages := packRosterTable(events, map[int64][]Signup{events[0].ID: roster})
+	pages := packEventTable(events, map[int64][]Signup{events[0].ID: roster})
 
 	text := pages[0][0].text
 	if !strings.Contains(text, "Going: Al, Bo") {
@@ -149,15 +149,19 @@ func TestARowSaysNothingItsThreadTitleAlreadySays(t *testing.T) {
 		Capacity: 8, AttendingCount: 3, Location: "The shed", ForumPostID: "post-9",
 		StartsAt: time.Now().Add(30 * time.Hour).Unix()}
 
-	block := buildRosterBlock(ev, rosterOf("Al", "Bo", "Cy"), true)
+	block := buildEventTableBlock(ev, rosterOf("Al", "Bo", "Cy"), true)
 	if !strings.Contains(block.text, "<#post-9>") {
 		t.Errorf("row = %q, want it to link the thread", block.text)
 	}
 	if strings.Contains(block.text, "Board game night") {
 		t.Errorf("row = %q, repeats the name the thread title already carries", block.text)
 	}
-	if strings.Contains(block.text, "3/8") {
-		t.Errorf("row = %q, repeats the badge the thread title already carries", block.text)
+	// The count is in the row on purpose. It used to be read off the thread
+	// title, and Discord rate-limits thread renames to about two per ten
+	// minutes, so under signups the number people read was two renames old. A
+	// message edit has no such limit.
+	if !strings.Contains(block.text, "3/8") {
+		t.Errorf("row = %q, want the live count in the message", block.text)
 	}
 	// Location is the one thing the title does not hold.
 	if !strings.Contains(block.text, "The shed") {
@@ -173,7 +177,7 @@ func TestARowSaysNothingItsThreadTitleAlreadySays(t *testing.T) {
 func TestAnEventWithNoThreadStillSaysWhatItIs(t *testing.T) {
 	ev := &Event{ID: 1, GuildID: "g1", Name: "Unlinked", Status: StatusOpen,
 		Capacity: 4, AttendingCount: 1, StartsAt: time.Now().Add(30 * time.Hour).Unix()}
-	block := buildRosterBlock(ev, rosterOf("Al"), true)
+	block := buildEventTableBlock(ev, rosterOf("Al"), true)
 	if !strings.Contains(block.text, "Unlinked") {
 		t.Errorf("row = %q, want the full line when there is no thread to link", block.text)
 	}
@@ -184,7 +188,7 @@ func TestAnEventWithNoThreadStillSaysWhatItIs(t *testing.T) {
 func TestTheRosterTableHasNoEditButton(t *testing.T) {
 	ev := &Event{ID: 1, GuildID: "g1", Name: "Games", Status: StatusOpen}
 	labels := []string{}
-	for _, b := range rosterTableButtons(ev) {
+	for _, b := range eventTableButtons(ev) {
 		labels = append(labels, b.(map[string]any)["label"].(string))
 	}
 	if strings.Contains(strings.Join(labels, ","), "Edit") {

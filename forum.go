@@ -185,13 +185,17 @@ func (s *Server) AdoptForum(guildID, channelID string) (*GuildForum, error) {
 	return &forum, nil
 }
 
-// forumPostTitle is the badge, the name, and the compact date.
+// forumPostTitle is the name and the compact date, decorated the way every
+// title is: "[Full]" in front when there is no room, the limit at the end when
+// there is. Never the live count — a thread rename is rate-limited to about two
+// per ten minutes, and a count that is usually two renames old is worse than
+// none.
 func forumPostTitle(ev *Event) string {
-	title := capacityPrefix(ev) + ev.Name
+	core := ev.Name
 	if ev.StartsAt > 0 {
-		title += " — " + compactWhen(ev)
+		core += " — " + compactWhen(ev)
 	}
-	return truncate(title, 100)
+	return decorateTitle(core, ev, discordEventNameLimit)
 }
 
 // forumTagFor picks the one tag that states the event's condition.

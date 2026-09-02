@@ -8,13 +8,13 @@ import (
 	"strings"
 )
 
-// The roster table: the event table with everyone's names on it.
+// The event table: every upcoming event, with who is going.
 //
-// It sits in the same channel as the event table and is drawn from the same
-// events, so the two can be read side by side and compared. The event table
-// answers "what is on"; this answers "who is going", which is the question the
-// Details button exists for — and Details is per-viewer, so nobody can see the
-// answer without pressing something.
+// One table, not two. It ran for an evening as a second table beside the first
+// so the shapes could be compared, and the comparison settled it — a row that
+// names the people going answers the question the first table made you press
+// Details for, so keeping both meant two messages saying the same thing and
+// disagreeing while they updated.
 //
 // Names, never mentions. A mention would ping every attendee each time the
 // table is redrawn, which is every signup, and this message is redrawn more
@@ -22,17 +22,17 @@ import (
 // display name that looks like a mention cannot reach anybody.
 
 const (
-	// rosterTableComponentBudget is Discord's cap on components in one
+	// eventTableComponentBudget is Discord's cap on components in one
 	// Components V2 message.
-	rosterTableComponentBudget = 40
+	eventTableComponentBudget = 40
 
-	// rosterTableCharBudget is the cap across every text block in one message.
+	// eventTableCharBudget is the cap across every text block in one message.
 	// Held a little under Discord's 4000 so that a block measured here and
 	// serialised slightly differently there does not lose the whole message.
-	rosterTableCharBudget = 3800
+	eventTableCharBudget = 3800
 )
 
-// rosterTableHeadline is the event's line, minus everything its forum post's
+// eventTableHeadline is the event's line, minus everything its forum post's
 // title already says.
 //
 // That title is "[3/8] Board game night — 8/29 4pm", and Discord renders
@@ -48,81 +48,91 @@ const (
 // rate-limits thread renames to about two per ten minutes — so under fast
 // signups the badge can lag. The names below it cannot: they are written into
 // this message, which has no such limit.
-func rosterTableHeadline(ev *Event) string {
+func eventTableHeadline(ev *Event) string {
 	if ev.ForumPostID == "" {
 		return eventLine(ev)
 	}
-	line := fmt.Sprintf("💬 <#%s>", ev.ForumPostID)
-	if ev.Location != "" {
-		line += "  ·  " + ev.Location
+	var parts []string
+	// The count lives here now. It used to be read off the thread title, and
+	// thread renames are rate-limited to about two per ten minutes — so under
+	// signups the number people were reading was the one from two renames ago.
+	// A message edit has no such limit, so the count belongs in the message.
+	if ev.Capacity > 0 {
+		parts = append(parts, fmt.Sprintf("`%d/%d`", ev.AttendingCount, ev.Capacity))
+	} else if ev.AttendingCount > 0 {
+		parts = append(parts, fmt.Sprintf("`%d`", ev.AttendingCount))
 	}
-	return line
+	parts = append(parts, fmt.Sprintf("💬 <#%s>", ev.ForumPostID))
+	if ev.Location != "" {
+		parts = append(parts, ev.Location)
+	}
+	return strings.Join(parts, "  ·  ")
 }
 
-// rosterBlock is one event as it will appear: its text, and what that costs.
-type rosterBlock struct {
+// eventTableBlock is one event as it will appear: its text, and what that costs.
+type eventTableBlock struct {
 	event      *Event
 	text       string
 	components int
 	characters int
 }
 
-// buildRosterBlock renders one event with its roster and measures it.
+// buildEventTableBlock renders one event with its roster and measures it.
 //
 // The measuring is the point. The event table can say "five events per message"
 // because every row is about the same size; here a row carrying twenty names is
 // many times one carrying none, so a fixed count would either waste most of a
 // message or overflow it.
-func buildRosterBlock(ev *Event, roster []Signup, first bool) rosterBlock {
+func buildEventTableBlock(ev *Event, roster []Signup, first bool) eventTableBlock {
 	attending, waiting := splitRoster(roster)
 
 	var b strings.Builder
-	b.WriteString(rosterTableHeadline(ev))
+	b.WriteString(eventTableHeadline(ev))
 	// Generous per-line budgets: the packer's job is to decide how many blocks
 	// fit in a message, and a single block only needs trimming when one event
 	// alone would fill one.
-	if line := rosterLine("Going", attending, rosterTableCharBudget/2); line != "" {
+	if line := rosterLine("Going", attending, eventTableCharBudget/2); line != "" {
 		b.WriteString(line)
 	} else if len(attending) == 0 {
 		b.WriteString("\n-# Nobody yet.")
 	}
-	if line := rosterLine("Waiting", waiting, rosterTableCharBudget/4); line != "" {
+	if line := rosterLine("Waiting", waiting, eventTableCharBudget/4); line != "" {
 		b.WriteString(line)
 	}
 	text := trimTo(b.String(), textDisplayLimit)
 
 	// One text block, one action row, its buttons, and the separator that
 	// divides this block from the one above it.
-	components := 2 + len(rosterTableButtons(ev))
+	components := 2 + len(eventTableButtons(ev))
 	if !first {
 		components++
 	}
-	return rosterBlock{event: ev, text: text, components: components, characters: len([]rune(text))}
+	return eventTableBlock{event: ev, text: text, components: components, characters: len([]rune(text))}
 }
 
-// packRosterTable fills each message as full as it will go and starts another
+// packEventTable fills each message as full as it will go and starts another
 // when the next event does not fit.
 //
 // Returns at least one page, so an empty guild still gets a message saying
 // there is nothing on rather than leaving whatever was there last week.
-func packRosterTable(events []Event, rosters map[int64][]Signup) [][]rosterBlock {
-	pages := [][]rosterBlock{}
-	var page []rosterBlock
+func packEventTable(events []Event, rosters map[int64][]Signup) [][]eventTableBlock {
+	pages := [][]eventTableBlock{}
+	var page []eventTableBlock
 	// The container itself is a component.
 	components, characters := 1, 0
 
 	for i := range events {
 		ev := &events[i]
-		block := buildRosterBlock(ev, rosters[ev.ID], len(page) == 0)
-		overComponents := components+block.components > rosterTableComponentBudget
-		overCharacters := characters+block.characters > rosterTableCharBudget
+		block := buildEventTableBlock(ev, rosters[ev.ID], len(page) == 0)
+		overComponents := components+block.components > eventTableComponentBudget
+		overCharacters := characters+block.characters > eventTableCharBudget
 		if len(page) > 0 && (overComponents || overCharacters) {
 			pages = append(pages, page)
 			page = nil
 			components, characters = 1, 0
 			// Re-measured as the first block on its new page, which is one
 			// component cheaper: no separator above it.
-			block = buildRosterBlock(ev, rosters[ev.ID], true)
+			block = buildEventTableBlock(ev, rosters[ev.ID], true)
 		}
 		page = append(page, block)
 		components += block.components
@@ -134,8 +144,8 @@ func packRosterTable(events []Event, rosters map[int64][]Signup) [][]rosterBlock
 	return pages
 }
 
-// RenderRosterTablePage draws one packed page.
-func RenderRosterTablePage(page []rosterBlock, index, total int) map[string]any {
+// RenderEventTablePage draws one packed page.
+func RenderEventTablePage(page []eventTableBlock, index, total int) map[string]any {
 	body := []any{}
 	if len(page) == 0 {
 		body = append(body, textBlock("-# Nothing coming up."))
@@ -148,7 +158,7 @@ func RenderRosterTablePage(page []rosterBlock, index, total int) map[string]any 
 		}
 		body = append(body, textBlock(block.text))
 		body = append(body, map[string]any{
-			"type": componentTypeActionRow, "components": rosterTableButtons(block.event),
+			"type": componentTypeActionRow, "components": eventTableButtons(block.event),
 		})
 	}
 	if total > 1 {
@@ -167,10 +177,10 @@ func RenderRosterTablePage(page []rosterBlock, index, total int) map[string]any 
 	}
 }
 
-// rosterTableButtons drops Edit, because Details is the edit form now for
+// eventTableButtons drops Edit, because Details is the edit form now for
 // anybody allowed to use it. One button fewer per row is also one component
 // fewer, which is more events per message.
-func rosterTableButtons(ev *Event) []any {
+func eventTableButtons(ev *Event) []any {
 	buttons := []any{}
 	if ev.Status == StatusOpen {
 		buttons = append(buttons,
@@ -185,11 +195,8 @@ func rosterTableButtons(ev *Event) []any {
 	return buttons
 }
 
-// RefreshRosterTable rewrites the roster table in place.
-//
-// Posted into the event table's own channel: it is a second view of the same
-// events, meant to be read beside the first, not a second thing to configure.
-func (s *Server) RefreshRosterTable(guildID string) error {
+// RefreshEventTable rewrites the table in place.
+func (s *Server) RefreshEventTable(guildID string) error {
 	if s.discord == nil {
 		return nil
 	}
@@ -214,9 +221,9 @@ func (s *Server) RefreshRosterTable(guildID string) error {
 		}
 		rosters[events[i].ID] = roster
 	}
-	pages := packRosterTable(events, rosters)
+	pages := packEventTable(events, rosters)
 
-	existing, err := s.store.RosterTablePages(guildID)
+	existing, err := s.store.TablePages(guildID)
 	if err != nil {
 		return err
 	}
@@ -226,18 +233,18 @@ func (s *Server) RefreshRosterTable(guildID string) error {
 	}
 
 	for i, page := range pages {
-		payload := RenderRosterTablePage(page, i, len(pages))
+		payload := RenderEventTablePage(page, i, len(pages))
 		if messageID, ok := byPage[i]; ok {
 			if err := s.discord.EditMessage(table.ChannelID, messageID, payload); err != nil {
-				return fmt.Errorf("edit roster table page %d: %w", i, err)
+				return fmt.Errorf("edit table page %d: %w", i, err)
 			}
 			continue
 		}
 		messageID, err := s.discord.CreateMessage(table.ChannelID, payload)
 		if err != nil {
-			return fmt.Errorf("post roster table page %d: %w", i, err)
+			return fmt.Errorf("post table page %d: %w", i, err)
 		}
-		if err := s.store.SetRosterTablePage(guildID, i, messageID); err != nil {
+		if err := s.store.SetTablePage(guildID, i, messageID); err != nil {
 			return err
 		}
 	}
@@ -248,60 +255,17 @@ func (s *Server) RefreshRosterTable(guildID string) error {
 			continue
 		}
 		if err := s.discord.DeleteMessage(table.ChannelID, p.MessageID); err != nil {
-			log.Printf("[discord-signup] delete spare roster table page %d: %v", p.Page, err)
+			log.Printf("[discord-signup] delete spare table page %d: %v", p.Page, err)
 		}
-		if err := s.store.DeleteRosterTablePage(guildID, p.Page); err != nil {
+		if err := s.store.DeleteTablePage(guildID, p.Page); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Server) refreshRosterTableQuietly(guildID string) {
-	if err := s.RefreshRosterTable(guildID); err != nil {
-		log.Printf("[discord-signup] refresh roster table for %s: %v", guildID, err)
+func (s *Server) refreshEventTableQuietly(guildID string) {
+	if err := s.RefreshEventTable(guildID); err != nil {
+		log.Printf("[discord-signup] refresh table for %s: %v", guildID, err)
 	}
-}
-
-// RosterTablePages lists the messages the roster table currently occupies.
-func (s *Store) RosterTablePages(guildID string) ([]TablePage, error) {
-	rows, err := s.db.Query(
-		`SELECT page, message_id FROM roster_table_pages WHERE guild_id = ? ORDER BY page ASC`,
-		guildID)
-	if err != nil {
-		return nil, fmt.Errorf("list roster table pages: %w", err)
-	}
-	defer rows.Close()
-	var out []TablePage
-	for rows.Next() {
-		var p TablePage
-		if err := rows.Scan(&p.Page, &p.MessageID); err != nil {
-			return nil, fmt.Errorf("scan roster table page: %w", err)
-		}
-		out = append(out, p)
-	}
-	return out, rows.Err()
-}
-
-// SetRosterTablePage records the message holding one page.
-func (s *Store) SetRosterTablePage(guildID string, page int, messageID string) error {
-	_, err := s.db.Exec(`
-		INSERT INTO roster_table_pages (guild_id, page, message_id, updated_at) VALUES (?,?,?,?)
-		ON CONFLICT(guild_id, page) DO UPDATE SET message_id = excluded.message_id,
-		                                          updated_at = excluded.updated_at`,
-		guildID, page, messageID, now())
-	if err != nil {
-		return fmt.Errorf("set roster table page: %w", err)
-	}
-	return nil
-}
-
-// DeleteRosterTablePage forgets a page the table has shrunk past.
-func (s *Store) DeleteRosterTablePage(guildID string, page int) error {
-	_, err := s.db.Exec(
-		`DELETE FROM roster_table_pages WHERE guild_id = ? AND page = ?`, guildID, page)
-	if err != nil {
-		return fmt.Errorf("delete roster table page: %w", err)
-	}
-	return nil
 }
