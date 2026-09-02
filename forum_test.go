@@ -90,8 +90,10 @@ func TestForumTagFlipsWhenTheEventFills(t *testing.T) {
 	if tags, _ := patch["applied_tags"].([]any); len(tags) != 1 || tags[0] != "t-full" {
 		t.Errorf("applied_tags = %v, want the full tag", patch["applied_tags"])
 	}
-	if name, _ := patch["name"].(string); !strings.HasPrefix(name, "[1/1] Games") {
-		t.Errorf("title = %q, want the badge on it", name)
+	// Full is the one state a title is allowed to announce: it flips rarely,
+	// and a rename is rate-limited, so a live count here was always stale.
+	if name, _ := patch["name"].(string); !strings.HasPrefix(name, "[Full] Games") {
+		t.Errorf("title = %q, want [Full] on it", name)
 	}
 }
 
