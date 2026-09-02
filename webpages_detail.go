@@ -87,8 +87,8 @@ func (s *Server) handleWebEditForm(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, "form.html", pageData{
 		Title: "Edit " + ev.Name, Session: session, Event: ev, CanManage: true,
-		StartsLocal:     localTimeValue(ev.StartsAt, zone),
-		EndsLocal:       localTimeValue(ev.EndsAt, zone),
+		StartsLocal:     FormatEventTime(ev.StartsAt, zone),
+		EndsLocal:       FormatEventTime(ev.EndsAt, zone),
 		TimezoneValue:   zone,
 		RecurrenceValue: ev.RecurrenceRule,
 		Roles:           s.assignableRolesIn(ev.GuildID),
@@ -114,12 +114,12 @@ func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	zone := strings.TrimSpace(r.FormValue("timezone"))
-	starts, err := parseLocalTime(r.FormValue("starts_at"), zone)
+	starts, err := ParseEventTime(r.FormValue("starts_at"), zone)
 	if err != nil {
 		s.webFormError(w, session, ev, err)
 		return
 	}
-	ends, err := parseLocalTime(r.FormValue("ends_at"), zone)
+	ends, err := ParseEventTime(r.FormValue("ends_at"), zone)
 	if err != nil {
 		s.webFormError(w, session, ev, err)
 		return
@@ -169,8 +169,8 @@ func (s *Server) webFormError(w http.ResponseWriter, session *WebSession, ev *Ev
 	s.render(w, "form.html", pageData{
 		Title: "Edit " + ev.Name, Session: session, Event: ev, CanManage: true,
 		Error:           err.Error(),
-		StartsLocal:     localTimeValue(ev.StartsAt, zone),
-		EndsLocal:       localTimeValue(ev.EndsAt, zone),
+		StartsLocal:     FormatEventTime(ev.StartsAt, zone),
+		EndsLocal:       FormatEventTime(ev.EndsAt, zone),
 		TimezoneValue:   zone,
 		RecurrenceValue: ev.RecurrenceRule,
 		Roles:           s.assignableRolesIn(ev.GuildID),

@@ -410,7 +410,9 @@ func RenderHowToMessage(boardChannelID, timezone string) map[string]any {
 	b.WriteString("## Making an event\n")
 	b.WriteString("Press **Create an event** below. A form opens with five boxes:\n\n")
 	b.WriteString("**Name** · **Starts** · **Ends** · **Places** · **Location**\n\n")
-	fmt.Fprintf(&b, "Times are typed as `2026-09-05 19:00` and read in **%s**.\n", timezone)
+	fmt.Fprintf(&b, "Times are read in **%s** and typed however you like — `9/29 5pm`, "+
+		"`14:30`, `1730`, `sept 29 7pm`, `tomorrow 6pm`, `friday noon`. "+
+		"With no am/pm, 1 to 11 means pm, so type `9am` if you mean the morning.\n", timezone)
 	b.WriteString("**Places** is how many people fit — put `0` for no limit.\n\n")
 
 	fmt.Fprintf(&b, "The event then appears in <#%s> with **Join** and **Leave** buttons.\n\n", boardChannelID)

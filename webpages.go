@@ -310,7 +310,7 @@ func (s *Server) handleWebCreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	zone := strings.TrimSpace(r.FormValue("timezone"))
-	starts, err := parseLocalTime(r.FormValue("starts_at"), zone)
+	starts, err := ParseEventTime(r.FormValue("starts_at"), zone)
 	if err != nil {
 		s.renderFormError(w, session, nil, err)
 		return
@@ -319,7 +319,7 @@ func (s *Server) handleWebCreateEvent(w http.ResponseWriter, r *http.Request) {
 		s.renderFormError(w, session, nil, err)
 		return
 	}
-	ends, err := parseLocalTime(r.FormValue("ends_at"), zone)
+	ends, err := ParseEventTime(r.FormValue("ends_at"), zone)
 	if err != nil {
 		s.renderFormError(w, session, nil, err)
 		return
@@ -357,35 +357,6 @@ func (s *Server) renderFormError(w http.ResponseWriter, session *WebSession, ev 
 	})
 }
 
-// parseLocalTime turns a datetime-local field plus an IANA zone into an
-// instant.
-//
-// This is the whole reason the web page exists rather than a Discord modal:
-// a browser gives a real date picker and this gives the picked wall-clock time
-// the zone it was meant in. A Discord modal accepts plain text only, so the
-// same field there is someone typing "7pm" and everyone guessing whose 7pm.
-func parseLocalTime(value, zone string) (int64, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return 0, nil
-	}
-	if zone == "" {
-		return 0, fmt.Errorf("%w: pick a timezone before setting a time — "+
-			"a wall-clock time without a zone is not an instant", ErrInvalidEvent)
-	}
-	loc, err := time.LoadLocation(zone)
-	if err != nil {
-		return 0, fmt.Errorf("%w: %q is not an IANA zone name", ErrInvalidEvent, zone)
-	}
-	// datetime-local omits seconds when they are zero, so both layouts occur.
-	for _, layout := range []string{"2006-01-02T15:04", "2006-01-02T15:04:05"} {
-		if t, err := time.ParseInLocation(layout, value, loc); err == nil {
-			return t.Unix(), nil
-		}
-	}
-	return 0, fmt.Errorf("%w: could not read %q as a date and time", ErrInvalidEvent, value)
-}
-
 // requireStartTime refuses an event with no start.
 //
 // Checked here rather than only with the form's `required` attribute, which any
@@ -399,17 +370,4 @@ func requireStartTime(startsAt int64) error {
 			"cannot be published to Discord", ErrInvalidEvent)
 	}
 	return nil
-}
-
-func localTimeValue(unix int64, zone string) string {
-	if unix == 0 {
-		return ""
-	}
-	loc := time.UTC
-	if zone != "" {
-		if parsed, err := time.LoadLocation(zone); err == nil {
-			loc = parsed
-		}
-	}
-	return time.Unix(unix, 0).In(loc).Format("2006-01-02T15:04")
 }

@@ -3,7 +3,6 @@ package discordsignup
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
 // A Discord modal holds at most five action rows, each with exactly one text
@@ -28,64 +27,6 @@ const (
 	fieldLocation    = "location"
 	fieldDescription = "description"
 )
-
-// eventTimeLayouts are the shapes a typed date is accepted in.
-//
-// More than one, because a person typing into a phone keyboard will produce
-// several of these and refusing the near-misses teaches nothing. Seconds are
-// accepted and ignored; a bare date means midnight.
-var eventTimeLayouts = []string{
-	"2006-01-02 15:04",
-	"2006-01-02T15:04",
-	"2006-01-02 15:04:05",
-	"2006-01-02 3:04pm",
-	"2006-01-02 3:04 pm",
-	"2006-01-02 3pm",
-	"2006-01-02",
-}
-
-// ParseEventTime reads a date and time typed by a person, in a named zone.
-//
-// The zone is a parameter and never inferred from the text: an offset typed by
-// hand cannot survive a daylight-saving change, and guessing the reader's zone
-// from a server-side request is not possible at all.
-func ParseEventTime(input, zone string) (int64, error) {
-	trimmed := strings.TrimSpace(input)
-	if trimmed == "" {
-		return 0, nil
-	}
-	if zone == "" {
-		return 0, fmt.Errorf("%w: no timezone is configured, so %q cannot be turned into "+
-			"an actual moment", ErrInvalidEvent, trimmed)
-	}
-	loc, err := time.LoadLocation(zone)
-	if err != nil {
-		return 0, fmt.Errorf("%w: %q is not an IANA zone name", ErrInvalidEvent, zone)
-	}
-	normalised := strings.ToLower(strings.Join(strings.Fields(trimmed), " "))
-	for _, layout := range eventTimeLayouts {
-		if t, err := time.ParseInLocation(layout, normalised, loc); err == nil {
-			return t.Unix(), nil
-		}
-	}
-	return 0, fmt.Errorf("%w: could not read %q as a date and time — try 2026-09-05 19:00",
-		ErrInvalidEvent, trimmed)
-}
-
-// FormatEventTime renders an instant back into the shape the form accepts, so
-// the modal opens with something editable rather than something to retype.
-func FormatEventTime(unix int64, zone string) string {
-	if unix == 0 {
-		return ""
-	}
-	loc := time.UTC
-	if zone != "" {
-		if parsed, err := time.LoadLocation(zone); err == nil {
-			loc = parsed
-		}
-	}
-	return time.Unix(unix, 0).In(loc).Format("2006-01-02 15:04")
-}
 
 // EventForm is the five typed values, before validation.
 //
@@ -197,7 +138,7 @@ func buildEventModal(customID, title string, ev *Event, zone string) map[string]
 		"components": []any{
 			row(modalTextInput(fieldName, "Name", name, "Friday playtest",
 				textInputStyleShort, true, 100)),
-			row(modalTextInput(fieldStartsAt, "Starts — "+zone, starts, "2026-09-05 19:00",
+			row(modalTextInput(fieldStartsAt, "Starts — "+zone, starts, "9/29 5pm · 14:30 · tomorrow 6pm",
 				textInputStyleShort, true, 40)),
 			row(modalTextInput(fieldCapacity, "Max attendees — 0 for no limit", capacity, "20",
 				textInputStyleShort, true, 6)),

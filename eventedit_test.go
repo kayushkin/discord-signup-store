@@ -239,3 +239,32 @@ func TestRaisingTheLimitThroughTheAPIPromotesTheWaitlist(t *testing.T) {
 		t.Errorf("pushed names = %v, want the last to be %q", names, "[3/3] Games")
 	}
 }
+
+// TestTheWebFormAcceptsATypedTime covers the surface that used to be a
+// datetime-local picker, which could only ever emit "2026-09-29T17:30". The
+// year is not asserted because it depends on when the suite runs — the roll
+// forward is pinned in eventtime_test.go — but the day and the hour are the
+// whole point.
+func TestTheWebFormAcceptsATypedTime(t *testing.T) {
+	_, store, _, mux, token := webTestServer(t)
+	ev := publishedEvent(t, store, 8, "alice")
+
+	form := editForm(ev, "8")
+	form.Set("starts_at", "9/29 5pm")
+	form.Set("timezone", "America/Los_Angeles")
+	postForm(t, mux, token, eventPath(ev), form)
+
+	after, err := store.GetEvent(ev.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	loc, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Fatalf("load zone: %v", err)
+	}
+	got := time.Unix(after.StartsAt, 0).In(loc)
+	if got.Month() != time.September || got.Day() != 29 || got.Hour() != 17 || got.Minute() != 0 {
+		t.Errorf("%q was stored as %s, want 29 September at 17:00",
+			"9/29 5pm", got.Format("2006-01-02 15:04 MST"))
+	}
+}

@@ -91,8 +91,29 @@ creating. There is no end-time field, and `ApplyEventForm` deliberately omits
 `EndsAt` from its patch: sending zero for a field the form never collected is
 how an end time set on the web page would get silently wiped. Five is
 Discord's hard ceiling on a modal, so description, recurrence and roles live on
-the web page instead. Times are typed as `2026-09-05 19:00` and read in the zone
-set by `DISCORD_DEFAULT_TIMEZONE`, which the form's own label prints.
+the web page instead.
+
+Times are read in the zone set by `DISCORD_DEFAULT_TIMEZONE`, which the form's
+own label prints, and one parser reads them for both the modal and the web page
+— `ParseEventTime`. It accepts a date, a time, or both, in any of:
+
+    date   9/29 · 09/29 · 9/29/26 · 9/29/2026 · 2026-09-29 · sep 29 · 29 sep
+           sept 29th · today · tomorrow · friday · fri
+    time   5pm · 5 pm · 5:30pm · 5:30 · 14:30 · 1730 · 1330pm · noon · midnight
+
+A date with no time is midnight. A time with no date is the next day that time
+comes round. A date with no year is the next year it comes round, compared by
+**day** and not by instant, so `9/2` typed on 2 September is today.
+
+⚠️ **A time with no am/pm and an hour of 1–11 is read as PM.** This field only
+schedules events and 5:30am is not one. The rule does not turn on a leading
+zero — `09:00` is 21:00, exactly as `9:00` is — because two nearly identical
+strings landing twelve hours apart is worse than one rule that is always
+stated. Consequently `FormatEventTime` **always writes an explicit am/pm**: a
+form prefilled with `09:00` would read back as 21:00, so opening an event and
+saving it unchanged would move it. That pairing is the contract between the
+parser and the renderer, and `TestEveryRenderedTimeSurvivesBeingReadBack` holds
+it.
 
 `signup:capacity:{id}` is still accepted, because cards posted before the button
 was widened are sitting in channels and their button must keep working.

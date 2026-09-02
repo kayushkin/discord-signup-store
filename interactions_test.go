@@ -288,7 +288,9 @@ func TestEditButtonOpensAPrefilledFormAndSaves(t *testing.T) {
 	for field, want := range map[string]string{
 		fieldName: "Playtest", fieldCapacity: "1", fieldLocation: "The shed",
 		fieldDescription: "Bring dice.",
-		fieldStartsAt:    "2026-09-05 12:00", // 19:00 UTC in Los Angeles
+		// 19:00 UTC in Los Angeles. The am/pm is not cosmetic: read back
+		// without it, 12:00 is noon but 9:00 would be 21:00.
+		fieldStartsAt: "2026-09-05 12:00pm",
 	} {
 		if prefilled[field] != want {
 			t.Errorf("%s prefilled with %q, want %q", field, prefilled[field], want)
