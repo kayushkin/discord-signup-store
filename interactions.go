@@ -308,7 +308,7 @@ func (s *Server) handleJoin(w http.ResponseWriter, in *Interaction, eventID int6
 	// written. They happen after the reply because the person clicking must not
 	// wait on Discord's API for their answer, and because a failure to sync a
 	// role must not make a successful signup look failed.
-	go s.syncAfterChange(ev, []stateChange{{UserID: userID, State: result.Signup.State}})
+	go s.syncAfterChange(ev.ID, []stateChange{{UserID: userID, State: result.Signup.State}})
 }
 
 func (s *Server) handleLeave(w http.ResponseWriter, in *Interaction, eventID int64, userID string) {
@@ -333,11 +333,11 @@ func (s *Server) handleLeave(w http.ResponseWriter, in *Interaction, eventID int
 	if result.Promoted != nil {
 		changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
 	}
-	if ev != nil {
-		go s.syncAfterChange(ev, changes)
-		if result.Promoted != nil {
-			go s.notifyPromoted(ev, result.Promoted)
-		}
+	// Synced by id, so a failed reload above no longer costs the whole sync —
+	// the roster changed whether or not this process could read it back.
+	go s.syncAfterChange(eventID, changes)
+	if ev != nil && result.Promoted != nil {
+		go s.notifyPromoted(ev, result.Promoted)
 	}
 }
 

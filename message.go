@@ -265,13 +265,27 @@ func (s *Server) RefreshSignupMessage(eventID int64) error {
 // syncAfterChange pushes what the database now says out to Discord: the roles
 // each affected person should hold, and the refreshed roster message.
 //
+// Takes an event id and reads the event itself, rather than accepting one from
+// the caller. An *Event is a snapshot: AttendingCount and WaitlistCount are
+// filled by the read path and never updated in place, so a struct fetched
+// before the join it is reacting to still carries the old numbers — and every
+// copy written below then publishes them, the count in the native event's
+// title most visibly. Three call sites on the web surface did exactly that.
+// Reading here makes a stale snapshot unrepresentable instead of asking
+// sixteen call sites to remember.
+//
 // Runs after the reply, never before it. The person who clicked must not wait
 // on Discord's API for their answer, and a role that fails to apply must not
 // make a successful signup look failed. Every failure here is logged loudly and
 // none of them roll anything back — the roster is the source of truth and the
 // roles are a projection of it, so the fix is to re-run the projection.
-func (s *Server) syncAfterChange(ev *Event, changes []stateChange) {
+func (s *Server) syncAfterChange(eventID int64, changes []stateChange) {
 	if s.discord == nil {
+		return
+	}
+	ev, err := s.store.GetEvent(eventID)
+	if err != nil {
+		log.Printf("[discord-signup] sync event=%d: reload: %v", eventID, err)
 		return
 	}
 	for _, change := range changes {

@@ -130,7 +130,7 @@ func (g *GatewayListener) onUserAdd(_ *discordgo.Session, e *discordgo.GuildSche
 	// Roles AND the public signup message. The message refresh is the part that
 	// makes Interested look like Join from the outside: without it the card
 	// keeps the old count until somebody presses a button.
-	g.server.syncAfterChange(fresh, []stateChange{{UserID: e.UserID, State: result.Signup.State}})
+	g.server.syncAfterChange(fresh.ID, []stateChange{{UserID: e.UserID, State: result.Signup.State}})
 	g.notifyInterestedOutcome(fresh, result)
 }
 
@@ -160,7 +160,7 @@ func (g *GatewayListener) onUserRemove(_ *discordgo.Session, e *discordgo.GuildS
 		changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
 		go g.server.notifyPromoted(fresh, result.Promoted)
 	}
-	g.server.syncAfterChange(fresh, changes)
+	g.server.syncAfterChange(fresh.ID, changes)
 }
 
 // onReactionAdd joins whoever clicked ✅ on a forum post.
@@ -193,7 +193,7 @@ func (g *GatewayListener) onReactionAdd(_ *discordgo.Session, e *discordgo.Messa
 	if err != nil {
 		return
 	}
-	g.server.syncAfterChange(fresh, []stateChange{{UserID: e.UserID, State: result.Signup.State}})
+	g.server.syncAfterChange(fresh.ID, []stateChange{{UserID: e.UserID, State: result.Signup.State}})
 	// A reaction carries no interaction token, so a waitlisted clicker can only
 	// be told by DM — same shape as Interested, same fallback to reading the
 	// card.
@@ -239,7 +239,7 @@ func (g *GatewayListener) onReactionRemove(_ *discordgo.Session, e *discordgo.Me
 		changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
 		go g.server.notifyPromoted(fresh, result.Promoted)
 	}
-	g.server.syncAfterChange(fresh, changes)
+	g.server.syncAfterChange(fresh.ID, changes)
 }
 
 // onScheduledEventCreated imports a brand new native event and posts its card

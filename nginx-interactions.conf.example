@@ -1,9 +1,12 @@
 # Publishes exactly one route from discord-signup-store to the internet.
 #
-# Paste this location block into the YOUR_EXISTING_DOMAIN server block in
-# /etc/nginx/sites-enabled/YOUR_EXISTING_DOMAIN, then `sudo nginx -t &&
-# sudo systemctl reload nginx`. The Interactions Endpoint URL to paste into the
-# Developer Portal is then:
+# Put this location block in the YOUR_EXISTING_DOMAIN server block — in the
+# repo that owns that vhost, if one does. Editing /etc/nginx directly loses the
+# block the next time that repo deploys, and the only symptom is Discord
+# answering "This interaction failed" while this service looks perfectly
+# healthy. On this box the vhost is dash's, at
+# ~/repos/dash/deploy/nginx/dash.kayushkin.com.conf, installed by its deploy.sh.
+# The Interactions Endpoint URL to paste into the Developer Portal is then:
 #
 #     https://YOUR_EXISTING_DOMAIN/discord/interactions
 #

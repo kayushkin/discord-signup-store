@@ -647,7 +647,7 @@ func TestTheTitleIsPushedOnEveryRosterChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	srv.syncAfterChange(after, nil)
+	srv.syncAfterChange(after.ID, nil)
 
 	var pushed string
 	for _, c := range fake.recorded() {
