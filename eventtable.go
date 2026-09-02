@@ -559,5 +559,20 @@ func (s *Server) RebuildEventTable(guildID string) error {
 			return err
 		}
 	}
-	return s.RefreshEventTable(guildID)
+	pages, err = s.store.RosterTablePages(guildID)
+	if err != nil {
+		return err
+	}
+	for _, p := range pages {
+		if err := s.discord.DeleteMessage(table.ChannelID, p.MessageID); err != nil {
+			log.Printf("[discord-signup] rebuild: could not delete roster page %d: %v", p.Page, err)
+		}
+		if err := s.store.DeleteRosterTablePage(guildID, p.Page); err != nil {
+			return err
+		}
+	}
+	if err := s.RefreshEventTable(guildID); err != nil {
+		return err
+	}
+	return s.RefreshRosterTable(guildID)
 }

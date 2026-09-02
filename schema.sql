@@ -235,3 +235,23 @@ CREATE TABLE IF NOT EXISTS event_updates (
 );
 
 CREATE INDEX IF NOT EXISTS idx_event_updates_event ON event_updates(event_id, at);
+
+-- roster_table_pages: the messages of the roster table, which is the event
+-- table with everyone's names on it.
+--
+-- Its own pages rather than a second guild_tables row, because it is not a
+-- second place to configure — it lives in the SAME channel as the event table
+-- and is drawn from the same events. Only the messages differ, so only the
+-- messages are stored.
+--
+-- Paged like table_pages, but NOT a fixed number of events per message: a row
+-- carrying twenty names is many times the size of one carrying none, so the
+-- packer measures each block and starts a new message when the next one would
+-- not fit.
+CREATE TABLE IF NOT EXISTS roster_table_pages (
+    guild_id   TEXT NOT NULL,
+    page       INTEGER NOT NULL,
+    message_id TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, page)
+);

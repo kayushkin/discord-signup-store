@@ -168,6 +168,9 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 	// The table row is a second view of the same roster. One message, not the
 	// whole table: this runs on every signup.
 	s.refreshEventTableQuietly(ev.GuildID)
+	// The roster table is the same events with the names on. Same trigger, so
+	// the two cannot drift apart and be compared against each other wrongly.
+	s.refreshRosterTableQuietly(ev.GuildID)
 	if err := s.refreshForumPost(ev); err != nil {
 		log.Printf("[discord-signup] refresh forum post for event %d: %v", ev.ID, err)
 		published = false
@@ -205,7 +208,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	1  the original card, title badge and "Signups are in …" pointer
 //	2  the roster listed in the native description, and the pointer reworded to
 //	   stop calling the forum the place to sign up
-const publishFormatVersion = 2
+//	3  the roster table, drawn beside the event table in the same channel
+const publishFormatVersion = 3
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //

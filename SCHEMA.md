@@ -1,7 +1,7 @@
 # Every table, every column
 
 SQLite at `~/.config/discord-signup-store/discord-signup-store.db` (WAL, foreign
-keys on). Ten tables of ours, plus SQLite's own `sqlite_sequence`. Taken from the live database on 2026-09-02 and checked
+keys on). Eleven tables of ours, plus SQLite's own `sqlite_sequence`. Taken from the live database on 2026-09-02 and checked
 against a database built fresh from `schema.sql` plus the migrations — every
 table's column *set* matches.
 
@@ -176,6 +176,23 @@ stored in and is due to be renamed.
 
 No foreign key to `guild_tables`, so deleting a table's row leaves its pages
 behind. Rebuilding deletes them explicitly.
+
+### `roster_table_pages` — the roster table's messages
+
+| column | type | description |
+|---|---|---|
+| `guild_id` | TEXT | PK part 1. |
+| `page` | INTEGER | PK part 2, zero-based. |
+| `message_id` | TEXT | The message holding that page. |
+| `updated_at` | INTEGER | |
+
+The roster table is the event table with everyone's **names** on it, posted into
+the same channel so the two can be read side by side. Its own pages rather than
+a second `guild_tables` row, because it is not a second thing to configure — same
+channel, same events, different messages. Unlike `table_pages` there is no fixed
+number of events per message: a row carrying twenty names is many times one
+carrying none, so each block is measured and a new message starts when the next
+one will not fit.
 
 ### `standing_messages` — messages kept written rather than posted once
 
