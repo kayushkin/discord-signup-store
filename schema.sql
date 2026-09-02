@@ -159,19 +159,6 @@ CREATE TABLE IF NOT EXISTS guild_tables (
     updated_at INTEGER NOT NULL
 );
 
--- event_table_rows: one row of the consolidated table, which is one Discord
--- message holding one event's line and its buttons.
---
--- Separate from events.message_id, which points at the full card in the board
--- channel. An event has two representations in two channels and they are edited
--- independently, so one column cannot hold both.
-CREATE TABLE IF NOT EXISTS event_table_rows (
-    event_id   INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
-    guild_id   TEXT NOT NULL,
-    message_id TEXT NOT NULL,
-    updated_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_event_table_rows_guild ON event_table_rows(guild_id);
 
 -- table_pages: the consolidated table, which is more than one message when it
 -- has to be.

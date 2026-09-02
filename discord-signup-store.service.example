@@ -50,6 +50,10 @@ Environment=DISCORD_DEFAULT_TIMEZONE=
 # Where finished cards move to. Leave empty and they stay on the board, which
 # is a legitimate way to run it — the archive is tidiness, not correctness.
 Environment=DISCORD_PAST_CHANNEL_ID=
+# Where the hour-before and starting-now reminders are posted. These are the
+# only messages this service sends that deliberately ping, so they get their own
+# channel that people can mute on its own. Empty turns reminders off entirely.
+Environment=DISCORD_REMINDER_CHANNEL_ID=
 
 Environment=HOME=/home/YOUR_USER
 

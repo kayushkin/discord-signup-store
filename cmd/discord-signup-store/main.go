@@ -92,6 +92,7 @@ func main() {
 			),
 		}, os.Getenv("DISCORD_BOARD_CHANNEL_ID"))
 		srvAPI.SetPastChannelID(os.Getenv("DISCORD_PAST_CHANNEL_ID"))
+		srvAPI.SetReminderChannelID(os.Getenv("DISCORD_REMINDER_CHANNEL_ID"))
 		log.Printf("web surface enabled, callback %s", redirect)
 	} else {
 		log.Print("web surface disabled (DISCORD_OAUTH_REDIRECT_URL unset)")

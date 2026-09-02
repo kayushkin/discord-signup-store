@@ -48,6 +48,14 @@ type Server struct {
 	// Discord events land here rather than in their own channel, which for a
 	// voice event is the room people talk in and where a card would be unread.
 	boardChannelID string
+	// reminderChannelID is where the hour-before and starting-now messages go.
+	//
+	// Its own channel because those two are the only messages this service
+	// sends that deliberately ping, and mixing them into the board means every
+	// card and every table redraw shares a channel with notifications people
+	// cannot mute separately. Empty means reminders are not sent at all —
+	// silence rather than pinging a channel nobody chose.
+	reminderChannelID string
 	// syncs serialises Discord writes per event. Without it, two roster
 	// changes seconds apart raced and the older one could land last, leaving
 	// every public surface showing a count that was already wrong.
@@ -62,6 +70,14 @@ func (s *Server) EnableWeb(oauth *OAuthConfig, boardChannelID string) {
 	s.oauth = oauth
 	s.boardChannelID = boardChannelID
 }
+
+// SetReminderChannelID names the channel reminders are posted in. Empty turns
+// reminders off, which is the right default: a service that starts pinging a
+// channel nobody picked is worse than one that says nothing.
+func (s *Server) SetReminderChannelID(channelID string) { s.reminderChannelID = channelID }
+
+// ReminderChannelID reports it.
+func (s *Server) ReminderChannelID() string { return s.reminderChannelID }
 
 // SetPastChannelID names the channel finished cards move to.
 func (s *Server) SetPastChannelID(channelID string) { s.pastChannelID = channelID }

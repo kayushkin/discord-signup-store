@@ -30,7 +30,7 @@ func reminderEvent(t *testing.T, store *Store, startsIn time.Duration, joiners .
 func posted(fake *fakeDiscord) []recordedCall {
 	var out []recordedCall
 	for _, c := range fake.recorded() {
-		if c.Method == http.MethodPost && c.Path == "/channels/board/messages" {
+		if c.Method == http.MethodPost && c.Path == "/channels/reminders/messages" {
 			out = append(out, c)
 		}
 	}
@@ -43,6 +43,7 @@ func reminderServer(t *testing.T) (*Server, *Store, *fakeDiscord) {
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
 	srv.EnableWeb(nil, "board")
+	srv.SetReminderChannelID("reminders")
 	return srv, store, fake
 }
 
@@ -173,7 +174,7 @@ func TestAFailedReminderIsRetriedRatherThanLost(t *testing.T) {
 	reminderEvent(t, store, 30*time.Minute, "alice")
 
 	var attempts int
-	fake.on(http.MethodPost, "/channels/board/messages",
+	fake.on(http.MethodPost, "/channels/reminders/messages",
 		func(w http.ResponseWriter, r *http.Request) {
 			attempts++
 			if attempts == 1 {
@@ -189,5 +190,39 @@ func TestAFailedReminderIsRetriedRatherThanLost(t *testing.T) {
 	}
 	if sent, _ := srv.SendDueReminders(); sent != 1 {
 		t.Error("the failed reminder was not retried on the next run")
+	}
+}
+
+// TestRemindersAreSilentUntilAChannelIsNamed. Reminders are the only pinging
+// messages here, so an unconfigured deployment says nothing rather than picking
+// a channel on somebody's behalf.
+//
+// And it must not STAMP while unconfigured: naming the channel next week has to
+// start reminding about the events that already exist, not find every one of
+// them already written off.
+func TestRemindersAreSilentUntilAChannelIsNamed(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+
+	ev := reminderEvent(t, store, 30*time.Minute, "alice")
+	if sent, err := srv.SendDueReminders(); err != nil || sent != 0 {
+		t.Fatalf("sent %d, %v; want silence with no channel configured", sent, err)
+	}
+	if n := len(fake.recorded()); n != 0 {
+		t.Errorf("%d Discord calls with no reminder channel, want 0", n)
+	}
+	after, err := store.GetEvent(ev.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if after.RemindedBeforeAt != 0 {
+		t.Error("stamped while unconfigured, so naming the channel later reminds nobody")
+	}
+
+	srv.SetReminderChannelID("reminders")
+	if sent, _ := srv.SendDueReminders(); sent != 1 {
+		t.Error("naming the channel did not start reminding about an event that already existed")
 	}
 }

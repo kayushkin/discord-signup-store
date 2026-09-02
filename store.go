@@ -192,6 +192,9 @@ func Open(dataDir string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	if err := dropRetiredTables(db); err != nil {
+		return nil, err
+	}
 	if err := ensureColumns(db); err != nil {
 		db.Close()
 		return nil, err
@@ -286,6 +289,31 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 // each one is checked against the live table first. A failure here is fatal at
 // boot rather than swallowed: a service running against a database missing a
 // column it reads would fail later, on a request, somewhere less obvious.
+// tablesRetired are tables this service used to keep and no longer reads.
+//
+// Dropped rather than left, because a table nothing writes still gets created
+// on every fresh database, still carries its indexes, and still turns up in any
+// honest description of the schema — where it has to be explained every time.
+//
+// IF EXISTS, so this is a no-op on a database that never had them and on every
+// boot after the first.
+var tablesRetired = []string{
+	// event_table_rows: one message per event, from before the consolidated
+	// table was paged. Superseded by table_pages. Its rows pointed at messages
+	// deleted when that change shipped, so none of them addressed anything that
+	// still existed.
+	"event_table_rows",
+}
+
+func dropRetiredTables(db *sql.DB) error {
+	for _, name := range tablesRetired {
+		if _, err := db.Exec("DROP TABLE IF EXISTS " + name); err != nil {
+			return fmt.Errorf("drop retired table %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
 func ensureColumns(db *sql.DB) error {
 	for _, c := range columnsAddedAfterFirstRelease {
 		have, err := columnExists(db, c.table, c.column)

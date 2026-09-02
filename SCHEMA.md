@@ -1,7 +1,7 @@
 # Every table, every column
 
 SQLite at `~/.config/discord-signup-store/discord-signup-store.db` (WAL, foreign
-keys on). Ten tables. Taken from the live database on 2026-09-02 and checked
+keys on). Nine tables, plus SQLite's own `sqlite_sequence`. Taken from the live database on 2026-09-02 and checked
 against a database built fresh from `schema.sql` plus the migrations — every
 table's column *set* matches.
 
@@ -189,22 +189,13 @@ Indexed by `expires_at` (the sweep) and `discord_user_id`.
 
 ---
 
-## `event_table_rows` — **dead. Nothing reads or writes it.**
+## `event_table_rows` — **dropped 2026-09-02**
 
-| column | type | description |
-|---|---|---|
-| `event_id` | INTEGER PK | → `events(id)`, ON DELETE CASCADE. |
-| `guild_id` | TEXT | |
-| `message_id` | TEXT | |
-| `updated_at` | INTEGER | |
+A one-message-per-event table from before the consolidated table was paged,
+superseded by `table_pages`. Nothing in the code had mentioned it for months,
+yet it was still created on every fresh database and still carried an index. It
+held five rows here, written 2026-08-23, addressing messages that were deleted
+when paging shipped — none matched a live `events.message_id`.
 
-A one-message-per-event table, superseded by `table_pages` when the table became
-paged. No Go file mentions it. It still gets created on every fresh database and
-still carries an index (`idx_event_table_rows_guild`).
-
-It holds **5 rows on this host**, all written 2026-08-23 06:44 and untouched
-since. They point at messages from the era when each event had its own table
-message; none of those ids matches any live `events.message_id`, so they address
-messages that were deleted when the table became paged. Dropping the table is
-safe, and is the only schema change here that removes anything — five rows of
-addresses for messages that no longer exist.
+`dropRetiredTables` runs `DROP TABLE IF EXISTS` at open, so it goes on the next
+boot of every deployment and is a no-op on every boot after.

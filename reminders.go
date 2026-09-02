@@ -42,7 +42,7 @@ const (
 // sends one message per event per stage no matter how often it is called, and a
 // restart mid-run cannot double up.
 func (s *Server) SendDueReminders() (sent int, err error) {
-	if s.discord == nil {
+	if s.discord == nil || s.reminderChannelID == "" {
 		return 0, nil
 	}
 	guilds, err := s.store.GuildsWithEvents()
@@ -123,9 +123,11 @@ func (s *Server) sendReminder(ev *Event, stage string) bool {
 		s.stampReminder(ev, stage, "nobody has a place")
 		return false
 	}
-	channelID := ev.ChannelID
+	channelID := s.reminderChannelID
 	if channelID == "" {
-		s.stampReminder(ev, stage, "the event has no channel to post in")
+		// Not stamped. Configuring the channel later must start reminding
+		// about events that already exist, not find every one of them already
+		// written off.
 		return false
 	}
 
