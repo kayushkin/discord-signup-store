@@ -109,6 +109,40 @@ func modalTextInput(customID, label, value, placeholder string, style int, requi
 	return field
 }
 
+// labelWrapModalRows converts Action-Row-per-input into Label-per-input.
+//
+// The Label carries the wording and the input keeps everything else — a wrapped
+// Text Input does NOT keep its own "label" field, so it is moved rather than
+// copied, or the same words would be declared twice and one of them ignored.
+func labelWrapModalRows(rows []any) []any {
+	out := make([]any, 0, len(rows))
+	for _, row := range rows {
+		m, ok := row.(map[string]any)
+		if !ok || m["type"] != componentTypeActionRow {
+			out = append(out, row) // already a Label, or a Text Display
+			continue
+		}
+		inner, ok := m["components"].([]any)
+		if !ok || len(inner) != 1 {
+			out = append(out, row)
+			continue
+		}
+		field, ok := inner[0].(map[string]any)
+		if !ok {
+			out = append(out, row)
+			continue
+		}
+		label, _ := field["label"].(string)
+		delete(field, "label")
+		out = append(out, map[string]any{
+			"type":      componentTypeLabel,
+			"label":     label,
+			"component": field,
+		})
+	}
+	return out
+}
+
 // buildEventModal assembles the form. ev is nil when creating, in which case
 // every field opens empty except the ones with a sensible starting point.
 func buildEventModal(customID, title string, ev *Event, zone string) map[string]any {
@@ -162,6 +196,16 @@ func buildEventModal(customID, title string, ev *Event, zone string) map[string]
 // inputs, so the summary stays at one rather than finding that limit live.
 func buildEditModalWithRoster(ev *Event, roster []Signup, zone string) map[string]any {
 	modal := buildEventModal(EditModalCustomID(ev.ID), "Edit "+ev.Name, ev, zone)
+	// Every input is re-wrapped in a Label, which is what makes the summary
+	// legal beside them. The first attempt at this modal put a Text Display in
+	// an array of Action Rows and Discord refused the whole thing — silently,
+	// because a modal is validated after the interaction is answered, so it
+	// showed as "This interaction failed" and left no trace in any log here.
+	//
+	// Discord's own reference says Action Row with Text Inputs in modals is
+	// deprecated in favour of Label. A modal is evidently one shape or the
+	// other, so a modal holding a Text Display has to be Label all through.
+	modal["components"] = labelWrapModalRows(modal["components"].([]any))
 
 	attending, waiting := splitRoster(roster)
 	var b strings.Builder

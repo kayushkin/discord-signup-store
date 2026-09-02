@@ -520,7 +520,7 @@ func (s *Server) handleModalSubmit(w http.ResponseWriter, in *Interaction) {
 		// save. It still has a submit button — every modal does — and Discord
 		// requires an answer to it. Somebody who may edit gets the edit form in
 		// the same modal, which submits as "edit-modal" and never lands here.
-		s.replyEphemeral(w, "Nothing to save there. Use **Edit** on the row to change the event.")
+		s.replyEphemeral(w, "Nothing to save — that was just the roster.")
 	default:
 		s.replyEphemeral(w, "That form is not one of mine.")
 	}

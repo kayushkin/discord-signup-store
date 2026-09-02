@@ -181,9 +181,7 @@ func rosterTableButtons(ev *Event) []any {
 	}
 	buttons = append(buttons,
 		map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
-			"label": "Details", "custom_id": DetailsCustomID(ev.ID)},
-		map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
-			"label": "Edit", "custom_id": EditCustomID(ev.ID)})
+			"label": "Details", "custom_id": DetailsCustomID(ev.ID)})
 	return buttons
 }
 

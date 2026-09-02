@@ -127,6 +127,11 @@ func (s *Store) DeleteTablePage(guildID string, page int) error {
 
 const componentTypeTextDisplay = 10
 
+// componentTypeLabel wraps one input in a modal, carrying its wording.
+// Discord's reference: "Label is recommended for use over an Action Row in
+// modals", and "Action Row with Text Inputs in modals are now deprecated".
+const componentTypeLabel = 18
+
 // textDisplayLimit is the cap on one block's content.
 const textDisplayLimit = 4000
 
@@ -148,14 +153,9 @@ const textDisplayLimit = 4000
 // whatever else it holds, keeps everything else to a single block instead of
 // discovering that limit in production.
 func buildDetailsModal(ev *Event, roster []Signup, canEdit bool, zone string) map[string]any {
-	// ⚠️ The merged form is OFF. Mixing a Text Display with Action Rows in one
-	// modal was rejected by Discord — every press showed "This interaction
-	// failed" — and the merge is not worth a broken button while it is being
-	// worked out. buildEditModalWithRoster stays, covered by tests, and is
-	// switched back on once it is built the way modals now want: Label
-	// wrapping each input, rather than an Action Row per input.
-	_ = canEdit
-	_ = zone
+	if canEdit {
+		return buildEditModalWithRoster(ev, roster, zone)
+	}
 	return buildViewOnlyDetailsModal(ev, roster)
 }
 
