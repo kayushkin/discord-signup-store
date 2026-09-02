@@ -187,6 +187,11 @@ func (s *Server) SyncScheduledEvents(guildID, boardChannelID string) (*SyncResul
 	if result.Imported > 0 || result.Updated > 0 {
 		s.refreshEventTableQuietly(guildID)
 	}
+	// Whatever else happened, leave every live event's Discord copies agreeing
+	// with its roster. A write lost to a 500 or a restart used to sit wrong
+	// until the next person joined; this is the pass that repairs it, and it
+	// costs one query per event when nothing is stale.
+	s.RepublishStaleEvents(guildID)
 	return result, nil
 }
 

@@ -262,67 +262,6 @@ func (s *Server) RefreshSignupMessage(eventID int64) error {
 	return s.discord.EditMessage(ev.ChannelID, ev.MessageID, RenderSignupMessage(ev, roster))
 }
 
-// syncAfterChange pushes what the database now says out to Discord: the roles
-// each affected person should hold, and the refreshed roster message.
-//
-// Takes an event id and reads the event itself, rather than accepting one from
-// the caller. An *Event is a snapshot: AttendingCount and WaitlistCount are
-// filled by the read path and never updated in place, so a struct fetched
-// before the join it is reacting to still carries the old numbers — and every
-// copy written below then publishes them, the count in the native event's
-// title most visibly. Three call sites on the web surface did exactly that.
-// Reading here makes a stale snapshot unrepresentable instead of asking
-// sixteen call sites to remember.
-//
-// Runs after the reply, never before it. The person who clicked must not wait
-// on Discord's API for their answer, and a role that fails to apply must not
-// make a successful signup look failed. Every failure here is logged loudly and
-// none of them roll anything back — the roster is the source of truth and the
-// roles are a projection of it, so the fix is to re-run the projection.
-func (s *Server) syncAfterChange(eventID int64, changes []stateChange) {
-	if s.discord == nil {
-		return
-	}
-	ev, err := s.store.GetEvent(eventID)
-	if err != nil {
-		log.Printf("[discord-signup] sync event=%d: reload: %v", eventID, err)
-		return
-	}
-	for _, change := range changes {
-		// Someone who left keeps their ✅ on the forum post otherwise, and a
-		// reaction that no longer means membership would teach everyone to
-		// distrust it. Removing it fires a gateway remove event, which lands on
-		// an already-withdrawn row and no-ops.
-		if change.State == StateWithdrawn && ev.ForumPostID != "" {
-			if err := s.discord.RemoveUserReaction(ev.ForumPostID, ev.ForumPostID,
-				joinReactionEmoji, change.UserID); err != nil {
-				log.Printf("[discord-signup] clear ✅ for %s on event %d: %v", change.UserID, ev.ID, err)
-			}
-		}
-		if err := s.applyRoles(ev, change); err != nil {
-			log.Printf("[discord-signup] role sync event=%d user=%s state=%s: %v",
-				ev.ID, change.UserID, change.State, err)
-		}
-	}
-	if err := s.RefreshSignupMessage(ev.ID); err != nil {
-		log.Printf("[discord-signup] refresh message event=%d: %v", ev.ID, err)
-	}
-	// The table row is a second view of the same roster. Refreshed from here
-	// because this is the one place every roster change passes through — join,
-	// leave, Interested, promotion, operator override — so there is no path
-	// that updates a card and forgets the row. One message, not the whole
-	// table: this runs on every signup.
-	s.refreshEventTableQuietly(ev.GuildID)
-	s.refreshForumPostQuietly(ev)
-	// The native event's title carries the count, so it goes stale on every
-	// signup. Pushed through the same function an edit uses rather than a
-	// second, lighter one: two paths that both write the native event would
-	// eventually disagree about what they write.
-	if err := s.PushEditToDiscord(ev); err != nil {
-		log.Printf("[discord-signup] push title for event %d: %v", ev.ID, err)
-	}
-}
-
 // applyRoles makes one person's roles match one state.
 func (s *Server) applyRoles(ev *Event, change stateChange) error {
 	// Roles are optional. An event with neither configured keeps its roster

@@ -77,8 +77,12 @@ type Event struct {
 	DiscordInterestedCount int    `json:"discord_interested_count"`
 	DiscordSyncedAt        int64  `json:"discord_synced_at"`
 	CreatedBy              string `json:"created_by"`
-	CreatedAt              int64  `json:"created_at"`
-	UpdatedAt              int64  `json:"updated_at"`
+	// PublishedSignature fingerprints what was last successfully written to
+	// Discord for this event. Bookkeeping, not content: it is written by the
+	// publisher and read only by the publisher.
+	PublishedSignature string `json:"published_signature"`
+	CreatedAt          int64  `json:"created_at"`
+	UpdatedAt          int64  `json:"updated_at"`
 
 	// AttendingCount and WaitlistCount are computed by the read path. They are
 	// never stored, so they can never disagree with the signups table.
@@ -230,6 +234,12 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	{"events", "discord_synced_at", "INTEGER NOT NULL DEFAULT 0"},
 	{"events", "created_by", "TEXT NOT NULL DEFAULT ''"},
 
+	// A fingerprint of everything that feeds a rendered surface, stored when a
+	// publish fully succeeds. It is what lets the reconcile sweep ask "is any
+	// of this stale?" for the price of one query, and repair the one event
+	// whose write was lost instead of rewriting every card every ten minutes.
+	{"events", "published_signature", "TEXT NOT NULL DEFAULT ''"},
+
 	// The discussion thread hanging off the signup card. Discord gives a
 	// message thread the SAME id as its parent message, but it is stored
 	// separately anyway: the card can be reposted (new message id) while the
@@ -377,7 +387,8 @@ func (s *Store) CreateEvent(e Event) (*Event, error) {
 const eventColumns = `id, guild_id, channel_id, message_id, discord_scheduled_event_id,
 	name, description, capacity, status, attending_role_id, waitlist_role_id,
 	starts_at, ends_at, location, entity_type, recurrence_rule, timezone, origin,
-	thread_id, forum_post_id, discord_interested_count, discord_synced_at, created_by, created_at, updated_at`
+	thread_id, forum_post_id, discord_interested_count, discord_synced_at, created_by,
+	published_signature, created_at, updated_at`
 
 func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 	var e Event
@@ -385,7 +396,7 @@ func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 		&e.Name, &e.Description, &e.Capacity, &e.Status, &e.AttendingRoleID, &e.WaitlistRoleID,
 		&e.StartsAt, &e.EndsAt, &e.Location, &e.EntityType, &e.RecurrenceRule, &e.Timezone,
 		&e.Origin, &e.ThreadID, &e.ForumPostID, &e.DiscordInterestedCount, &e.DiscordSyncedAt, &e.CreatedBy,
-		&e.CreatedAt, &e.UpdatedAt)
+		&e.PublishedSignature, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -680,6 +691,19 @@ func validateRecurrence(rule, timezone string) error {
 // DeleteEvent soft-deletes a roster. The rows stay so the history stays
 // readable; use status 'cancelled' if you mean the event is off but the record
 // should remain visible.
+// SetPublishedSignature records what was last successfully written to Discord.
+//
+// updated_at is deliberately not touched. This is the publisher noting what it
+// did, not somebody editing the event, and bumping the timestamp would make
+// every publish look like an edit to anything sorting or syncing on it.
+func (s *Store) SetPublishedSignature(id int64, signature string) error {
+	_, err := s.db.Exec(`UPDATE events SET published_signature = ? WHERE id = ?`, signature, id)
+	if err != nil {
+		return fmt.Errorf("set published signature: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) DeleteEvent(id int64) error {
 	res, err := s.db.Exec(`UPDATE events SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at = 0`, now(), now(), id)
 	if err != nil {

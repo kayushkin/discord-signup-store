@@ -1,0 +1,244 @@
+package discordsignup
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"log"
+	"strings"
+	"sync"
+)
+
+// Publishing an event to Discord, and doing it exactly once at a time.
+//
+// Discord stores message text. There is no live rendering: a bot writes a
+// message and Discord shows those words until somebody writes different ones.
+// So every public surface this service has — the signup card, the forum post,
+// the consolidated table line, the native scheduled event's title — is a copy
+// of the roster that is only as current as the last write, and the whole job
+// here is making sure the last write is the newest state.
+//
+// It was not. Every roster change spawned its own goroutine and they raced:
+// four Interested clicks in thirty-three seconds started four syncs, each
+// making five or six sequential Discord calls, and whichever finished last
+// won. On 2 September the one that finished last had read a roster of three
+// people five seconds before the one that had read two, and every Discord
+// surface sat on 3/7 while the database and both web pages said 2/7. The
+// single-retry-on-429 in discord.go made it likelier rather than safer: the
+// sync most likely to be delayed is the one already behind.
+//
+// Two rules fix it, and neither is a workaround:
+//
+//	one writer per event   a second change arriving mid-sync does not start a
+//	                       second sync; it marks the run dirty and the writer
+//	                       does one more pass when it finishes. The re-read
+//	                       happens inside that pass, so the last write always
+//	                       carries the newest committed state, and a burst of
+//	                       clicks costs two passes rather than one per click.
+//
+//	write only what changed a signature over everything that feeds a rendered
+//	                       surface is stored when a sync fully succeeds. A pass
+//	                       whose signature already matches makes no Discord
+//	                       calls at all, which is what lets the ten-minute
+//	                       reconcile re-check every live event for nothing and
+//	                       repair the one whose write was lost.
+
+// eventSyncQueue serialises Discord writes per event.
+type eventSyncQueue struct {
+	mu       sync.Mutex
+	inFlight map[int64]*eventSyncRun
+}
+
+// eventSyncRun is one event's writer. dirty means another pass is owed, and is
+// separate from changes because an edit that promoted nobody still has to be
+// published.
+type eventSyncRun struct {
+	dirty   bool
+	changes []stateChange
+}
+
+func newEventSyncQueue() *eventSyncQueue {
+	return &eventSyncQueue{inFlight: map[int64]*eventSyncRun{}}
+}
+
+// enqueue registers a request to publish an event. It returns true if the
+// caller is now the writer for that event, and false if a writer already has
+// it — in which case the request has been handed to that writer and the caller
+// is done.
+func (q *eventSyncQueue) enqueue(eventID int64, changes []stateChange) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if run, running := q.inFlight[eventID]; running {
+		run.dirty = true
+		run.changes = append(run.changes, changes...)
+		return false
+	}
+	q.inFlight[eventID] = &eventSyncRun{dirty: true, changes: changes}
+	return true
+}
+
+// claim hands the writer the changes banked since its last pass. When it
+// reports false there is nothing left owed and the event is released, so the
+// next enqueue starts a fresh writer.
+func (q *eventSyncQueue) claim(eventID int64) ([]stateChange, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	run, running := q.inFlight[eventID]
+	if !running || !run.dirty {
+		delete(q.inFlight, eventID)
+		return nil, false
+	}
+	changes := run.changes
+	run.changes, run.dirty = nil, false
+	return changes, true
+}
+
+// syncAfterChange publishes what the database now says: the roles each affected
+// person should hold, and every copy of the roster Discord is holding.
+//
+// Runs after the reply, never before it. The person who clicked must not wait
+// on Discord's API for their answer, and a role that fails to apply must not
+// make a successful signup look failed. Every failure here is logged loudly and
+// none of them roll anything back — the roster is the source of truth and the
+// Discord surfaces are projections of it, so the fix is to re-run the
+// projection, which the ten-minute reconcile does by itself.
+//
+// Callers spawn this with `go`. Only the first caller for a given event does
+// any work; the rest hand their changes over and return.
+func (s *Server) syncAfterChange(eventID int64, changes []stateChange) {
+	if s.discord == nil {
+		return
+	}
+	if !s.syncs.enqueue(eventID, changes) {
+		return
+	}
+	for {
+		batch, owed := s.syncs.claim(eventID)
+		if !owed {
+			return
+		}
+		s.publishEventToDiscord(eventID, batch)
+	}
+}
+
+// publishEventToDiscord is one pass: read the event, then write every surface
+// that is out of date.
+func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
+	ev, err := s.store.GetEvent(eventID)
+	if err != nil {
+		log.Printf("[discord-signup] publish event=%d: reload: %v", eventID, err)
+		return
+	}
+	roster, err := s.store.Roster(eventID, false)
+	if err != nil {
+		log.Printf("[discord-signup] publish event=%d: roster: %v", eventID, err)
+		return
+	}
+
+	for _, change := range changes {
+		// Someone who left keeps their ✅ on the forum post otherwise, and a
+		// reaction that no longer means membership would teach everyone to
+		// distrust it. Removing it fires a gateway remove event, which lands on
+		// an already-withdrawn row and no-ops.
+		if change.State == StateWithdrawn && ev.ForumPostID != "" {
+			if err := s.discord.RemoveUserReaction(ev.ForumPostID, ev.ForumPostID,
+				joinReactionEmoji, change.UserID); err != nil {
+				log.Printf("[discord-signup] clear ✅ for %s on event %d: %v", change.UserID, ev.ID, err)
+			}
+		}
+		if err := s.applyRoles(ev, change); err != nil {
+			log.Printf("[discord-signup] role sync event=%d user=%s state=%s: %v",
+				ev.ID, change.UserID, change.State, err)
+		}
+	}
+
+	// Nothing a reader can see has changed since the last successful publish,
+	// so there is nothing to write. This is what makes the reconcile sweep
+	// affordable: re-checking every live event costs one query each.
+	signature := eventPublishSignature(ev, roster)
+	if signature == ev.PublishedSignature {
+		return
+	}
+
+	published := true
+	if err := s.RefreshSignupMessage(ev.ID); err != nil {
+		log.Printf("[discord-signup] refresh message event=%d: %v", ev.ID, err)
+		published = false
+	}
+	// The table row is a second view of the same roster. One message, not the
+	// whole table: this runs on every signup.
+	s.refreshEventTableQuietly(ev.GuildID)
+	if err := s.refreshForumPost(ev); err != nil {
+		log.Printf("[discord-signup] refresh forum post for event %d: %v", ev.ID, err)
+		published = false
+	}
+	// The native event's title carries the count, so it goes stale on every
+	// signup. Pushed through the same function an edit uses rather than a
+	// second, lighter one: two paths that both write the native event would
+	// eventually disagree about what they write.
+	if err := s.PushEditToDiscord(ev); err != nil {
+		log.Printf("[discord-signup] push title for event %d: %v", ev.ID, err)
+		published = false
+	}
+
+	// Only a clean sweep is recorded. A partial one leaves the old signature
+	// in place, so the next reconcile tries the whole set again rather than
+	// declaring an event published that is half written.
+	if !published {
+		return
+	}
+	if err := s.store.SetPublishedSignature(ev.ID, signature); err != nil {
+		log.Printf("[discord-signup] record published signature for event %d: %v", ev.ID, err)
+	}
+}
+
+// eventPublishSignature covers everything that feeds a surface Discord stores.
+//
+// Deliberately taken over the INPUTS rather than the rendered output. A
+// signature over the finished strings would have to be kept in step with every
+// renderer, and the day somebody adds a field to the card and forgets this, the
+// sweep stops repairing that field and nothing says so. Over the inputs it can
+// only ever be too eager, which costs a redundant write.
+//
+// Two fields are deliberately absent, and both were in it once. ThreadID is
+// written by ensureEventThread DURING a publish, so including it made every
+// first publish dirty its own signature and write a second time. Nothing
+// renders it — the card links the forum post, not the thread. And
+// DiscordInterestedCount only ever appears in the details modal, which is built
+// per click and cannot go stale, so an import moving it would have rewritten
+// every card for a number no card carries.
+func eventPublishSignature(ev *Event, roster []Signup) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\x00%s\x00%s\x00%d\x00%d\x00%d\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s",
+		ev.Name, ev.Description, ev.Status, ev.Capacity, ev.StartsAt, ev.EndsAt,
+		ev.Location, ev.Timezone, ev.MessageID, ev.ChannelID,
+		ev.ForumPostID, ev.DiscordScheduledEventID)
+	for _, sg := range roster {
+		fmt.Fprintf(&b, "\x01%s\x00%s\x00%s\x00%d", sg.DiscordUserID, sg.DisplayName, sg.State, sg.Position)
+	}
+	sum := sha256.Sum256([]byte(b.String()))
+	return hex.EncodeToString(sum[:])
+}
+
+// RepublishStaleEvents re-checks every live event in a guild and rewrites the
+// ones whose Discord copies do not match the roster.
+//
+// The backstop. A write can fail — a Discord 500, a network drop, a restart
+// mid-sync — and until now a failed write left that surface wrong until the
+// next time somebody happened to join. Nothing noticed and nothing retried.
+// This runs from the same ten-minute reconcile that already repairs missing
+// cards and cancelled events, and costs one query per event when everything
+// agrees, which is almost always.
+func (s *Server) RepublishStaleEvents(guildID string) {
+	if s.discord == nil {
+		return
+	}
+	events, err := s.liveEventsFor(guildID)
+	if err != nil {
+		log.Printf("[discord-signup] republish sweep for guild %s: %v", guildID, err)
+		return
+	}
+	for i := range events {
+		s.syncAfterChange(events[i].ID, nil)
+	}
+}

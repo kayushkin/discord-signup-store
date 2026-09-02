@@ -48,6 +48,10 @@ type Server struct {
 	// Discord events land here rather than in their own channel, which for a
 	// voice event is the room people talk in and where a card would be unread.
 	boardChannelID string
+	// syncs serialises Discord writes per event. Without it, two roster
+	// changes seconds apart raced and the older one could land last, leaving
+	// every public surface showing a count that was already wrong.
+	syncs *eventSyncQueue
 }
 
 // EnableWeb turns on the browser surface at YOUR_DOMAIN.
@@ -85,7 +89,7 @@ func (s *Server) BoardChannelID() string { return s.boardChannelID }
 // still works and nothing is pushed to Discord — useful in tests and for a
 // first run before the bot token is filed in auth-store.
 func NewServer(store *Store, verifier *InteractionVerifier, discord *DiscordClient) *Server {
-	return &Server{store: store, verifier: verifier, discord: discord}
+	return &Server{store: store, verifier: verifier, discord: discord, syncs: newEventSyncQueue()}
 }
 
 // RegisterHandlers mounts every route on mux.
