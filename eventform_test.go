@@ -17,7 +17,7 @@ func TestTheEditModalShowsWhoIsGoing(t *testing.T) {
 		{DiscordUserID: "u2", DisplayName: "Bo", State: StateAttending},
 		{DiscordUserID: "u3", DisplayName: "Cy", State: StateWaitlisted, WaitlistPlace: 1},
 	}
-	modal := buildDetailsModal(ev, roster, true, "America/Los_Angeles")
+	modal := buildEditModalWithRoster(ev, roster, "America/Los_Angeles")
 
 	components := modal["components"].([]any)
 	if len(components) != 6 {

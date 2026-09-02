@@ -148,9 +148,14 @@ const textDisplayLimit = 4000
 // whatever else it holds, keeps everything else to a single block instead of
 // discovering that limit in production.
 func buildDetailsModal(ev *Event, roster []Signup, canEdit bool, zone string) map[string]any {
-	if canEdit {
-		return buildEditModalWithRoster(ev, roster, zone)
-	}
+	// ⚠️ The merged form is OFF. Mixing a Text Display with Action Rows in one
+	// modal was rejected by Discord — every press showed "This interaction
+	// failed" — and the merge is not worth a broken button while it is being
+	// worked out. buildEditModalWithRoster stays, covered by tests, and is
+	// switched back on once it is built the way modals now want: Label
+	// wrapping each input, rather than an Action Row per input.
+	_ = canEdit
+	_ = zone
 	return buildViewOnlyDetailsModal(ev, roster)
 }
 

@@ -179,18 +179,16 @@ func TestAnEventWithNoThreadStillSaysWhatItIs(t *testing.T) {
 	}
 }
 
-// TestTheRosterTableHasNoEditButton. Details is the edit form now for anybody
-// allowed to use it, so a second button would open the same thing.
-func TestTheRosterTableHasNoEditButton(t *testing.T) {
+// TestTheRosterTableCarriesTheFourButtons. Details and Edit are separate again:
+// the merged modal was rejected by Discord for mixing a Text Display with
+// Action Rows, and a row with one button that fails is worse than two that work.
+func TestTheRosterTableCarriesTheFourButtons(t *testing.T) {
 	ev := &Event{ID: 1, GuildID: "g1", Name: "Games", Status: StatusOpen}
 	labels := []string{}
 	for _, b := range rosterTableButtons(ev) {
 		labels = append(labels, b.(map[string]any)["label"].(string))
 	}
-	if strings.Contains(strings.Join(labels, ","), "Edit") {
-		t.Errorf("buttons = %v, want Details to cover editing", labels)
-	}
-	if len(labels) != 3 {
-		t.Errorf("buttons = %v, want Join, Leave and Details", labels)
+	if len(labels) != 4 {
+		t.Errorf("buttons = %v, want Join, Leave, Details and Edit", labels)
 	}
 }

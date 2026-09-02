@@ -209,9 +209,9 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	2  the roster listed in the native description, and the pointer reworded to
 //	   stop calling the forum the place to sign up
 //	3  the roster table, drawn beside the event table in the same channel
-//	4  roster table rows link their thread instead of restating its title, and
-//	   drop the Edit button now that Details edits
-const publishFormatVersion = 4
+//	4  roster table rows link their thread instead of restating its title
+//	5  Edit back on those rows: the merged Details+Edit modal was rejected
+const publishFormatVersion = 5
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //
