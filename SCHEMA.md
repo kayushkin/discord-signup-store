@@ -41,7 +41,7 @@ the event at all but the addresses of messages this service has written about it
 | `ends_at` | INTEGER | When it ends. `0` means unset, and a run time is assumed — by one constant, so the archive sweep and the publisher cannot assume different lengths. |
 | `location` | TEXT | Free text. Sent to Discord with a placeholder when empty, because Discord refuses an EXTERNAL event without one; the placeholder is stripped on the way back. |
 | `entity_type` | TEXT | Discord's kind of event: `stage`, `voice` or `external`. |
-| `recurrence_rule` | TEXT | An RFC 5545 RRULE, passed to Discord untouched. |
+| `recurrence_rule` | TEXT | RFC 5545 RRULE. Encoded into Discord's `recurrence_rule` object on every publish since 2026-09-03 — before that it was stored and never sent. `''` means the event does not repeat, and sends `null`. |
 | `timezone` | TEXT | IANA zone name, never an offset — an offset cannot survive a daylight-saving change. Mandatory whenever `recurrence_rule` is set. |
 | `origin` | TEXT | `local` (made here) or `discord` (imported). **Not** derivable from `discord_scheduled_event_id`: a local event published to Discord also has one. This records who owns the thing. |
 | `discord_interested_count` | INTEGER | Discord's own Interested tally. Stored for display, labelled as Discord's, and **never** feeds a capacity decision. |
