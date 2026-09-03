@@ -95,12 +95,12 @@ messages older than an hour; **reminders checked** every minute.
 
 | surface | who sees it | what it is |
 |---|---|---|
-| **Standing how-to** (pinned) | everyone | Where you start. Two buttons: Create an event, My events. |
 | **Signup card** (board) | everyone | One event: what it is, when, who is going, Join / Leave / Details / Edit. |
 | **Discussion thread** | everyone | Talk about that one event. Not signups. |
 | **Forum post** | everyone | The card again, plus discussion, in a channel that lists every event. |
-| **Event table** | everyone | Every upcoming event, one line each, with the same four buttons. |
-| **Details** | just you | The full roster, by name, without pinging anyone. |
+| **Event table** (`#events`) | everyone | Every upcoming event: its thread, its place, the live count and who is going, with Join / Leave / Details. |
+| **Management table** (`#event-management`) | organisers | The same events with **Edit** on each row, and **Create an event** and **My events** on the end. Where anything about an event is changed. |
+| **Details** | just you | The full roster, by name, read-only, without pinging anyone. |
 | **My events** | just you | The events *you* are on, with Join / Leave in place. |
 | **Discord's own event** | everyone | Discord's native event, linked to a roster here. Its title carries the count. |
 | **Web — list** | logged in | Every event, live from the database. |

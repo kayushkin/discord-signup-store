@@ -1,7 +1,7 @@
 # Every table, every column
 
 SQLite at `~/.config/discord-signup-store/discord-signup-store.db` (WAL, foreign
-keys on). Ten tables of ours, plus SQLite's own `sqlite_sequence`. Taken from the live database on 2026-09-02 and checked
+keys on). Eleven tables of ours, plus SQLite's own `sqlite_sequence`. Taken from the live database on 2026-09-02 and checked
 against a database built fresh from `schema.sql` plus the migrations — every
 table's column *set* matches.
 
@@ -162,6 +162,7 @@ service has written. They are why a *UI* change needs storage at all.
 | `guild_id` | TEXT PK | One table per guild. |
 | `channel_id` | TEXT | The channel it is posted in. |
 | `message_id` | TEXT | The header message. `''` if never posted. |
+| `management_channel_id` | TEXT | Where the management table lives — the same events with Edit on each row and Create on the end. `''` means there is not one. On this row because it is the same table for a different audience, not a second thing to configure. |
 | `updated_at` | INTEGER | |
 
 ⚠️ **"Table" here means the UI thing** — a Discord message listing every
@@ -179,6 +180,19 @@ stored in and is due to be renamed.
 
 No foreign key to `guild_tables`, so deleting a table's row leaves its pages
 behind. Rebuilding deletes them explicitly.
+
+### `management_pages` — the management table's messages
+
+| column | type | description |
+|---|---|---|
+| `guild_id` | TEXT | PK part 1. |
+| `page` | INTEGER | PK part 2, zero-based. |
+| `message_id` | TEXT | The message holding that page. |
+| `updated_at` | INTEGER | |
+
+Same shape as `table_pages`, for the same reason: a packed table is more than one
+message when it has to be. Its last page also carries the Create and My events
+buttons, so the packer reserves a row's worth of components on every page.
 
 ### `standing_messages` — messages kept written rather than posted once
 

@@ -255,3 +255,15 @@ CREATE TABLE IF NOT EXISTS roster_table_pages (
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (guild_id, page)
 );
+
+-- management_pages: the messages of the management table — the same events
+-- as table_pages, drawn in the management channel with Edit on each row and
+-- Create on the end. Same shape as table_pages for the same reason: a packed
+-- table is more than one message when it has to be.
+CREATE TABLE IF NOT EXISTS management_pages (
+    guild_id   TEXT NOT NULL,
+    page       INTEGER NOT NULL,
+    message_id TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, page)
+);

@@ -189,45 +189,8 @@ func rosterField(ev *Event, roster []Signup) map[string]any {
 		textInputStyleParagraph, false, 4000)
 }
 
-// buildEditModalWithRoster is the edit form with the roster at the top of it.
-//
-// One modal instead of two: somebody choosing a new capacity wants to see who
-// is already on it while they choose, and before this they had to open Details,
-// read it, dismiss it and press Edit.
-//
-// ⚠️ Description is NOT in this form, and its absence is the price of the
-// merge. A modal takes five Action Rows and no more, the roster takes one, so
-// one field had to go — and Description is the one the web page also edits, the
-// one nobody changes from a phone, and the only one that is not a single line.
-func buildEditModalWithRoster(ev *Event, roster []Signup, zone string) map[string]any {
-	eventZone := ev.Timezone
-	if eventZone == "" {
-		eventZone = zone
-	}
-	row := func(field map[string]any) map[string]any {
-		return map[string]any{"type": componentTypeActionRow, "components": []any{field}}
-	}
-	return map[string]any{
-		"custom_id": EditModalCustomID(ev.ID),
-		"title":     truncate("Edit "+ev.Name, 45),
-		"components": []any{
-			row(rosterField(ev, roster)),
-			row(modalTextInput(fieldName, "Name", ev.Name, "Friday playtest",
-				textInputStyleShort, true, 100)),
-			row(modalTextInput(fieldStartsAt, "Starts — "+eventZone,
-				FormatEventTime(ev.StartsAt, eventZone),
-				"9/29 3   or   9/29 3:00   or   9/29 3:00pm",
-				textInputStyleShort, true, 40)),
-			row(modalTextInput(fieldCapacity, "Max attendees — 0 for no limit",
-				fmt.Sprintf("%d", ev.Capacity), "20", textInputStyleShort, true, 6)),
-			row(modalTextInput(fieldLocation, "Location", ev.Location, "Where it happens",
-				textInputStyleShort, false, 100)),
-		},
-	}
-}
-
-// buildRosterOnlyModal is what somebody who may not edit sees: the roster, and
-// nothing to change.
+// buildRosterOnlyModal is Details: the roster, and nothing to change. Editing
+// lives on the management table.
 func buildRosterOnlyModal(ev *Event, roster []Signup) map[string]any {
 	return map[string]any{
 		"custom_id": DetailsModalCustomID(ev.ID),

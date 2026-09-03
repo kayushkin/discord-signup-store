@@ -30,12 +30,8 @@ func modalFields(t *testing.T, modal map[string]any) map[string]map[string]any {
 }
 
 // TestNoModalCarriesATextDisplay is the test that was missing for ten days.
-//
-// On 23 August the Details modal was rebuilt out of Text Displays, with a
-// comment asserting Discord allows them in a modal. It does not — every such
-// modal was refused, and refused SILENTLY, because a modal is validated after
-// the interaction has already been answered 200. Nothing reached any log here;
-// it showed only as "didn't respond in time" to whoever pressed Details.
+// Discord refuses a modal carrying one, silently: a modal is validated after
+// the interaction has already been answered 200.
 func TestNoModalCarriesATextDisplay(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 2,
 		StartsAt: 1788067881, Timezone: "America/Los_Angeles", Location: "The shed"}
@@ -44,30 +40,26 @@ func TestNoModalCarriesATextDisplay(t *testing.T) {
 		{DiscordUserID: "u2", DisplayName: "Bo", State: StateWaitlisted, WaitlistPlace: 1},
 	}
 	for name, modal := range map[string]map[string]any{
-		"viewer": buildDetailsModal(ev, roster, false, "America/Los_Angeles"),
-		"editor": buildDetailsModal(ev, roster, true, "America/Los_Angeles"),
-		"create": buildEventModal(CreateModalCustomID(), "New event", nil, "America/Los_Angeles"),
+		"details": buildRosterOnlyModal(ev, roster),
+		"edit":    buildEventModal(EditModalCustomID(1), "Edit", ev, "America/Los_Angeles"),
+		"create":  buildEventModal(CreateModalCustomID(), "New event", nil, "America/Los_Angeles"),
 	} {
-		rendered := fmt.Sprint(modal)
-		if strings.Contains(rendered, fmt.Sprintf("%d", componentTypeTextDisplay)) {
-			for _, c := range modal["components"].([]any) {
-				if c.(map[string]any)["type"] == componentTypeTextDisplay {
-					t.Errorf("%s modal carries a Text Display, which Discord refuses", name)
-				}
+		for _, c := range modal["components"].([]any) {
+			if c.(map[string]any)["type"] == componentTypeTextDisplay {
+				t.Errorf("%s modal carries a Text Display, which Discord refuses", name)
 			}
 		}
 	}
 }
 
-// TestAModalNeverExceedsFiveRows. Discord takes five Action Rows in a modal and
-// no more, which is why the merged form has no Description field.
+// TestAModalNeverExceedsFiveRows. Discord takes five Action Rows in a modal
+// and no more.
 func TestAModalNeverExceedsFiveRows(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, StartsAt: 1788067881}
 	for name, modal := range map[string]map[string]any{
-		"viewer": buildDetailsModal(ev, nil, false, "America/Los_Angeles"),
-		"editor": buildDetailsModal(ev, nil, true, "America/Los_Angeles"),
-		"edit":   buildEventModal(EditModalCustomID(1), "Edit", ev, "America/Los_Angeles"),
-		"create": buildEventModal(CreateModalCustomID(), "New", nil, "America/Los_Angeles"),
+		"details": buildRosterOnlyModal(ev, nil),
+		"edit":    buildEventModal(EditModalCustomID(1), "Edit", ev, "America/Los_Angeles"),
+		"create":  buildEventModal(CreateModalCustomID(), "New", nil, "America/Los_Angeles"),
 	} {
 		if n := len(modal["components"].([]any)); n > 5 {
 			t.Errorf("%s modal has %d rows, over Discord's five", name, n)
@@ -75,76 +67,60 @@ func TestAModalNeverExceedsFiveRows(t *testing.T) {
 	}
 }
 
-// TestTheMergedModalShowsWhoIsGoingAndEdits is the merge itself.
-func TestTheMergedModalShowsWhoIsGoingAndEdits(t *testing.T) {
-	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 2,
-		StartsAt: 1788067881, Location: "The shed", Timezone: "America/Los_Angeles"}
+// TestDetailsIsTheRosterAndNothingToChange. Editing lives on the management
+// table; Details shows who is going, to everybody, and nothing else.
+func TestDetailsIsTheRosterAndNothingToChange(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 2, StartsAt: 1788067881}
 	roster := []Signup{
 		{DiscordUserID: "u1", DisplayName: "Al", State: StateAttending},
 		{DiscordUserID: "u2", DisplayName: "Bo", State: StateAttending},
 		{DiscordUserID: "u3", DisplayName: "Cy", State: StateWaitlisted, WaitlistPlace: 1},
 	}
-	modal := buildDetailsModal(ev, roster, true, "America/Los_Angeles")
+	modal := buildRosterOnlyModal(ev, roster)
 	fields := modalFields(t, modal)
-
-	shown := fields[fieldRoster]
-	if shown == nil {
-		t.Fatal("the merged modal does not show the roster")
+	if len(fields) != 1 || fields[fieldRoster] == nil {
+		t.Fatalf("Details holds %v, want only the roster", fields)
 	}
+	shown := fields[fieldRoster]
 	for _, want := range []string{"Al", "Bo", "Waitlist", "Cy"} {
 		if !strings.Contains(shown["value"].(string), want) {
 			t.Errorf("roster field = %q, want %q in it", shown["value"], want)
 		}
 	}
 	if shown["required"] != false {
-		t.Error("the roster field is required, so a viewer cannot submit without editing it")
+		t.Error("the roster field is required, so a viewer cannot dismiss without editing it")
 	}
 	if !strings.Contains(shown["label"].(string), "read only") {
 		t.Errorf("roster label = %q; it looks editable, so it has to say it is not", shown["label"])
-	}
-	for _, want := range []string{fieldName, fieldStartsAt, fieldCapacity, fieldLocation} {
-		if fields[want] == nil {
-			t.Errorf("the merged modal cannot edit %q", want)
-		}
-	}
-	if fields[fieldName]["value"] != "Games" {
-		t.Errorf("name opens with %q, want the current name", fields[fieldName]["value"])
-	}
-	if id := modal["custom_id"].(string); !strings.Contains(id, "edit-modal") {
-		t.Errorf("custom_id = %q, want it to submit as an edit", id)
-	}
-}
-
-// TestAViewerGetsTheRosterAndNothingToChange.
-func TestAViewerGetsTheRosterAndNothingToChange(t *testing.T) {
-	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
-	modal := buildDetailsModal(ev, []Signup{
-		{DiscordUserID: "u1", DisplayName: "Al", State: StateAttending}}, false, "")
-	fields := modalFields(t, modal)
-
-	if len(fields) != 1 || fields[fieldRoster] == nil {
-		t.Fatalf("a viewer's modal holds %v, want only the roster", fields)
 	}
 	if id := modal["custom_id"].(string); !strings.Contains(id, "details-modal") {
 		t.Errorf("custom_id = %q, want the view-only form's", id)
 	}
 }
 
-// TestSubmittingTheRosterFieldChangesNothing. It is not required and looks
-// editable, so somebody will type in it, and what they type must be ignored
-// rather than saved over the event.
-func TestSubmittingTheRosterFieldChangesNothing(t *testing.T) {
-	form := EventForm{
-		Name: "Games", StartsAt: "9/29 5pm", Capacity: "4", Location: "The shed",
+// TestTheEditModalCarriesEveryField. Description is back, because Edit is
+// no longer sharing a modal with the roster and has all five rows to itself.
+func TestTheEditModalCarriesEveryField(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Games", Capacity: 4, StartsAt: 1788067881,
+		Location: "The shed", Description: "Bring dice.", Timezone: "America/Los_Angeles"}
+	fields := modalFields(t, buildEventModal(EditModalCustomID(1), "Edit", ev, "America/Los_Angeles"))
+	for _, want := range []string{fieldName, fieldStartsAt, fieldCapacity, fieldLocation, fieldDescription} {
+		if fields[want] == nil {
+			t.Errorf("the edit modal cannot edit %q", want)
+		}
 	}
-	result, err := form.Validate("America/Los_Angeles")
-	if err != nil {
+	if fields[fieldDescription]["value"] != "Bring dice." {
+		t.Errorf("description opens with %q", fields[fieldDescription]["value"])
+	}
+}
+
+// TestSubmittingTheRosterFieldChangesNothing. It is not required and looks
+// editable, so somebody will type in it, and what they type must be ignored.
+func TestSubmittingTheRosterFieldChangesNothing(t *testing.T) {
+	form := EventForm{Name: "Games", StartsAt: "9/29 5pm", Capacity: "4", Location: "The shed"}
+	if _, err := form.Validate("America/Los_Angeles"); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	if result.Name != "Games" {
-		t.Errorf("name = %q", result.Name)
-	}
-	// The roster field is not one of EventForm's, so it cannot reach a patch.
 	if strings.Contains(fmt.Sprint(form), "roster") {
 		t.Error("the form carries the roster field, which would let it be saved")
 	}

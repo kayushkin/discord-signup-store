@@ -43,14 +43,14 @@ func TestEveryPageStaysInsideDiscordsBudgets(t *testing.T) {
 		rosters[events[i].ID] = rosterOf(names...)
 	}
 
-	pages := packEventTable(events, rosters)
+	pages := packEventTable(events, rosters, eventTableButtons, 1)
 	if len(pages) < 2 {
 		t.Fatalf("%d pages for twelve events with big rosters, want the packer to overflow", len(pages))
 	}
 	seen := 0
 	for i, page := range pages {
 		seen += len(page)
-		payload := RenderEventTablePage(page, i, len(pages))
+		payload := RenderEventTablePage(page, i, len(pages), eventTableButtons, nil)
 		components := countComponents(payload["components"].([]any))
 		if components > eventTableComponentBudget {
 			t.Errorf("page %d renders %d components, over Discord's %d",
@@ -79,7 +79,7 @@ func TestSmallRostersPackMoreEventsPerMessage(t *testing.T) {
 	for i := range events {
 		rosters[events[i].ID] = rosterOf("Al", "Bo")
 	}
-	pages := packEventTable(events, rosters)
+	pages := packEventTable(events, rosters, eventTableButtons, 1)
 	if len(pages[0]) < 5 {
 		t.Errorf("first page holds %d events with tiny rosters, want at least 5", len(pages[0]))
 	}
@@ -92,7 +92,7 @@ func TestTheRosterTableNamesPeopleWithoutPingingThem(t *testing.T) {
 	events := rosterTableEvents(1)
 	rosters := map[int64][]Signup{events[0].ID: rosterOf("Domonation", "Twili Midna")}
 
-	payload := RenderEventTablePage(packEventTable(events, rosters)[0], 0, 1)
+	payload := RenderEventTablePage(packEventTable(events, rosters, eventTableButtons, 1)[0], 0, 1)
 	rendered := fmt.Sprint(payload)
 	if !strings.Contains(rendered, "Domonation") || !strings.Contains(rendered, "Twili Midna") {
 		t.Errorf("the roster table does not name who is going: %q", rendered)
@@ -112,11 +112,11 @@ func TestTheRosterTableNamesPeopleWithoutPingingThem(t *testing.T) {
 // TestAnEmptyGuildStillGetsAPage. Otherwise the last thing posted stays up
 // saying something that stopped being true.
 func TestAnEmptyGuildStillGetsAPage(t *testing.T) {
-	pages := packEventTable(nil, nil)
+	pages := packEventTable(nil, nil, eventTableButtons, 1)
 	if len(pages) != 1 {
 		t.Fatalf("%d pages for no events, want 1", len(pages))
 	}
-	rendered := fmt.Sprint(RenderEventTablePage(pages[0], 0, 1))
+	rendered := fmt.Sprint(RenderEventTablePage(pages[0], 0, 1, eventTableButtons, nil))
 	if !strings.Contains(rendered, "Nothing coming up") {
 		t.Errorf("an empty roster table says %q", rendered)
 	}
@@ -132,11 +132,11 @@ func TestTheWaitlistIsNamedSeparately(t *testing.T) {
 	pages := packEventTable(events, map[int64][]Signup{events[0].ID: roster})
 
 	text := pages[0][0].text
-	if !strings.Contains(text, "Going: Al, Bo") {
-		t.Errorf("block = %q, want the going list", text)
+	if !strings.Contains(text, "2/8 👥 Al, Bo") {
+		t.Errorf("block = %q, want the count and the going list", text)
 	}
-	if !strings.Contains(text, "Waiting: Cy") {
-		t.Errorf("block = %q, want the waitlist named separately", text)
+	if !strings.Contains(text, "⏳ Cy") {
+		t.Errorf("block = %q, want the waitlist on its own line", text)
 	}
 }
 
@@ -149,7 +149,7 @@ func TestARowSaysNothingItsThreadTitleAlreadySays(t *testing.T) {
 		Capacity: 8, AttendingCount: 3, Location: "The shed", ForumPostID: "post-9",
 		StartsAt: time.Now().Add(30 * time.Hour).Unix()}
 
-	block := buildEventTableBlock(ev, rosterOf("Al", "Bo", "Cy"), true)
+	block := buildEventTableBlock(ev, rosterOf("Al", "Bo", "Cy"), true, eventTableButtons)
 	if !strings.Contains(block.text, "<#post-9>") {
 		t.Errorf("row = %q, want it to link the thread", block.text)
 	}
@@ -167,7 +167,7 @@ func TestARowSaysNothingItsThreadTitleAlreadySays(t *testing.T) {
 	if !strings.Contains(block.text, "The shed") {
 		t.Errorf("row = %q, want the location kept", block.text)
 	}
-	if !strings.Contains(block.text, "Going: Al, Bo, Cy") {
+	if !strings.Contains(block.text, "3/8 👥 Al, Bo, Cy") {
 		t.Errorf("row = %q, want the names", block.text)
 	}
 }
@@ -177,7 +177,7 @@ func TestARowSaysNothingItsThreadTitleAlreadySays(t *testing.T) {
 func TestAnEventWithNoThreadStillSaysWhatItIs(t *testing.T) {
 	ev := &Event{ID: 1, GuildID: "g1", Name: "Unlinked", Status: StatusOpen,
 		Capacity: 4, AttendingCount: 1, StartsAt: time.Now().Add(30 * time.Hour).Unix()}
-	block := buildEventTableBlock(ev, rosterOf("Al"), true)
+	block := buildEventTableBlock(ev, rosterOf("Al"), true, eventTableButtons)
 	if !strings.Contains(block.text, "Unlinked") {
 		t.Errorf("row = %q, want the full line when there is no thread to link", block.text)
 	}
@@ -196,5 +196,67 @@ func TestTheRosterTableHasNoEditButton(t *testing.T) {
 	}
 	if len(labels) != 3 {
 		t.Errorf("buttons = %v, want Join, Leave and Details", labels)
+	}
+}
+
+// TestTheRowReadsLikeTheExample pins the shape asked for:
+//
+//	<#thread>  📍  in my butt
+//	2/10 👥 Twili Midna, Slava
+func TestTheRowReadsLikeTheExample(t *testing.T) {
+	ev := &Event{ID: 1, GuildID: "g1", Name: "Party", Status: StatusOpen,
+		Capacity: 10, AttendingCount: 2, Location: "in my butt", ForumPostID: "post-9"}
+	block := buildEventTableBlock(ev, rosterOf("Twili Midna", "Slava"), true, eventTableButtons)
+	want := "<#post-9>  📍  in my butt\n2/10 👥 Twili Midna, Slava"
+	if block.text != want {
+		t.Errorf("row =\n%q\nwant\n%q", block.text, want)
+	}
+}
+
+// TestTheManagementTableHasEditAndCreateAndNothingAMemberDoes.
+func TestTheManagementTableHasEditAndCreateAndNothingAMemberDoes(t *testing.T) {
+	events := rosterTableEvents(2)
+	rosters := map[int64][]Signup{events[0].ID: rosterOf("Al"), events[1].ID: nil}
+	pages := packEventTable(events, rosters, managementButtons, len(managementTrailing())+1)
+	payload := RenderEventTablePage(pages[0], 0, 1, managementButtons, managementTrailing())
+	labels := []string{}
+	var walk func([]any)
+	walk = func(cs []any) {
+		for _, c := range cs {
+			m := c.(map[string]any)
+			if m["type"] == componentTypeButton {
+				labels = append(labels, m["label"].(string))
+			}
+			if nested, ok := m["components"].([]any); ok {
+				walk(nested)
+			}
+		}
+	}
+	walk(payload["components"].([]any))
+	joined := strings.Join(labels, ",")
+	for _, banned := range []string{"Join", "Leave", "Details"} {
+		if strings.Contains(joined, banned) {
+			t.Errorf("management table carries %s: %v", banned, labels)
+		}
+	}
+	if strings.Count(joined, "Edit") != 2 {
+		t.Errorf("want Edit on each of two rows, got %v", labels)
+	}
+	if !strings.Contains(joined, "Create an event") || !strings.Contains(joined, "My events") {
+		t.Errorf("want Create and My events on the last page, got %v", labels)
+	}
+	if n := countComponents(payload["components"].([]any)); n > eventTableComponentBudget {
+		t.Errorf("management page renders %d components, over %d", n, eventTableComponentBudget)
+	}
+}
+
+// TestThePublicTableCarriesNoTrailingControls: Create and My events live on
+// the management table only.
+func TestThePublicTableCarriesNoTrailingControls(t *testing.T) {
+	events := rosterTableEvents(1)
+	pages := packEventTable(events, nil, eventTableButtons, 1)
+	rendered := fmt.Sprint(RenderEventTablePage(pages[0], 0, 1, eventTableButtons, nil))
+	if strings.Contains(rendered, "Create an event") || strings.Contains(rendered, myEventsButtonID) {
+		t.Error("the public table carries management controls")
 	}
 }

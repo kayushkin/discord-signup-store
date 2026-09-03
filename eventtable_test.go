@@ -91,27 +91,17 @@ func TestTableIsEditedInPlaceAndShrinks(t *testing.T) {
 
 // TestTheDetailsModalIsBuiltFromTheOnlyShapeThatWorks.
 //
-// This test used to assert the opposite — that every component was a Text
-// Display (type 10), "because anything else is an input, which cannot be made
-// read-only". The reasoning was sound and the premise was false: Discord
-// refuses a modal carrying a Text Display, so that assertion held a button
-// broken for ten days while the suite stayed green.
-//
-// A modal cannot show read-only text at all. The roster therefore travels as a
-// paragraph Text Input that is not required, is labelled "read only", and whose
-// contents are thrown away on submit.
+// This test used to assert every component was a Text Display, "because
+// anything else is an input, which cannot be made read-only". The reasoning
+// was sound and the premise was false: Discord refuses a modal carrying a Text
+// Display, so that assertion held a button broken for ten days while the suite
+// stayed green.
 func TestTheDetailsModalIsBuiltFromTheOnlyShapeThatWorks(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
 	roster := []Signup{{DiscordUserID: "u1", DisplayName: "Al", State: StateAttending}}
-
-	for _, canEdit := range []bool{false, true} {
-		modal := buildDetailsModal(ev, roster, canEdit, "America/Los_Angeles")
-		for i, c := range modal["components"].([]any) {
-			m := c.(map[string]any)
-			if m["type"] != componentTypeActionRow {
-				t.Errorf("canEdit=%v component %d is type %v, want an Action Row",
-					canEdit, i, m["type"])
-			}
+	for i, c := range buildRosterOnlyModal(ev, roster)["components"].([]any) {
+		if m := c.(map[string]any); m["type"] != componentTypeActionRow {
+			t.Errorf("component %d is type %v, want an Action Row", i, m["type"])
 		}
 	}
 }
@@ -260,9 +250,9 @@ func TestUserSignupsInGuildAnswersThePerViewerQuestion(t *testing.T) {
 // carries them into a text input, where a mention would be worse still.
 func TestTheRosterFieldNamesPeopleWithoutMentioning(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
-	modal := buildDetailsModal(ev, []Signup{
+	modal := buildRosterOnlyModal(ev, []Signup{
 		{DiscordUserID: "110122051179687936", DisplayName: "Slava", State: StateAttending},
-	}, false, "America/Los_Angeles")
+	})
 
 	rendered := fmt.Sprint(modal)
 	if strings.Contains(rendered, "<@") {
@@ -276,7 +266,7 @@ func TestTheRosterFieldNamesPeopleWithoutMentioning(t *testing.T) {
 // TestAnEmptyRosterSaysSoRatherThanShowingNothing.
 func TestAnEmptyRosterSaysSoRatherThanShowingNothing(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, StartsAt: 1788067881}
-	modal := buildDetailsModal(ev, nil, false, "America/Los_Angeles")
+	modal := buildRosterOnlyModal(ev, nil)
 	if !strings.Contains(fmt.Sprint(modal), "Nobody yet") {
 		t.Errorf("an empty roster renders as %q", fmt.Sprint(modal))
 	}

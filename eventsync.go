@@ -187,7 +187,7 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 	}
 	// The table row is a second view of the same roster. One message, not the
 	// whole table: this runs on every signup.
-	s.refreshEventTableQuietly(ev.GuildID)
+	s.refreshTablesQuietly(ev.GuildID)
 	if err := s.refreshForumPost(ev, rename); err != nil {
 		log.Printf("[discord-signup] refresh forum post for event %d: %v", ev.ID, err)
 		published = false

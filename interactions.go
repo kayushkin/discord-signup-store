@@ -264,7 +264,7 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 	case "create":
 		s.handleCreateButton(w, in)
 	case "details":
-		s.handleDetailsButton(w, in, eventID)
+		s.handleDetailsButton(w, eventID)
 	case "my-events":
 		// The routing bug this fixes: "my-events" matched no case and no
 		// "table-" prefix, so the button shipped answering "Unknown signup
@@ -603,7 +603,7 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 	// own event list and fires Discord's start notification. Best effort: the
 	// roster and its card already exist and are the real thing, so a failure
 	// here is reported rather than allowed to undo them.
-	go s.refreshEventTableQuietly(ev.GuildID)
+	go s.refreshTablesQuietly(ev.GuildID)
 
 	published := true
 	if _, err := s.PublishToDiscord(ev.ID, s.BoardChannelID()); err != nil {

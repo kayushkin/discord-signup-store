@@ -142,6 +142,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/sync", s.handleSyncAllGuilds)
 	mux.HandleFunc("POST /api/channels/{channelID}/how-to", s.handlePostHowTo)
 	mux.HandleFunc("PUT /api/guilds/{guildID}/table", s.handleSetGuildTable)
+	mux.HandleFunc("PUT /api/guilds/{guildID}/management", s.handleSetGuildManagement)
 	mux.HandleFunc("POST /api/guilds/{guildID}/table/refresh", s.handleRefreshGuildTable)
 	mux.HandleFunc("PUT /api/guilds/{guildID}/forum", s.handleSetGuildForum)
 	mux.HandleFunc("POST /api/events/complete-finished", s.handleCompleteFinished)
@@ -165,6 +166,29 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/post-message", s.handleWebPostMessage)
 	mux.HandleFunc("POST /events/{id}/publish", s.handleWebPublish)
 	mux.HandleFunc("POST /sync", s.handleWebSync)
+}
+
+// handleSetGuildManagement points a guild's management table at a channel and
+// draws it. The management table hangs off the event table, so this is a 404
+// until PUT .../table has been called.
+func (s *Server) handleSetGuildManagement(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		ChannelID string `json:"channel_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.ChannelID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "channel_id is required"})
+		return
+	}
+	guildID := r.PathValue("guildID")
+	if err := s.store.SetGuildManagementChannel(guildID, in.ChannelID); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if err := s.RefreshManagementTable(guildID); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleSetGuildTable points a guild's consolidated table at a channel and

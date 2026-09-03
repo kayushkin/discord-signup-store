@@ -34,7 +34,24 @@ type GuildTable struct {
 	GuildID   string `json:"guild_id"`
 	ChannelID string `json:"channel_id"`
 	MessageID string `json:"message_id"` // the header
-	UpdatedAt int64  `json:"updated_at"`
+	// ManagementChannelID is where the management table lives: the same
+	// events with Edit on each row and Create on the end. Empty means there
+	// is not one.
+	ManagementChannelID string `json:"management_channel_id"`
+	UpdatedAt           int64  `json:"updated_at"`
+}
+
+// SetGuildManagementChannel points the management table at a channel.
+func (s *Store) SetGuildManagementChannel(guildID, channelID string) error {
+	res, err := s.db.Exec(`UPDATE guild_tables SET management_channel_id = ?, updated_at = ? WHERE guild_id = ?`,
+		channelID, now(), guildID)
+	if err != nil {
+		return fmt.Errorf("set management channel: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound // no event table yet; the management one hangs off it
+	}
+	return nil
 }
 
 // SetGuildTable records the channel a guild's table lives in.
@@ -66,8 +83,8 @@ func (s *Store) SetGuildTableMessage(guildID, messageID string) error {
 func (s *Store) GuildTable(guildID string) (*GuildTable, error) {
 	var t GuildTable
 	err := s.db.QueryRow(
-		`SELECT guild_id, channel_id, message_id, updated_at FROM guild_tables WHERE guild_id = ?`,
-		guildID).Scan(&t.GuildID, &t.ChannelID, &t.MessageID, &t.UpdatedAt)
+		`SELECT guild_id, channel_id, message_id, management_channel_id, updated_at FROM guild_tables WHERE guild_id = ?`,
+		guildID).Scan(&t.GuildID, &t.ChannelID, &t.MessageID, &t.ManagementChannelID, &t.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -134,103 +151,6 @@ const componentTypeLabel = 18
 // textDisplayLimit is the cap on one block's content.
 const textDisplayLimit = 4000
 
-// buildDetailsModal shows an event as three blocks of plain text: what it is,
-// who is going, and who is waiting — in that order, because that is the order
-// the questions get asked.
-//
-// Every component is a Text Display. Nothing here is an input, so nothing looks
-// editable, and there is no submit to explain away.
-// buildDetailsModal deliberately carries NO forum reference, unlike every
-// other surface: a modal resolves neither <#…> mentions nor markdown links, so
-// the reference would render as dead text — a raw id in angle brackets.
-// buildDetailsModal renders an event for somebody looking at it, and for
-// somebody about to change it.
-//
-// An editor gets ONE text block rather than the three a viewer gets. Discord
-// documents no total component limit for modals — only messages have the
-// documented 40 — so the editor's version, which must carry five text inputs
-// whatever else it holds, keeps everything else to a single block instead of
-// discovering that limit in production.
-func buildDetailsModal(ev *Event, roster []Signup, canEdit bool, zone string) map[string]any {
-	if canEdit {
-		return buildEditModalWithRoster(ev, roster, zone)
-	}
-	return buildRosterOnlyModal(ev, roster)
-}
-
-func buildViewOnlyDetailsModal(ev *Event, roster []Signup) map[string]any {
-	text := func(content string) map[string]any {
-		return map[string]any{"type": componentTypeTextDisplay, "content": trimTo(content, textDisplayLimit)}
-	}
-	components := []any{}
-
-	var head strings.Builder
-	if ev.Description != "" {
-		head.WriteString(ev.Description)
-	} else {
-		head.WriteString("_No description._")
-	}
-	// The when and where go under the description as small text, so the thing
-	// asked for first is read first.
-	var meta []string
-	if ev.StartsAt > 0 {
-		zone := ev.Timezone
-		if zone == "" {
-			zone = "UTC"
-		}
-		// Spelled out rather than Discord's <t:…> markup, which renders as
-		// literal text in a modal instead of localising.
-		meta = append(meta, FormatEventTime(ev.StartsAt, zone)+" ("+zone+")")
-	}
-	if ev.Location != "" {
-		meta = append(meta, ev.Location)
-	}
-	if ev.Status != StatusOpen {
-		meta = append(meta, "signups "+ev.Status)
-	}
-	if len(meta) > 0 {
-		head.WriteString("\n-# " + strings.Join(meta, "  ·  "))
-	}
-	components = append(components, text(head.String()))
-
-	attending, waiting := splitRoster(roster)
-	going := fmt.Sprintf("**Going — %d**", len(attending))
-	if ev.Capacity > 0 {
-		going = fmt.Sprintf("**Going — %d of %d**", len(attending), ev.Capacity)
-	}
-	if len(attending) == 0 {
-		going += "\n-# Nobody yet."
-	} else {
-		// A BLANK line, not a single newline. "1." at the start of a line is
-		// Discord's ordered-list syntax, and a list that follows a paragraph
-		// with no blank line between them gets pulled up onto that paragraph's
-		// last line — which is why the details view read
-		// "**Going — 2 of 7** 1. Domonation" with no break.
-		going += "\n\n" + rosterNames(attending)
-	}
-	components = append(components, text(going))
-
-	// Only when there is one: a permanently empty heading reads as a fault.
-	if len(waiting) > 0 {
-		components = append(components, text(fmt.Sprintf("**Waitlist — %d**\n\n%s",
-			len(waiting), rosterNames(waiting))))
-	}
-
-	if ev.DiscordScheduledEventID != "" && len(components) < 5 {
-		components = append(components, text(fmt.Sprintf(
-			"-# Discord's own event shows **%d interested** — a different number from the "+
-				"list above, and always will be. Discord counts people who asked to be "+
-				"notified; this counts people who have a place.",
-			ev.DiscordInterestedCount)))
-	}
-
-	return map[string]any{
-		"custom_id":  DetailsModalCustomID(ev.ID),
-		"title":      truncate(ev.Name, 45),
-		"components": components,
-	}
-}
-
 // rosterNames lists people one per line, by display name.
 //
 // Names rather than <@id> mentions: a modal does not resolve a mention, so one
@@ -264,20 +184,11 @@ func trimTo(s string, max int) string {
 }
 
 // handleDetailsButton opens the details modal.
-// handleDetailsButton opens the one modal that both shows an event and edits
-// it.
-//
-// Two modals used to do this and the split was arbitrary from where somebody
-// was standing: Details said who is going, Edit changed the event, and anybody
-// allowed to do the second wanted the first in front of them while they did it.
-// Now there is one button. What it opens depends on whether the person pressing
-// may edit — Discord renders a component to everybody or nobody, so the check
-// has to happen on the press, and this is the press.
-//
-// Buttons cannot go in a modal at all (Discord lists Button as message-only),
-// which is why this merges the two modals rather than putting Edit inside
-// Details.
-func (s *Server) handleDetailsButton(w http.ResponseWriter, in *Interaction, eventID int64) {
+// handleDetailsButton shows who is going. Read-only, for everybody: editing
+// lives on the management table, whose rows carry Edit and nothing a member
+// does. The two were one modal for an afternoon; splitting them again is a
+// choice about where controls live, not about what Discord allows.
+func (s *Server) handleDetailsButton(w http.ResponseWriter, eventID int64) {
 	ev, err := s.store.GetEvent(eventID)
 	if err != nil {
 		s.replyEphemeral(w, "That event no longer exists.")
@@ -287,14 +198,9 @@ func (s *Server) handleDetailsButton(w http.ResponseWriter, in *Interaction, eve
 	if err != nil {
 		log.Printf("[discord-signup] roster for details of %d: %v", ev.ID, err)
 	}
-	canEdit, _ := s.mayEdit(in, ev)
-	zone := ev.Timezone
-	if zone == "" {
-		zone = s.DefaultTimezone()
-	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"type": callbackTypeModal,
-		"data": buildDetailsModal(ev, roster, canEdit, zone),
+		"data": buildRosterOnlyModal(ev, roster),
 	})
 }
 
@@ -465,5 +371,22 @@ func (s *Server) RebuildEventTable(guildID string) error {
 			return err
 		}
 	}
-	return s.RefreshEventTable(guildID)
+	if table.ManagementChannelID != "" {
+		mpages, err := s.store.ManagementPages(guildID)
+		if err != nil {
+			return err
+		}
+		for _, p := range mpages {
+			if err := s.discord.DeleteMessage(table.ManagementChannelID, p.MessageID); err != nil {
+				log.Printf("[discord-signup] rebuild: could not delete management page %d: %v", p.Page, err)
+			}
+			if err := s.store.DeleteManagementPage(guildID, p.Page); err != nil {
+				return err
+			}
+		}
+	}
+	if err := s.RefreshEventTable(guildID); err != nil {
+		return err
+	}
+	return s.RefreshManagementTable(guildID)
 }

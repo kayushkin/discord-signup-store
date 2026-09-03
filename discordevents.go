@@ -189,7 +189,7 @@ func (s *Server) SyncScheduledEvents(guildID, boardChannelID string) (*SyncResul
 	// Imported and edited events both change what the panel should say, and
 	// the panel is one message, so one redraw covers all of them.
 	if result.Imported > 0 || result.Updated > 0 {
-		s.refreshEventTableQuietly(guildID)
+		s.refreshTablesQuietly(guildID)
 	}
 	return result, nil
 }
@@ -900,7 +900,7 @@ func (s *Server) finishEventEverywhere(id int64) {
 	if err != nil {
 		return
 	}
-	s.refreshEventTableQuietly(ev.GuildID)
+	s.refreshTablesQuietly(ev.GuildID)
 	// The forum post gets its finished tag and archives.
 	s.refreshForumPostQuietly(ev)
 	if ev.ThreadID != "" {
@@ -1078,7 +1078,7 @@ func (s *Server) cancelEventEverywhere(ev *Event, why string) error {
 	if err := s.RefreshSignupMessage(ev.ID); err != nil {
 		log.Printf("[discord-signup] refresh cancelled card %d: %v", ev.ID, err)
 	}
-	s.refreshEventTableQuietly(ev.GuildID)
+	s.refreshTablesQuietly(ev.GuildID)
 	s.refreshForumPostQuietly(updated)
 	if updated.ThreadID != "" {
 		if err := s.discord.ArchiveThread(updated.ThreadID); err != nil {

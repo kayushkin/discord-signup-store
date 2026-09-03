@@ -279,6 +279,11 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// renames at once. Deciding that needs the last title written and when,
 	// which nothing else records. Bookkeeping, like published_signature:
 	// written by the publisher, read only by the publisher.
+	// Where the management table lives, beside the public table's channel.
+	// On guild_tables because it is the same table drawn for a different
+	// audience, not a second thing to configure from scratch.
+	{"guild_tables", "management_channel_id", "TEXT NOT NULL DEFAULT ''"},
+
 	{"events", "title_written_at", "INTEGER NOT NULL DEFAULT 0"},
 	{"events", "native_title_written", "TEXT NOT NULL DEFAULT ''"},
 	{"events", "forum_title_written", "TEXT NOT NULL DEFAULT ''"},
