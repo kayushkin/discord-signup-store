@@ -129,7 +129,7 @@ func TestTheWaitlistIsNamedSeparately(t *testing.T) {
 	roster := rosterOf("Al", "Bo")
 	roster = append(roster, Signup{DiscordUserID: "u-cy", DisplayName: "Cy",
 		State: StateWaitlisted, WaitlistPlace: 1})
-	pages := packEventTable(events, map[int64][]Signup{events[0].ID: roster})
+	pages := packEventTable(events, map[int64][]Signup{events[0].ID: roster}, eventTableButtons, 1)
 
 	text := pages[0][0].text
 	if !strings.Contains(text, "2/8 👥 Al, Bo") {

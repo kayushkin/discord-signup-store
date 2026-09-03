@@ -172,6 +172,27 @@ sort.
 A closed event keeps Details and Edit and loses Join and Leave: a button that
 cannot act is a trap, not an affordance.
 
+## The management table
+
+`PUT /api/guilds/{guildID}/management {"channel_id"}` points the management
+table at a channel and draws it. It is the event table drawn for organisers:
+the same events, the same packing, with **Edit** on each row instead of Join,
+Leave and Details, and **Create an event** and **My events** on the last page.
+It hangs off the event table — `management_channel_id` on `guild_tables` — so
+the call is a 404 until `PUT .../table` has been made. One trigger redraws both
+tables, so they cannot show different rosters.
+
+A row on either table is the thread link with the location beside it, then the
+live count and who is going, then whoever is waiting:
+
+    <#thread>  📍  in my butt
+    2/10 👥 Twili Midna, Slava
+    ⏳ Dan
+
+**Details is read-only** — the roster, as a text input that is not required and
+says so, because a modal cannot show read-only text any other way. Editing is
+the management table's job.
+
 ## The personal dashboard
 
 `signup:my-events:0`, on the **standing how-to message**, opens an **ephemeral**
