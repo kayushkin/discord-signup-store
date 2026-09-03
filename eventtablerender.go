@@ -221,19 +221,29 @@ func eventTableButtons(ev *Event) []any {
 // managementButtons is the row on the management table: what an organiser
 // does to an event, and nothing a member does.
 func managementButtons(ev *Event) []any {
-	return []any{map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+	buttons := []any{map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
 		"label": "Edit", "custom_id": EditCustomID(ev.ID)}}
+	// One toggle whose label says which way it goes. Closed means nobody new
+	// can join while everyone on it stays; it is not cancelled.
+	switch ev.Status {
+	case StatusOpen:
+		buttons = append(buttons, map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+			"label": "Close signups", "custom_id": CloseCustomID(ev.ID)})
+	case StatusClosed:
+		buttons = append(buttons, map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+			"label": "Reopen signups", "custom_id": CloseCustomID(ev.ID)})
+	}
+	return append(buttons, map[string]any{"type": componentTypeButton, "style": buttonStyleDanger,
+		"label": "Cancel", "custom_id": CancelCustomID(ev.ID)})
 }
 
 // managementTrailing is the last page's row on the management table: making a
-// new event, and the per-viewer My events view. Both are things a person does
-// rather than things about one event, which is why they are not on a row.
+// new event. A thing a person does rather than a thing about one event, which
+// is why it is not on a row.
 func managementTrailing() []any {
 	return []any{
 		map[string]any{"type": componentTypeButton, "style": buttonStylePrimary,
 			"label": "Create an event", "custom_id": CreateCustomID()},
-		map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
-			"label": "My events", "custom_id": myEventsButtonID},
 	}
 }
 

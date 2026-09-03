@@ -239,7 +239,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	   instead of a live count
 //	8  titles carry [X/Y] at the end again, renamed at most every five minutes,
 //	   and [Full] at the front at once
-const publishFormatVersion = 8
+//	9  management rows carry Close/Reopen and Cancel; My events is gone
+const publishFormatVersion = 9
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //

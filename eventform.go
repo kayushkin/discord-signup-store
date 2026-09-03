@@ -115,6 +115,13 @@ func modalTextInput(customID, label, value, placeholder string, style int, requi
 // buildEventModal assembles the form. ev is nil when creating, in which case
 // every field opens empty except the ones with a sensible starting point.
 func buildEventModal(customID, title string, ev *Event, zone string) map[string]any {
+	// Every input's custom_id is scoped to THIS modal. Five edit modals in a
+	// row used to send five inputs called "name", and later ones opened with
+	// their values rotated down a field — the start date in the name box, the
+	// limit in the start box. The server's JSON was right each time; whatever
+	// the client keys a rendered modal on, it evidently outlived the modal. An
+	// id no other modal has ever used cannot collide with anything cached.
+	scoped := func(field string) string { return field + "@" + customID }
 	var name, starts, capacity, location, description string
 	if ev != nil {
 		eventZone := ev.Timezone
@@ -139,15 +146,15 @@ func buildEventModal(customID, title string, ev *Event, zone string) map[string]
 		// characters, so it is trimmed rather than sent whole and refused.
 		"title": truncate(title, 45),
 		"components": []any{
-			row(modalTextInput(fieldName, "Name", name, "Friday playtest",
+			row(modalTextInput(scoped(fieldName), "Name", name, "Friday playtest",
 				textInputStyleShort, true, 100)),
-			row(modalTextInput(fieldStartsAt, "Starts — "+zone, starts, "9/29 3   or   9/29 3:00   or   9/29 3:00pm",
+			row(modalTextInput(scoped(fieldStartsAt), "Starts — "+zone, starts, "9/29 3   or   9/29 3:00   or   9/29 3:00pm",
 				textInputStyleShort, true, 40)),
-			row(modalTextInput(fieldCapacity, "Max attendees — 0 for no limit", capacity, "20",
+			row(modalTextInput(scoped(fieldCapacity), "Max attendees — 0 for no limit", capacity, "20",
 				textInputStyleShort, true, 6)),
-			row(modalTextInput(fieldLocation, "Location", location, "Where it happens",
+			row(modalTextInput(scoped(fieldLocation), "Location", location, "Where it happens",
 				textInputStyleShort, false, 100)),
-			row(modalTextInput(fieldDescription, "Description", description,
+			row(modalTextInput(scoped(fieldDescription), "Description", description,
 				"What it is, what to bring, anything else",
 				textInputStyleParagraph, false, 1000)),
 		},

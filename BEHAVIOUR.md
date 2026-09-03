@@ -88,8 +88,8 @@ ping everybody about events that already happened.
 
 On a timer, and nothing else: **finished events archived** every 5 minutes;
 **native events imported** every 10 (plus instantly over the gateway);
-**the table deleted and reposted** hourly, because Discord caps edits to
-messages older than an hour; **reminders checked** every minute.
+**reminders checked** every minute. A finished event leaves **one line** in
+past-events — the table row folded flat — not a card of dead buttons.
 
 ## 4. What each surface is for
 
@@ -99,7 +99,7 @@ messages older than an hour; **reminders checked** every minute.
 | **Discussion thread** | everyone | Talk about that one event. Not signups. |
 | **Forum post** | everyone | The card again, plus discussion, in a channel that lists every event. |
 | **Event table** (`#events`) | everyone | Every upcoming event: its thread, its place, the live count and who is going, with Join / Leave / Details. |
-| **Management table** (`#event-management`) | organisers | The same events with **Edit** on each row, and **Create an event** and **My events** on the end. Where anything about an event is changed. |
+| **Management table** (`#event-management`) | organisers | The same events with **Edit**, **Close/Reopen signups** and **Cancel** on each row, and **Create an event** on the end. Where anything about an event is changed. |
 | **Details** | just you | The full roster, by name, read-only, without pinging anyone. |
 | **My events** | just you | The events *you* are on, with Join / Leave in place. |
 | **Discord's own event** | everyone | Discord's native event, linked to a roster here. Its title carries the count. |

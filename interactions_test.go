@@ -281,7 +281,8 @@ func TestEditButtonOpensAPrefilledFormAndSaves(t *testing.T) {
 	prefilled := map[string]string{}
 	for _, r := range rows {
 		f := r.(map[string]any)["components"].([]any)[0].(map[string]any)
-		prefilled[f["custom_id"].(string)] = f["value"].(string)
+		// Ids are scoped "name@<modal>"; the test keys by field.
+		prefilled[strings.SplitN(f["custom_id"].(string), "@", 2)[0]] = f["value"].(string)
 	}
 	// Every field opens with what is already there, so a small change is a
 	// small edit rather than retyping the event.

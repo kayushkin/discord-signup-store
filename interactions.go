@@ -265,6 +265,10 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		s.handleCreateButton(w, in)
 	case "details":
 		s.handleDetailsButton(w, eventID)
+	case "cancel":
+		s.handleCancelButton(w, in, eventID)
+	case "close":
+		s.handleCloseToggle(w, in, eventID)
 	case "my-events":
 		// The routing bug this fixes: "my-events" matched no case and no
 		// "table-" prefix, so the button shipped answering "Unknown signup
@@ -421,6 +425,21 @@ func DetailsCustomID(eventID int64) string {
 	return fmt.Sprintf("%s:details:%d", customIDPrefix, eventID)
 }
 
+// CancelCustomID is the management row's Cancel button; it opens a confirm.
+func CancelCustomID(eventID int64) string {
+	return fmt.Sprintf("%s:cancel:%d", customIDPrefix, eventID)
+}
+
+// CancelModalCustomID is the confirm modal Cancel opens.
+func CancelModalCustomID(eventID int64) string {
+	return fmt.Sprintf("%s:cancel-modal:%d", customIDPrefix, eventID)
+}
+
+// CloseCustomID is the management row's Close signups / Reopen signups toggle.
+func CloseCustomID(eventID int64) string {
+	return fmt.Sprintf("%s:close:%d", customIDPrefix, eventID)
+}
+
 // CreateCustomID is the button on the how-to message. It carries event id 0,
 // because there is no event yet — the id slot is kept so one parser handles
 // every custom_id this service issues.
@@ -515,6 +534,8 @@ func (s *Server) handleModalSubmit(w http.ResponseWriter, in *Interaction) {
 		s.applyEditForm(w, in, eventID, form)
 	case "create-modal":
 		s.applyCreateForm(w, in, form)
+	case "cancel-modal":
+		s.applyCancelConfirm(w, in, eventID, form)
 	case "details-modal":
 		// A viewer's details modal holds no inputs, so there is nothing to
 		// save. It still has a submit button — every modal does — and Discord
@@ -700,11 +721,14 @@ func plainError(err error) string {
 }
 
 // fieldValue pulls one typed field out of a modal submission.
-func (i *Interaction) fieldValue(customID string) string {
+func (i *Interaction) fieldValue(field string) string {
 	for _, row := range i.Data.Components {
-		for _, field := range row.Components {
-			if field.CustomID == customID {
-				return field.Value
+		for _, f := range row.Components {
+			// An input's id is the field name scoped to its modal, "name@…".
+			// The bare name is accepted too, because that is what modals
+			// built before scoping sent, and one may still be open somewhere.
+			if f.CustomID == field || strings.HasPrefix(f.CustomID, field+"@") {
+				return f.Value
 			}
 		}
 	}

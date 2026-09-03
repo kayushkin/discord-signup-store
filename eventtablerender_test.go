@@ -242,8 +242,11 @@ func TestTheManagementTableHasEditAndCreateAndNothingAMemberDoes(t *testing.T) {
 	if strings.Count(joined, "Edit") != 2 {
 		t.Errorf("want Edit on each of two rows, got %v", labels)
 	}
-	if !strings.Contains(joined, "Create an event") || !strings.Contains(joined, "My events") {
-		t.Errorf("want Create and My events on the last page, got %v", labels)
+	if !strings.Contains(joined, "Create an event") {
+		t.Errorf("want Create on the last page, got %v", labels)
+	}
+	if strings.Contains(joined, "My events") {
+		t.Errorf("My events is back on the management table: %v", labels)
 	}
 	if n := countComponents(payload["components"].([]any)); n > eventTableComponentBudget {
 		t.Errorf("management page renders %d components, over %d", n, eventTableComponentBudget)

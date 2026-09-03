@@ -176,8 +176,13 @@ cannot act is a trap, not an affordance.
 
 `PUT /api/guilds/{guildID}/management {"channel_id"}` points the management
 table at a channel and draws it. It is the event table drawn for organisers:
-the same events, the same packing, with **Edit** on each row instead of Join,
-Leave and Details, and **Create an event** and **My events** on the last page.
+the same events, the same packing, with **Edit**, **Close signups** / **Reopen
+signups** and **Cancel** on each row instead of Join, Leave and Details, and
+**Create an event** on the last page. Cancel opens a confirm that asks for the
+event's name typed back — it deletes the native Discord event and cannot be
+undone, and that is the one gesture Discord offers that cannot happen by
+accident. Close is reversible with the same button and is not cancel: the event
+still happens, everyone on it stays, nobody new can join.
 It hangs off the event table — `management_channel_id` on `guild_tables` — so
 the call is a 404 until `PUT .../table` has been made. One trigger redraws both
 tables, so they cannot show different rosters.

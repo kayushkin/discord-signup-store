@@ -1,6 +1,7 @@
 package discordsignup
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -24,7 +25,8 @@ func modalFields(t *testing.T, modal map[string]any) map[string]map[string]any {
 		if field["type"] != componentTypeTextInput {
 			t.Fatalf("component %d wraps type %v, want a text input", i, field["type"])
 		}
-		out[field["custom_id"].(string)] = field
+		// Ids are scoped "name@<modal>"; tests look them up by field.
+		out[strings.SplitN(field["custom_id"].(string), "@", 2)[0]] = field
 	}
 	return out
 }
@@ -123,5 +125,41 @@ func TestSubmittingTheRosterFieldChangesNothing(t *testing.T) {
 	}
 	if strings.Contains(fmt.Sprint(form), "roster") {
 		t.Error("the form carries the roster field, which would let it be saved")
+	}
+}
+
+// TestEveryInputIdIsUniqueToItsModal is the fix for values rotating down a
+// field on the second modal of a session. Two modals must never share an
+// input id, and the reader must still find the field.
+func TestEveryInputIdIsUniqueToItsModal(t *testing.T) {
+	a := buildEventModal(EditModalCustomID(13), "Edit", &Event{Name: "deez"}, "UTC")
+	b := buildEventModal(EditModalCustomID(19), "Edit", &Event{Name: "Test time"}, "UTC")
+	idsOf := func(m map[string]any) map[string]bool {
+		out := map[string]bool{}
+		for _, c := range m["components"].([]any) {
+			out[c.(map[string]any)["components"].([]any)[0].(map[string]any)["custom_id"].(string)] = true
+		}
+		return out
+	}
+	for id := range idsOf(a) {
+		if idsOf(b)[id] {
+			t.Errorf("input id %q is shared by two modals", id)
+		}
+		if !strings.Contains(id, "@") {
+			t.Errorf("input id %q is not scoped to a modal", id)
+		}
+	}
+	var in Interaction
+	raw := fmt.Sprintf(`{"data":{"components":[{"components":[
+		{"custom_id":%q,"value":"deez"},
+		{"custom_id":%q,"value":"4"}]}]}}`, fieldName+"@"+EditModalCustomID(13), fieldCapacity)
+	if err := json.Unmarshal([]byte(raw), &in); err != nil {
+		t.Fatalf("build interaction: %v", err)
+	}
+	if got := in.fieldValue(fieldName); got != "deez" {
+		t.Errorf("fieldValue(name) = %q through a scoped id", got)
+	}
+	if got := in.fieldValue(fieldCapacity); got != "4" {
+		t.Errorf("fieldValue(capacity) = %q through a bare id", got)
 	}
 }
