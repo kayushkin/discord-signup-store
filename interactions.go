@@ -611,15 +611,6 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 		s.replyEphemeral(w, plainError(err))
 		return
 	}
-	if _, err := s.PostSignupMessage(ev.ID); err != nil {
-		// The event exists; only the card failed. Say so rather than implying
-		// nothing happened, or they will create it a second time.
-		log.Printf("[discord-signup] post card for new event %d: %v", ev.ID, err)
-		s.replyEphemeral(w, fmt.Sprintf("**%s** was created, but its signup card could not "+
-			"be posted to <#%s>. Nothing is lost — the next sync will try again.",
-			ev.Name, s.BoardChannelID()))
-		return
-	}
 	// Also published as a native Discord event, so it appears in the server's
 	// own event list and fires Discord's start notification. Best effort: the
 	// roster and its card already exist and are the real thing, so a failure

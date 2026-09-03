@@ -47,7 +47,7 @@ the event at all but the addresses of messages this service has written about it
 | `discord_interested_count` | INTEGER | Discord's own Interested tally. Stored for display, labelled as Discord's, and **never** feeds a capacity decision. |
 | `discord_synced_at` | INTEGER | When the native event was last read. |
 | `created_by` | TEXT | Discord user id of whoever made it. Grants edit rights, and gets them a place on their own roster. |
-| `thread_id` | TEXT | The discussion thread hanging off the card. Stored separately from `message_id` even though Discord gives a message thread the same id, because the card can be reposted while the thread lives on. |
+| `thread_id` | TEXT | A discussion thread from when cards existed; nothing writes it now. Old ones are still archived when their event finishes. |
 | `forum_post_id` | TEXT | The event's post in the forum channel. One id reaches both the post and the card inside it. |
 | `published_signature` | TEXT | Fingerprint of everything that feeds a Discord copy, written only when a publish fully succeeds. `''` means never published, or the last publish failed part way. The minute sweep republishes anything that does not match. |
 | `reminded_before_at` | INTEGER | When the hour-before reminder went out, **or** when it was written off as too late. `0` means still owed. |

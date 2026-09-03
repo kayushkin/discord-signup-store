@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 )
 
@@ -39,25 +38,14 @@ type stateChange struct {
 	State  string
 }
 
-// RenderSignupMessage builds the public message that carries the buttons.
-//
-// It shows two numbers, both labelled, and deliberately does not try to
-// reconcile them with Discord's own Interested count on the linked scheduled
-// event. Those two will disagree — Discord counts notification subscribers and
-// this counts places — and a message that quietly picks one is worse than one
-// that is clear about which it means.
-func RenderSignupMessage(ev *Event, roster []Signup) map[string]any {
-	return renderSignupMessage(ev, roster, true)
-}
-
 // RenderForumCard is the same card without the discussion link: the forum
 // post's first message IS the card, and a card pointing at its own post would
 // read as a working link that goes nowhere new.
 func RenderForumCard(ev *Event, roster []Signup) map[string]any {
-	return renderSignupMessage(ev, roster, false)
+	return renderSignupMessage(ev, roster)
 }
 
-func renderSignupMessage(ev *Event, roster []Signup, withForumLink bool) map[string]any {
+func renderSignupMessage(ev *Event, roster []Signup) map[string]any {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "## %s\n", ev.Name)
@@ -85,12 +73,6 @@ func renderSignupMessage(ev *Event, roster []Signup, withForumLink bool) map[str
 			fmt.Fprintf(&b, " · %d waiting", ev.WaitlistCount)
 		}
 		b.WriteString("\n")
-	}
-
-	if withForumLink && ev.ForumPostID != "" {
-		// A thread mention: renders as the post's clickable name and needs no
-		// guild id or URL building.
-		fmt.Fprintf(&b, "\n💬 <#%s>\n", ev.ForumPostID)
 	}
 
 	attending, waiting := splitRoster(roster)
@@ -177,105 +159,6 @@ func writeMentions(b *strings.Builder, signups []Signup) {
 		fmt.Fprintf(b, "<@%s>", sg.DiscordUserID)
 	}
 	b.WriteString("\n")
-}
-
-// PostSignupMessage posts an event's signup message and records its id.
-//
-// The id matters beyond convenience: a button click arrives naming the message
-// it sits on, and EventByMessage is how that click is resolved back to a roster
-// even if the custom_id has been copied elsewhere.
-func (s *Server) PostSignupMessage(eventID int64) (*Event, error) {
-	ev, err := s.store.GetEvent(eventID)
-	if err != nil {
-		return nil, err
-	}
-	if s.discord == nil {
-		return nil, errors.New("no discord client configured")
-	}
-	roster, err := s.store.Roster(eventID, false)
-	if err != nil {
-		return nil, err
-	}
-	messageID, err := s.discord.CreateMessage(ev.ChannelID, RenderSignupMessage(ev, roster))
-	if err != nil {
-		return nil, fmt.Errorf("post signup message: %w", err)
-	}
-	updated, err := s.store.UpdateEvent(eventID, EventPatch{MessageID: &messageID})
-	if err != nil {
-		return nil, err
-	}
-	s.ensureEventThread(updated)
-	return updated, nil
-}
-
-// ensureEventThread makes sure a live event's card carries a discussion
-// thread, exactly once.
-//
-// Hung off RefreshSignupMessage rather than only event creation, because that
-// is the choke point every maintained card passes through — so events that
-// existed before threads did grow one on their next activity, with no
-// backfill pass to write or forget. Idempotent via thread_id, so the cost on
-// every later refresh is one column read.
-func (s *Server) ensureEventThread(ev *Event) {
-	if s.discord == nil || ev.MessageID == "" || ev.ThreadID != "" || ev.Status != StatusOpen {
-		return
-	}
-	threadID, err := s.discord.CreateThreadFromMessage(ev.ChannelID, ev.MessageID, truncate(ev.Name, 100))
-	if err != nil {
-		// Loud and non-fatal: the card and roster are the product, the thread
-		// is a place to talk about them.
-		log.Printf("[discord-signup] create thread for event %d: %v", ev.ID, err)
-		return
-	}
-	if _, err := s.store.UpdateEvent(ev.ID, EventPatch{ThreadID: &threadID}); err != nil {
-		log.Printf("[discord-signup] record thread for event %d: %v", ev.ID, err)
-		return
-	}
-	// A seed so the thread opens with its purpose rather than empty. Best
-	// effort; the thread exists either way.
-	if _, err := s.discord.CreateMessage(threadID, map[string]any{
-		"content":          fmt.Sprintf("Chat about **%s** here. Signups stay on the card above.", ev.Name),
-		"allowed_mentions": map[string]any{"parse": []string{}},
-	}); err != nil {
-		log.Printf("[discord-signup] seed thread for event %d: %v", ev.ID, err)
-	}
-	log.Printf("[discord-signup] opened thread %s for event %d (%q)", threadID, ev.ID, ev.Name)
-	ev.ThreadID = threadID
-}
-
-// RefreshSignupMessage rewrites the public message to match the roster.
-func (s *Server) RefreshSignupMessage(eventID int64) error {
-	ev, err := s.store.GetEvent(eventID)
-	if err != nil {
-		return err
-	}
-	if ev.MessageID == "" {
-		return nil // never posted; nothing to refresh
-	}
-	if s.discord == nil {
-		return nil
-	}
-	roster, err := s.store.Roster(eventID, false)
-	if err != nil {
-		return err
-	}
-	s.ensureEventThread(ev)
-	err = s.discord.EditMessage(ev.ChannelID, ev.MessageID, RenderSignupMessage(ev, roster))
-	var apiErr *APIError
-	if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
-		// The card is gone — deleted by hand, or with its channel. Forgetting
-		// it is the only correct move: an event whose card 404s used to be
-		// unpublishable forever, because the publish failed, the signature was
-		// never stamped, and the sweep retried and logged this every minute
-		// until somebody noticed. Gone means somebody deleted it.
-		log.Printf("[discord-signup] card for event %d is gone from Discord; forgetting it", ev.ID)
-		empty := ""
-		if _, err := s.store.UpdateEvent(ev.ID, EventPatch{MessageID: &empty}); err != nil {
-			return fmt.Errorf("forget missing card: %w", err)
-		}
-		return nil
-	}
-	return err
 }
 
 // applyRoles makes one person's roles match one state.

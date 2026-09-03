@@ -1,9 +1,7 @@
 package discordsignup
 
 import (
-	"net/http"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 )
@@ -43,44 +41,6 @@ func TestTheOrganiserIsOnTheirOwnRoster(t *testing.T) {
 	}
 	if roster[0].State != StateAttending {
 		t.Errorf("state = %q, want attending", roster[0].State)
-	}
-}
-
-// TestTheCardForANewEventAlreadyShowsItsOrganiser is why the helper re-reads
-// the event before returning it. AttendingCount is filled by the read path, so
-// the struct CreateEvent hands back says nobody is going — and the very next
-// thing that happens is a card being rendered from it.
-func TestTheCardForANewEventAlreadyShowsItsOrganiser(t *testing.T) {
-	fake := newFakeDiscord(t)
-	store := testStore(t)
-	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
-
-	ev, err := srv.createEventAndJoinOrganiser(Event{
-		GuildID: "g1", ChannelID: "board", Name: "Games", Capacity: 4,
-		StartsAt: time.Now().Add(48 * time.Hour).Unix(), CreatedBy: "u-organiser",
-	}, "Organiser")
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	if ev.AttendingCount != 1 {
-		t.Fatalf("the returned event says %d attending, want 1", ev.AttendingCount)
-	}
-
-	if _, err := srv.PostSignupMessage(ev.ID); err != nil {
-		t.Fatalf("post card: %v", err)
-	}
-	var posted string
-	for _, c := range fake.recorded() {
-		if c.Method == http.MethodPost && c.Path == "/channels/board/messages" {
-			posted, _ = c.Body["content"].(string)
-		}
-	}
-	if !strings.Contains(posted, "1/4 places taken") {
-		t.Errorf("the first card reads %q, want it to already say 1/4", posted)
-	}
-	if !strings.Contains(posted, "<@u-organiser>") {
-		t.Error("the organiser is not named on their own event's card")
 	}
 }
 

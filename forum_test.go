@@ -26,7 +26,7 @@ func forumFake(t *testing.T) (*fakeDiscord, *Store, *Server) {
 }
 
 // TestForumPostCarriesTheSameCardAndButtons: the first message is
-// RenderSignupMessage verbatim, so one handler serves both surfaces.
+// RenderForumCard verbatim, so one handler serves both surfaces.
 func TestForumPostCarriesTheSameCardAndButtons(t *testing.T) {
 	fake, store, srv := forumFake(t)
 	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Games",
@@ -254,10 +254,8 @@ func TestSurfacesLinkToTheForumPostExceptTheForumItself(t *testing.T) {
 		StartsAt: time.Now().Add(time.Hour).Unix(), Status: StatusOpen,
 		ForumPostID: "post-9"}
 
-	card := fmt.Sprint(RenderSignupMessage(ev, nil)["content"])
-	if !strings.Contains(card, "<#post-9>") {
-		t.Error("the board card does not link to the forum post")
-	}
+	// There is no board card any more; the forum card is the one card there
+	// is, and it must not link to itself.
 	forumCard := fmt.Sprint(RenderForumCard(ev, nil)["content"])
 	if strings.Contains(forumCard, "post-9") {
 		t.Error("the forum card links to its own post")
@@ -289,7 +287,7 @@ func TestSurfacesLinkToTheForumPostExceptTheForumItself(t *testing.T) {
 
 	// No post yet: no dangling links anywhere.
 	bare := &Event{ID: 2, GuildID: "g1", Name: "Fresh", Status: StatusOpen}
-	if strings.Contains(fmt.Sprint(RenderSignupMessage(bare, nil)["content"]), "💬") {
+	if strings.Contains(fmt.Sprint(RenderForumCard(bare, nil)["content"]), "💬") {
 		t.Error("a card links to a post that does not exist")
 	}
 	if strings.Contains(eventLine(bare), "💬") {

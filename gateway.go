@@ -258,8 +258,7 @@ func (g *GatewayListener) onScheduledEventCreated(_ *discordgo.Session, e *disco
 		log.Printf("[discord-signup] import new discord event %s: %v", e.ID, err)
 		return
 	}
-	log.Printf("[discord-signup] discord event %q created: %d imported, %d cards posted",
-		e.Name, result.Imported, result.Posted)
+	log.Printf("[discord-signup] discord event %q created: %d imported", e.Name, result.Imported)
 }
 
 // onScheduledEventDeleted cancels the local event the moment its native one is

@@ -181,10 +181,6 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 	}
 
 	published := true
-	if err := s.RefreshSignupMessage(ev.ID); err != nil {
-		log.Printf("[discord-signup] refresh message event=%d: %v", ev.ID, err)
-		published = false
-	}
 	// The table row is a second view of the same roster. One message, not the
 	// whole table: this runs on every signup.
 	s.refreshTablesQuietly(ev.GuildID)
@@ -251,7 +247,7 @@ const publishFormatVersion = 9
 // only ever be too eager, which costs a redundant write.
 //
 // Two fields are deliberately absent, and both were in it once. ThreadID is
-// written by ensureEventThread DURING a publish, so including it made every
+// written during a publish by the thread that cards used to grow, so including it made every
 // first publish dirty its own signature and write a second time. Nothing
 // renders it — the card links the forum post, not the thread. And
 // DiscordInterestedCount only ever appears in the details modal, which is built

@@ -156,11 +156,11 @@ func TestFinishedEventsRefuseNewSignups(t *testing.T) {
 	}
 }
 
-// TestFinishedCardLosesItsButtons stops a past event still taking signups from
+// TestFinishedForumCardLosesItsButtons stops a past event still taking signups from
 // a message sitting in the channel.
-func TestFinishedCardLosesItsButtons(t *testing.T) {
+func TestFinishedForumCardLosesItsButtons(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Over", Status: StatusCompleted, Capacity: 5, AttendingCount: 5}
-	payload := RenderSignupMessage(ev, nil)
+	payload := RenderForumCard(ev, nil)
 	components, ok := payload["components"].([]any)
 	if !ok {
 		t.Fatal("components key missing — omitting it leaves the old buttons live")
@@ -264,9 +264,10 @@ func TestTheSweepNeverClosesAnUpcomingEventItself(t *testing.T) {
 	}
 }
 
-// TestFinishedCardMovesToPastEvents covers the tidy-up: Discord cannot move a
-// message between channels, so this is a post followed by a delete.
-func TestFinishedCardMovesToPastEvents(t *testing.T) {
+// TestFinishedEventLeavesOneLineInPastEvents: the table row folded flat, with
+// nothing to press, and nothing deleted anywhere — there is no board card to
+// take down any more.
+func TestFinishedEventLeavesOneLineInPastEvents(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
@@ -275,8 +276,8 @@ func TestFinishedCardMovesToPastEvents(t *testing.T) {
 
 	past := time.Now().Add(-10 * time.Hour).Unix()
 	ev, err := store.CreateEvent(Event{
-		GuildID: "g1", ChannelID: "board", MessageID: "card-on-board",
-		Name: "Done", StartsAt: past, EndsAt: past + 3600, Capacity: 4,
+		GuildID: "g1", ChannelID: "board", Name: "Done", Location: "The shed",
+		StartsAt: past, EndsAt: past + 3600, Capacity: 4,
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -293,31 +294,32 @@ func TestFinishedCardMovesToPastEvents(t *testing.T) {
 		t.Fatalf("finished %d events, want 1", len(finished))
 	}
 
-	var posted, deleted []string
+	var posted []recordedCall
 	for _, c := range fake.recorded() {
-		switch {
-		case c.Method == http.MethodPost && strings.HasSuffix(c.Path, "/messages"):
-			posted = append(posted, c.Path)
-		case c.Method == http.MethodDelete:
-			deleted = append(deleted, c.Path)
+		if c.Method == http.MethodDelete {
+			t.Errorf("deleted %s; a finished event has nothing to take down", c.Path)
+		}
+		if c.Method == http.MethodPost && strings.HasSuffix(c.Path, "/messages") {
+			posted = append(posted, c)
 		}
 	}
-	if len(posted) != 1 || posted[0] != "/channels/past/messages" {
-		t.Errorf("posted to %v, want the past-events channel", posted)
+	if len(posted) != 1 || posted[0].Path != "/channels/past/messages" {
+		t.Fatalf("posted to %v, want exactly one line in the past-events channel", posted)
 	}
-	if len(deleted) != 1 || deleted[0] != "/channels/board/messages/card-on-board" {
-		t.Errorf("deleted %v, want the original card off the board", deleted)
+	line, _ := posted[0].Body["content"].(string)
+	for _, want := range []string{"Done", "The shed", "1/4", "Alice"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("past-events line = %q, want %q in it", line, want)
+		}
 	}
-
-	got, err := store.GetEvent(ev.ID)
-	if err != nil {
-		t.Fatalf("reload: %v", err)
+	if strings.Contains(line, "\n") {
+		t.Errorf("past-events line = %q, want one line", line)
 	}
-	// The columns mean "where this event's card is", so after the move they
-	// point at the new one. A stale pointer would make a later refresh edit a
-	// message that no longer exists.
-	if got.ChannelID != "past" || got.MessageID == "card-on-board" {
-		t.Errorf("card still recorded at %s/%s", got.ChannelID, got.MessageID)
+	if _, has := posted[0].Body["components"]; has {
+		t.Error("the past-events line carries components; there is nothing to press")
+	}
+	if got, _ := store.GetEvent(ev.ID); got.ChannelID != "past" {
+		t.Errorf("event channel = %q, want it repointed at past-events", got.ChannelID)
 	}
 }
 

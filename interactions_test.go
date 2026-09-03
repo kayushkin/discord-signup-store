@@ -400,7 +400,7 @@ func TestSomeoneWithoutManageEventsCannotEdit(t *testing.T) {
 }
 
 // TestCreateButtonMakesAnEventAndPostsItsCard covers the how-to channel button.
-func TestCreateButtonMakesAnEventAndPostsItsCard(t *testing.T) {
+func TestCreateButtonMakesAnEvent(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	pub, priv, err := ed25519.GenerateKey(nil)
@@ -450,18 +450,15 @@ func TestCreateButtonMakesAnEventAndPostsItsCard(t *testing.T) {
 	if created.CreatedBy != "boss" {
 		t.Errorf("created_by = %q, want \"boss\"", created.CreatedBy)
 	}
-	// The card goes to the board, not to the channel the button was pressed in.
-	if created.MessageID == "" {
-		t.Error("no signup card was posted")
+	// Nothing is posted to the board: there is no board card. The table and
+	// the forum draw the event from the database on the next publish.
+	if created.MessageID != "" {
+		t.Errorf("message_id = %q; creating an event must not post a card", created.MessageID)
 	}
-	var boardPosts int
 	for _, c := range fake.recorded() {
 		if c.Method == http.MethodPost && c.Path == "/channels/board-channel/messages" {
-			boardPosts++
+			t.Errorf("a message was posted to the board on create: %v", c.Body)
 		}
-	}
-	if boardPosts != 1 {
-		t.Errorf("%d posts to the board, want exactly the card", boardPosts)
 	}
 }
 

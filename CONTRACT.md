@@ -27,7 +27,6 @@ service's, and proxying any other route publishes roster editing to the world.
 | GET | `/api/events/{id}` | One roster with `attending_count` and `waitlist_count`. |
 | PATCH | `/api/events/{id}` | Partial update. Every field is optional; omitting one leaves it alone. |
 | DELETE | `/api/events/{id}` | Soft delete. Prefer `status: "cancelled"` if the record should stay visible. |
-| POST | `/api/events/{id}/message` | Post the signup message with its buttons and record its id. |
 | GET | `/api/events/{id}/signups?include_withdrawn=` | The roster: attending first, then the waitlist in promotion order. |
 | POST | `/api/events/{id}/signups` | Add someone by id. Goes through the same cap and waitlist as a click. |
 | DELETE | `/api/events/{id}/signups/{userID}?actor=` | Remove someone. Promotes the next in line, same as a click. |
@@ -46,7 +45,6 @@ service's, and proxying any other route publishes roster editing to the world.
 | GET | `/events/{id}` | Roster, history, and both counts labelled. |
 | GET | `/events/{id}/edit` · POST `/events/{id}` | Edit. |
 | POST | `/events/{id}/roster/remove` · `/roster/add` | Manage the roster; removal promotes the next in line. |
-| POST | `/events/{id}/post-message` | Post or repost the signup card. |
 | POST | `/events/{id}/publish` | Create a native Discord event linked to this roster. |
 | POST | `/sync` | Pull Discord events for every server you manage. |
 

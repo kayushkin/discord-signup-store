@@ -241,20 +241,13 @@ func (s *Server) ApplyEventForm(before *Event, values *EventFormResult, zone, ac
 	return s.applyEventEdit(before, patch, actor)
 }
 
-// moveCardToPastEvents leaves one line in the past-events channel for a
-// finished event, and takes its card off the board.
+// postPastEventLine leaves one line in the past-events channel for a finished
+// event: the table's row folded flat — the thread, the place, the count, who
+// went. Nothing to press, because a finished event has nothing to press.
 //
-// One line, not a card. A finished event has nothing to press — no Join, no
-// Leave, no thread to open for the first time — so a full card in the archive
-// was a row of dead buttons under a roster nobody can change. The line is the
-// table's row folded flat: the thread, the place, the count, who went.
-//
-// Post first, delete second, deliberately. If the post fails the original card
-// stays where it is and nothing is lost; the other way round would delete the
-// only copy and then discover the archive channel is unreachable. Nothing is
-// deleted when there is no card to delete, which since the board stopped
-// holding cards is the common case.
-func (s *Server) moveCardToPastEvents(eventID int64) error {
+// The event's channel and message are repointed at the line so the archive
+// knows where it wrote, and so this runs once.
+func (s *Server) postPastEventLine(eventID int64) error {
 	if s.discord == nil || s.pastChannelID == "" {
 		return nil
 	}
@@ -263,30 +256,22 @@ func (s *Server) moveCardToPastEvents(eventID int64) error {
 		return err
 	}
 	if ev.ChannelID == s.pastChannelID {
-		return nil // already moved
+		return nil // already there
 	}
 	roster, err := s.store.Roster(eventID, false)
 	if err != nil {
 		return err
 	}
-	newMessageID, err := s.discord.CreateMessage(s.pastChannelID, map[string]any{
+	messageID, err := s.discord.CreateMessage(s.pastChannelID, map[string]any{
 		"content":          pastEventLine(ev, roster),
 		"allowed_mentions": map[string]any{"parse": []string{}},
 	})
 	if err != nil {
 		return fmt.Errorf("post to past events: %w", err)
 	}
-	if ev.MessageID != "" {
-		if err := s.discord.DeleteMessage(ev.ChannelID, ev.MessageID); err != nil {
-			// The new line exists; a card left behind is untidy, not wrong.
-			log.Printf("[discord-signup] delete old card for event %d: %v", eventID, err)
-		}
-	}
 	past := s.pastChannelID
-	if _, err := s.store.UpdateEvent(eventID, EventPatch{
-		ChannelID: &past, MessageID: &newMessageID,
-	}); err != nil {
-		return fmt.Errorf("repoint card: %w", err)
+	if _, err := s.store.UpdateEvent(eventID, EventPatch{ChannelID: &past, MessageID: &messageID}); err != nil {
+		return fmt.Errorf("record past-events line: %w", err)
 	}
 	log.Printf("[discord-signup] event %d finished; one line left in past events", eventID)
 	return nil

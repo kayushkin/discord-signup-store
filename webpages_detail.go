@@ -244,27 +244,6 @@ func (s *Server) handleWebRosterAdd(w http.ResponseWriter, r *http.Request) {
 	s.redirectWithNotice(w, r, ev.ID, notice)
 }
 
-// handleWebPostMessage posts or reposts the signup card.
-func (s *Server) handleWebPostMessage(w http.ResponseWriter, r *http.Request) {
-	session := s.requireSession(w, r)
-	if session == nil {
-		return
-	}
-	ev, canManage := s.webEvent(w, r, session)
-	if ev == nil {
-		return
-	}
-	if !canManage {
-		http.Error(w, "you cannot edit this event", http.StatusForbidden)
-		return
-	}
-	if _, err := s.PostSignupMessage(ev.ID); err != nil {
-		s.redirectWithNotice(w, r, ev.ID, "Could not post it: "+err.Error())
-		return
-	}
-	s.redirectWithNotice(w, r, ev.ID, "Signup message posted.")
-}
-
 // handleWebPublish creates a native Discord scheduled event for this roster.
 func (s *Server) handleWebPublish(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
@@ -308,11 +287,10 @@ func (s *Server) handleWebSync(w http.ResponseWriter, r *http.Request) {
 		total.Imported += result.Imported
 		total.Updated += result.Updated
 		total.Unchanged += result.Unchanged
-		total.Posted += result.Posted
 		total.Problems = append(total.Problems, result.Problems...)
 	}
-	notice := fmt.Sprintf("Pulled from Discord: %d new, %d updated, %d unchanged, %d cards posted.",
-		total.Imported, total.Updated, total.Unchanged, total.Posted)
+	notice := fmt.Sprintf("Pulled from Discord: %d new, %d updated, %d unchanged.",
+		total.Imported, total.Updated, total.Unchanged)
 	if len(total.Problems) > 0 {
 		notice += " Problems: " + strings.Join(total.Problems, "; ")
 	}

@@ -14,7 +14,7 @@ import (
 // the table so the shapes can be compared on the same live data.
 //
 // A forum post is a thread whose first message is required and shares the
-// thread's id. That one message carries the same card RenderSignupMessage
+// thread's id. That one message carries the card RenderForumCard
 // already draws — same buttons, same custom_ids, one handler — and the replies
 // under it are the discussion. The post's own title carries the capacity badge
 // and its tags flip between open/full/finished/cancelled, which is what makes
@@ -215,7 +215,7 @@ func forumTagFor(ev *Event, f *GuildForum) string {
 // refreshForumPost creates or updates an event's post: the title and tag on
 // the thread, and the card in its first message.
 //
-// The card is RenderForumCard — RenderSignupMessage minus the discussion link,
+// The card is RenderForumCard — the one card there is now that the board holds none,
 // since the post cannot usefully link to itself — but otherwise verbatim — the same buttons with the same
 // custom_ids as the board card, so one handler serves both surfaces and they
 // cannot drift.

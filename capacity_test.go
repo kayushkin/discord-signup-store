@@ -181,7 +181,7 @@ func TestParseCapacity(t *testing.T) {
 // TestCapacityButtonIsOnTheCard stops the control quietly disappearing.
 func TestCapacityButtonIsOnTheCard(t *testing.T) {
 	ev := &Event{ID: 7, Name: "Open one", Status: StatusOpen, Capacity: 5}
-	rows, _ := RenderSignupMessage(ev, nil)["components"].([]any)
+	rows, _ := RenderForumCard(ev, nil)["components"].([]any)
 	if len(rows) == 0 {
 		t.Fatal("no components on an open event")
 	}

@@ -131,7 +131,6 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/events/{id}", s.handleGetEvent)
 	mux.HandleFunc("PATCH /api/events/{id}", s.handleUpdateEvent)
 	mux.HandleFunc("DELETE /api/events/{id}", s.handleDeleteEvent)
-	mux.HandleFunc("POST /api/events/{id}/message", s.handlePostMessage)
 	mux.HandleFunc("POST /api/events/{id}/publish", s.handlePublish)
 	mux.HandleFunc("GET /api/events/{id}/signups", s.handleRoster)
 	mux.HandleFunc("POST /api/events/{id}/signups", s.handleAdminJoin)
@@ -163,7 +162,6 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /events/{id}/edit", s.handleWebEditForm)
 	mux.HandleFunc("POST /events/{id}/roster/remove", s.handleWebRosterRemove)
 	mux.HandleFunc("POST /events/{id}/roster/add", s.handleWebRosterAdd)
-	mux.HandleFunc("POST /events/{id}/post-message", s.handleWebPostMessage)
 	mux.HandleFunc("POST /events/{id}/publish", s.handleWebPublish)
 	mux.HandleFunc("POST /sync", s.handleWebSync)
 }
@@ -509,20 +507,6 @@ func (s *Server) handleDeleteEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Server) handlePostMessage(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id must be an integer"})
-		return
-	}
-	ev, err := s.PostSignupMessage(id)
-	if err != nil {
-		writeStoreError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, ev)
 }
 
 // handlePublish creates a native Discord scheduled event for a local roster.

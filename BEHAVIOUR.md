@@ -30,12 +30,11 @@ Two numbers are **not** the roster and never feed a decision:
 
 ## 2. Every way onto and off the roster
 
-Eight, and they all go through the same two store methods (`Join`, `Leave`), so
+Seven, and they all go through the same two store methods (`Join`, `Leave`), so
 the capacity rule and the waitlist order cannot differ between them.
 
 | # | how | joins | leaves | `joined_via` |
 |---|---|---|---|---|
-| 1 | **Join / Leave** on the signup card | press Join | press Leave | `button` |
 | 2 | **Join / Leave** on a table row | press Join | press Leave | `button` |
 | 3 | **Join / Leave** on your My events view | press Join | press Leave | `button` |
 | 4 | **✅ on the forum post** | add the reaction | remove it | `reaction` |
@@ -66,8 +65,9 @@ every private reply to a button press.
 
 **Stored by Discord — as current as the last write.** Discord keeps message
 text; there is no live rendering and no callback on view. These are copies:
-the signup card, the forum post and its title, the table, and the native event's
-title and description. They are kept true by three rules:
+the two tables, the forum post and its title, and the native event's title and
+description. There is no board card: the database holds every row a card would
+show, and the table row already shows them. They are kept true by three rules:
 
 1. **One writer per event.** Overlapping changes fold into the run already
    going, which re-reads before each pass, so the last write is the newest
@@ -95,8 +95,6 @@ past-events — the table row folded flat — not a card of dead buttons.
 
 | surface | who sees it | what it is |
 |---|---|---|
-| **Signup card** (board) | everyone | One event: what it is, when, who is going, Join / Leave / Details / Edit. |
-| **Discussion thread** | everyone | Talk about that one event. Not signups. |
 | **Forum post** | everyone | The card again, plus discussion, in a channel that lists every event. |
 | **Event table** (`#events`) | everyone | Every upcoming event: its thread, its place, the live count and who is going, with Join / Leave / Details. |
 | **Management table** (`#event-management`) | organisers | The same events with **Edit**, **Close/Reopen signups** and **Cancel** on each row, and **Create an event** on the end. Where anything about an event is changed. |

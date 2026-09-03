@@ -131,7 +131,6 @@ type SyncResult struct {
 	Imported  int `json:"imported"`
 	Updated   int `json:"updated"`
 	Unchanged int `json:"unchanged"`
-	Posted    int `json:"posted"`
 	Published int `json:"published"`
 	Cancelled int `json:"cancelled"`
 	// Finished counts events Discord says are over — somebody pressed End on
@@ -178,9 +177,6 @@ func (s *Server) SyncScheduledEvents(guildID, boardChannelID string) (*SyncResul
 			result.Unchanged++
 		}
 	}
-	posted, problems := s.postMissingCards(guildID)
-	result.Posted = posted
-	result.Problems = append(result.Problems, problems...)
 	published, cancelledCount, finishedCount, reconcileProblems := s.reconcileWithNative(guildID, remote)
 	result.Published = published
 	result.Cancelled = cancelledCount
@@ -192,41 +188,6 @@ func (s *Server) SyncScheduledEvents(guildID, boardChannelID string) (*SyncResul
 		s.refreshTablesQuietly(guildID)
 	}
 	return result, nil
-}
-
-// postMissingCards puts a signup card on the board for every imported event
-// that has not got one yet.
-//
-// Only events with origin 'discord'. An event created here is deliberately not
-// posted automatically: it has not been announced anywhere, so its author gets
-// to look at it before it appears in a channel. One created in Discord is
-// already public the moment it exists, so mirroring it costs nobody a surprise.
-//
-// Driven off an empty message_id rather than a flag, so it is naturally
-// idempotent and naturally retries: a post that fails leaves the id empty and
-// the next sync tries again.
-func (s *Server) postMissingCards(guildID string) (posted int, problems []string) {
-	events, err := s.store.ListEvents(guildID, "", 500)
-	if err != nil {
-		return 0, []string{"list events: " + err.Error()}
-	}
-	for _, ev := range events {
-		if ev.Origin != OriginDiscord || ev.MessageID != "" {
-			continue
-		}
-		// Nothing is posted for an event that is over. A card for last month's
-		// event appearing on the board today reads as an announcement.
-		if IsArchived(ev.Status) {
-			continue
-		}
-		if _, err := s.PostSignupMessage(ev.ID); err != nil {
-			problems = append(problems, fmt.Sprintf("post card for %q: %v", ev.Name, err))
-			continue
-		}
-		log.Printf("[discord-signup] posted a signup card for imported event %d (%q)", ev.ID, ev.Name)
-		posted++
-	}
-	return posted, problems
 }
 
 // SyncAllGuilds pulls native events from every server the bot is in.
@@ -252,7 +213,6 @@ func (s *Server) SyncAllGuilds() (*SyncResult, error) {
 		total.Imported += result.Imported
 		total.Updated += result.Updated
 		total.Unchanged += result.Unchanged
-		total.Posted += result.Posted
 		total.Published += result.Published
 		total.Cancelled += result.Cancelled
 		total.Finished += result.Finished
@@ -862,7 +822,7 @@ func (s *Store) CompleteFinishedEvents() ([]int64, error) {
 // The message rewrite is the point of doing this on the server rather than only
 // in the web page's rendering: a finished event whose card still carries a live
 // Join button will keep taking signups for something that already happened.
-// RenderSignupMessage sends an empty components array for any non-open event,
+// RenderForumCard sends an empty components array for any non-open event,
 // which removes the buttons rather than leaving the old ones in place.
 func (s *Server) CompleteFinishedEvents() ([]int64, error) {
 	finished, err := s.store.CompleteFinishedEvents()
@@ -884,14 +844,7 @@ func (s *Server) CompleteFinishedEvents() ([]int64, error) {
 // the native Discord event. The second used to do nothing at all until the
 // first caught up.
 func (s *Server) finishEventEverywhere(id int64) {
-	// Refresh first: the card that moves should already say the event has
-	// finished and have lost its buttons. Moving a stale card would put a
-	// live Join button in the past-events channel.
-	if err := s.RefreshSignupMessage(id); err != nil {
-		log.Printf("[discord-signup] refresh finished event %d: %v", id, err)
-		return
-	}
-	if err := s.moveCardToPastEvents(id); err != nil {
+	if err := s.postPastEventLine(id); err != nil {
 		log.Printf("[discord-signup] move event %d to past events: %v", id, err)
 	}
 	// It has left the live list, so both tables have to stop showing it and its
@@ -1075,9 +1028,6 @@ func (s *Server) cancelEventEverywhere(ev *Event, why string) error {
 		return err
 	}
 	log.Printf("[discord-signup] event %d (%q) cancelled: %s", ev.ID, ev.Name, why)
-	if err := s.RefreshSignupMessage(ev.ID); err != nil {
-		log.Printf("[discord-signup] refresh cancelled card %d: %v", ev.ID, err)
-	}
 	s.refreshTablesQuietly(ev.GuildID)
 	s.refreshForumPostQuietly(updated)
 	if updated.ThreadID != "" {

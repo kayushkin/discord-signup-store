@@ -30,8 +30,6 @@
   {{if $canManage}}
   <p style="margin-top:16px" class="row">
     <a class="btn" href="/events/{{.Event.ID}}/edit">Edit</a>
-    <form method="post" action="/events/{{.Event.ID}}/post-message" style="margin:0">
-      <button class="ghost">{{if .Event.MessageID}}Repost{{else}}Post{{end}} signup message</button></form>
     {{if not .Event.DiscordScheduledEventID}}
     <form method="post" action="/events/{{.Event.ID}}/publish" style="margin:0">
       <button class="ghost">Publish to Discord events</button></form>

@@ -192,13 +192,13 @@ func TestClosedEventEditRemovesTheButtons(t *testing.T) {
 	open := &Event{ID: 1, Name: "Open one", Status: StatusOpen, Capacity: 5, AttendingCount: 2}
 	closed := &Event{ID: 1, Name: "Closed one", Status: StatusClosed, Capacity: 5, AttendingCount: 5}
 
-	openPayload := RenderSignupMessage(open, nil)
+	openPayload := RenderForumCard(open, nil)
 	components, ok := openPayload["components"].([]any)
 	if !ok || len(components) == 0 {
 		t.Fatal("an open event has no buttons")
 	}
 
-	closedPayload := RenderSignupMessage(closed, nil)
+	closedPayload := RenderForumCard(closed, nil)
 	closedComponents, ok := closedPayload["components"].([]any)
 	if !ok {
 		t.Fatal("components key missing on a closed event — omitting it leaves the old buttons live")
@@ -211,7 +211,7 @@ func TestClosedEventEditRemovesTheButtons(t *testing.T) {
 func TestRenderedMessageStatesBothNumbers(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Workshop", Status: StatusOpen, Capacity: 20,
 		AttendingCount: 20, WaitlistCount: 7}
-	content, _ := RenderSignupMessage(ev, nil)["content"].(string)
+	content, _ := RenderForumCard(ev, nil)["content"].(string)
 	if !strings.Contains(content, "20/20") {
 		t.Errorf("content = %q, want the places taken", content)
 	}
@@ -228,116 +228,13 @@ func TestLongRosterIsTrimmedToDiscordsLimit(t *testing.T) {
 	for i := range roster {
 		roster[i] = Signup{DiscordUserID: fmt.Sprintf("1000000000000%05d", i), State: StateAttending}
 	}
-	content, _ := RenderSignupMessage(ev, roster)["content"].(string)
+	content, _ := RenderForumCard(ev, roster)["content"].(string)
 	if len(content) > discordMessageContentLimit {
 		t.Errorf("content is %d bytes, over Discord's %d limit — this would be a 400",
 			len(content), discordMessageContentLimit)
 	}
 	if !strings.Contains(content, "trimmed") {
 		t.Error("the message was trimmed without saying so")
-	}
-}
-
-// TestOnlyImportedEventsGetACardPostedAutomatically pins the rule that decides
-// what appears in the channel without anyone asking.
-//
-// An event created in Discord is already public the moment it exists, so
-// mirroring it surprises nobody. One created on the web page has been announced
-// nowhere, and posting it the instant it is saved would take the decision away
-// from whoever wrote it.
-func TestOnlyImportedEventsGetACardPostedAutomatically(t *testing.T) {
-	fake := newFakeDiscord(t)
-	store := testStore(t)
-	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board-channel")
-
-	mk := func(name, origin, status, messageID string) *Event {
-		ev, err := store.CreateEvent(Event{
-			GuildID: "g1", ChannelID: "board-channel", Name: name,
-			Origin: origin, Status: status, MessageID: messageID,
-			DiscordScheduledEventID: "d-" + name,
-		})
-		if err != nil {
-			t.Fatalf("create %s: %v", name, err)
-		}
-		return ev
-	}
-	shouldPost := mk("imported-open", OriginDiscord, StatusOpen, "")
-	mk("imported-already-posted", OriginDiscord, StatusOpen, "existing-msg")
-	mk("imported-finished", OriginDiscord, StatusCompleted, "")
-	mk("imported-cancelled", OriginDiscord, StatusCancelled, "")
-	mk("made-here", OriginLocal, StatusOpen, "")
-
-	posted, problems := srv.postMissingCards("g1")
-	if len(problems) != 0 {
-		t.Fatalf("problems: %v", problems)
-	}
-	if posted != 1 {
-		t.Fatalf("posted %d cards, want exactly 1", posted)
-	}
-
-	var boardPosts, threadCreates int
-	for _, c := range fake.recorded() {
-		switch {
-		case c.Method == http.MethodPost && c.Path == "/channels/board-channel/messages":
-			boardPosts++
-		case c.Method == http.MethodPost && strings.HasSuffix(c.Path, "/threads"):
-			threadCreates++
-		}
-	}
-	if boardPosts != 1 {
-		t.Errorf("%d posts to the board, want 1", boardPosts)
-	}
-	// The card gets a discussion thread the moment it exists.
-	if threadCreates != 1 {
-		t.Errorf("%d threads created, want 1", threadCreates)
-	}
-
-	got, err := store.GetEvent(shouldPost.ID)
-	if err != nil {
-		t.Fatalf("reload: %v", err)
-	}
-	if got.MessageID == "" {
-		t.Error("the posted card's message id was not recorded, so the next sync would post it again")
-	}
-}
-
-// TestPostingACardIsRetriedOnTheNextSync covers Discord being unavailable at
-// the moment an event is imported. The empty message id is what makes the
-// retry automatic — there is no failed-post flag to get stuck.
-func TestPostingACardIsRetriedOnTheNextSync(t *testing.T) {
-	fake := newFakeDiscord(t)
-	store := testStore(t)
-	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board-channel")
-
-	if _, err := store.CreateEvent(Event{
-		GuildID: "g1", ChannelID: "board-channel", Name: "flaky",
-		Origin: OriginDiscord, DiscordScheduledEventID: "d-flaky",
-	}); err != nil {
-		t.Fatalf("create: %v", err)
-	}
-
-	var attempts int
-	fake.on(http.MethodPost, "/channels/board-channel/messages", func(w http.ResponseWriter, r *http.Request) {
-		attempts++
-		if attempts == 1 {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(w, `{"code":0,"message":"upstream is having a moment"}`)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"id":"msg-later"}`)
-	})
-
-	posted, problems := srv.postMissingCards("g1")
-	if posted != 0 || len(problems) != 1 {
-		t.Fatalf("first pass: posted=%d problems=%v, want 0 and one problem", posted, problems)
-	}
-
-	posted, problems = srv.postMissingCards("g1")
-	if posted != 1 || len(problems) != 0 {
-		t.Fatalf("second pass: posted=%d problems=%v, want 1 and none", posted, problems)
 	}
 }
 
@@ -653,68 +550,6 @@ func TestTheTitleIsPushedOnEveryRosterChange(t *testing.T) {
 	// First publish ever, one of three places taken: the count goes out.
 	if pushed != "Games [1/3]" {
 		t.Errorf("pushed name = %q, want the count on a first publish", pushed)
-	}
-}
-
-// TestThreadIsCreatedOnceAndArchivedWhenTheEventEnds pins the lifecycle: one
-// thread per event however many times the card refreshes, closed by the sweep.
-func TestThreadIsCreatedOnceAndArchivedWhenTheEventEnds(t *testing.T) {
-	fake := newFakeDiscord(t)
-	store := testStore(t)
-	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
-
-	past := time.Now().Add(-10 * time.Hour).Unix()
-	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Talky",
-		StartsAt: past + 20*3600, EndsAt: past + 21*3600})
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	if _, err := srv.PostSignupMessage(ev.ID); err != nil {
-		t.Fatalf("post card: %v", err)
-	}
-	// Three more refreshes must not open three more threads.
-	for i := 0; i < 3; i++ {
-		if err := srv.RefreshSignupMessage(ev.ID); err != nil {
-			t.Fatalf("refresh %d: %v", i, err)
-		}
-	}
-	var creates int
-	for _, c := range fake.recorded() {
-		if c.Method == http.MethodPost && strings.HasSuffix(c.Path, "/threads") {
-			creates++
-		}
-	}
-	if creates != 1 {
-		t.Fatalf("%d thread creates across four card writes, want 1", creates)
-	}
-	got, err := store.GetEvent(ev.ID)
-	if err != nil {
-		t.Fatalf("reload: %v", err)
-	}
-	if got.ThreadID == "" {
-		t.Fatal("the thread id was not recorded")
-	}
-
-	// Push the event into the past and sweep: the thread archives.
-	newEnd := past
-	newStart := past - 3600
-	if _, err := store.UpdateEvent(ev.ID, EventPatch{StartsAt: &newStart, EndsAt: &newEnd}); err != nil {
-		t.Fatalf("re-date: %v", err)
-	}
-	if _, err := srv.CompleteFinishedEvents(); err != nil {
-		t.Fatalf("sweep: %v", err)
-	}
-	var archived bool
-	for _, c := range fake.recorded() {
-		if c.Method == http.MethodPatch && c.Path == "/channels/"+got.ThreadID {
-			if v, ok := c.Body["archived"].(bool); ok && v {
-				archived = true
-			}
-		}
-	}
-	if !archived {
-		t.Error("the thread was not archived when the event finished")
 	}
 }
 

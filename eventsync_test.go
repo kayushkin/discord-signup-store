@@ -14,7 +14,7 @@ import (
 func syncTestEvent(t *testing.T, store *Store, capacity int, joiners ...string) *Event {
 	t.Helper()
 	ev, err := store.CreateEvent(Event{
-		GuildID: "g1", ChannelID: "board", MessageID: "msg-1", Name: "Games",
+		GuildID: "g1", ChannelID: "board", Name: "Games",
 		Capacity: capacity, Status: StatusOpen,
 		StartsAt:                time.Now().Add(48 * time.Hour).Unix(),
 		DiscordScheduledEventID: "native-9",
@@ -30,13 +30,15 @@ func syncTestEvent(t *testing.T, store *Store, capacity int, joiners ...string) 
 	return ev
 }
 
-// cardWrites returns the content of every edit made to the signup card, in the
-// order the fake received them.
+// cardWrites returns the description of every write made to the native event,
+// in the order the fake received them. There is no board card any more; the
+// native description carries the live count and names on every publish, so
+// it is the copy these tests watch.
 func cardWrites(fake *fakeDiscord) []string {
 	var out []string
 	for _, c := range fake.recorded() {
-		if c.Method == http.MethodPatch && c.Path == "/channels/board/messages/msg-1" {
-			content, _ := c.Body["content"].(string)
+		if c.Method == http.MethodPatch && c.Path == "/guilds/g1/scheduled-events/native-9" {
+			content, _ := c.Body["description"].(string)
 			out = append(out, content)
 		}
 	}
@@ -52,7 +54,7 @@ func cardWrites(fake *fakeDiscord) []string {
 // before the pass that read two, and every Discord surface sat on 3/7 while the
 // database and both web pages said 2/7.
 //
-// Here the first pass is held inside its card write while two more changes land
+// Here the first pass is held inside its native write while two more changes land
 // and two more syncs are asked for. Both must fold into the run already going,
 // and the write that lands last must be the one carrying the final roster.
 func TestTheLastWriteWinsWhenChangesOverlap(t *testing.T) {
@@ -65,14 +67,14 @@ func TestTheLastWriteWinsWhenChangesOverlap(t *testing.T) {
 	var writes int32
 	held := make(chan struct{})
 	release := make(chan struct{})
-	fake.on(http.MethodPatch, "/channels/board/messages/msg-1",
+	fake.on(http.MethodPatch, "/guilds/g1/scheduled-events/native-9",
 		func(w http.ResponseWriter, r *http.Request) {
 			if atomic.AddInt32(&writes, 1) == 1 {
 				close(held)
 				<-release // the first pass is stuck mid-flight, as a real one can be
 			}
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, `{"id":"msg-1"}`)
+			fmt.Fprint(w, `{"id":"native-9"}`)
 		})
 
 	done := make(chan struct{})
@@ -100,12 +102,12 @@ func TestTheLastWriteWinsWhenChangesOverlap(t *testing.T) {
 
 	got := cardWrites(fake)
 	if len(got) != 2 {
-		t.Errorf("%d card writes for three changes, want 2 — one in flight and one owed", len(got))
+		t.Errorf("%d native writes for three changes, want 2 — one in flight and one owed", len(got))
 	}
 	if len(got) == 0 {
 		t.Fatal("nothing was written at all")
 	}
-	if last := got[len(got)-1]; !strings.Contains(last, "3/3 places taken") {
+	if last := got[len(got)-1]; !strings.Contains(last, "3 of 3 places taken") {
 		t.Errorf("the last write says %q, want the final roster of 3/3", firstLine(last))
 	}
 }
@@ -123,14 +125,14 @@ func TestAPassWithNothingToSayWritesNothing(t *testing.T) {
 	srv.syncAfterChange(ev.ID, nil)
 	after := len(cardWrites(fake))
 	if after != 1 {
-		t.Fatalf("%d card writes on the first publish, want 1", after)
+		t.Fatalf("%d native writes on the first publish, want 1", after)
 	}
 
 	for i := 0; i < 3; i++ {
 		srv.syncAfterChange(ev.ID, nil)
 	}
 	if got := len(cardWrites(fake)); got != after {
-		t.Errorf("%d card writes after three idle passes, want %d — an unchanged event "+
+		t.Errorf("%d native writes after three idle passes, want %d — an unchanged event "+
 			"must not be rewritten", got, after)
 	}
 }
@@ -153,9 +155,9 @@ func TestARosterChangeAfterAnIdlePassStillPublishes(t *testing.T) {
 
 	got := cardWrites(fake)
 	if len(got) != 2 {
-		t.Fatalf("%d card writes, want 2 — one for alice, one for bob", len(got))
+		t.Fatalf("%d native writes, want 2 — one for alice, one for bob", len(got))
 	}
-	if !strings.Contains(got[1], "2/3 places taken") {
+	if !strings.Contains(got[1], "2 of 3 places taken") {
 		t.Errorf("the second write says %q, want 2/3", firstLine(got[1]))
 	}
 }
@@ -171,17 +173,17 @@ func TestAFailedWriteIsRepairedByTheSweep(t *testing.T) {
 	ev := syncTestEvent(t, store, 3, "alice")
 
 	var attempts int32
-	fake.on(http.MethodPatch, "/channels/board/messages/msg-1",
+	fake.on(http.MethodPatch, "/guilds/g1/scheduled-events/native-9",
 		func(w http.ResponseWriter, r *http.Request) {
 			if atomic.AddInt32(&attempts, 1) == 1 {
 				http.Error(w, `{"message":"internal"}`, http.StatusInternalServerError)
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, `{"id":"msg-1"}`)
+			fmt.Fprint(w, `{"id":"native-9"}`)
 		})
 
-	srv.syncAfterChange(ev.ID, nil) // the card write fails
+	srv.syncAfterChange(ev.ID, nil) // the native write fails
 
 	stored, err := store.GetEvent(ev.ID)
 	if err != nil {
@@ -195,9 +197,9 @@ func TestAFailedWriteIsRepairedByTheSweep(t *testing.T) {
 
 	got := cardWrites(fake)
 	if len(got) < 2 {
-		t.Fatalf("%d card writes, want the sweep to have retried the failed one", len(got))
+		t.Fatalf("%d native writes, want the sweep to have retried the failed one", len(got))
 	}
-	if !strings.Contains(got[len(got)-1], "1/3 places taken") {
+	if !strings.Contains(got[len(got)-1], "1 of 3 places taken") {
 		t.Errorf("the repair wrote %q, want 1/3", firstLine(got[len(got)-1]))
 	}
 	repaired, err := store.GetEvent(ev.ID)
@@ -270,8 +272,8 @@ func TestTheSweepOnlyTouchesDiscordForStaleEvents(t *testing.T) {
 	}
 	srv.RepublishStaleEvents("g1")
 	writes := cardWrites(fake)
-	if len(writes) != 2 || !strings.Contains(writes[1], "2/3 places taken") {
-		t.Errorf("card writes = %d, last = %q; want the sweep to have republished 2/3",
+	if len(writes) != 2 || !strings.Contains(writes[1], "2 of 3 places taken") {
+		t.Errorf("native writes = %d, last = %q; want the sweep to have republished 2/3",
 			len(writes), firstLine(writes[len(writes)-1]))
 	}
 }
