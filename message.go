@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 )
 
@@ -259,7 +260,22 @@ func (s *Server) RefreshSignupMessage(eventID int64) error {
 		return err
 	}
 	s.ensureEventThread(ev)
-	return s.discord.EditMessage(ev.ChannelID, ev.MessageID, RenderSignupMessage(ev, roster))
+	err = s.discord.EditMessage(ev.ChannelID, ev.MessageID, RenderSignupMessage(ev, roster))
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
+		// The card is gone — deleted by hand, or with its channel. Forgetting
+		// it is the only correct move: an event whose card 404s used to be
+		// unpublishable forever, because the publish failed, the signature was
+		// never stamped, and the sweep retried and logged this every minute
+		// until somebody noticed. Gone means somebody deleted it.
+		log.Printf("[discord-signup] card for event %d is gone from Discord; forgetting it", ev.ID)
+		empty := ""
+		if _, err := s.store.UpdateEvent(ev.ID, EventPatch{MessageID: &empty}); err != nil {
+			return fmt.Errorf("forget missing card: %w", err)
+		}
+		return nil
+	}
+	return err
 }
 
 // applyRoles makes one person's roles match one state.
