@@ -117,3 +117,83 @@ func (s *Server) applyCancelConfirm(w http.ResponseWriter, in *Interaction, even
 	}
 	s.replyEphemeral(w, fmt.Sprintf("**%s** is cancelled. Its Discord event is gone and nobody can join.", ev.Name))
 }
+
+// handleRepeatButton opens the Repeat form: how often, and when it ends.
+func (s *Server) handleRepeatButton(w http.ResponseWriter, in *Interaction, eventID int64) {
+	ev, err := s.store.GetEvent(eventID)
+	if err != nil {
+		s.replyEphemeral(w, "That event no longer exists.")
+		return
+	}
+	if ok, why := s.mayEdit(in, ev); !ok {
+		s.replyEphemeral(w, why)
+		return
+	}
+	zone := ev.Timezone
+	if zone == "" {
+		zone = s.DefaultTimezone()
+	}
+	modalID := RepeatModalCustomID(ev.ID)
+	row := func(field map[string]any) map[string]any {
+		return map[string]any{"type": componentTypeActionRow, "components": []any{field}}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"type": callbackTypeModal,
+		"data": map[string]any{
+			"custom_id": modalID,
+			"title":     truncate("Repeat "+ev.Name, 45),
+			"components": []any{
+				row(modalTextInput(fieldRepeats+"@"+modalID, "Repeats — weekly, every 2 weeks, monthly, or never",
+					describeRepeat(ev.RecurrenceRule), "weekly", textInputStyleShort, true, 40)),
+				row(modalTextInput(fieldEndsAt+"@"+modalID, "Ends — "+zone,
+					FormatEventTime(ev.EndsAt, zone), "9/29 5pm   (blank for none)", textInputStyleShort, false, 40)),
+			},
+		},
+	})
+}
+
+// applyRepeatForm stores the rule and pushes it to Discord through the one
+// edit path, so it is logged and every copy republishes.
+func (s *Server) applyRepeatForm(w http.ResponseWriter, in *Interaction, eventID int64, repeats, ends string) {
+	ev, err := s.store.GetEvent(eventID)
+	if err != nil {
+		s.replyEphemeral(w, "That event no longer exists.")
+		return
+	}
+	if ok, why := s.mayEdit(in, ev); !ok {
+		s.replyEphemeral(w, why)
+		return
+	}
+	zone := ev.Timezone
+	if zone == "" {
+		zone = s.DefaultTimezone()
+	}
+	rule, err := repeatWordToRRule(repeats, startInZone(ev, zone))
+	if err != nil {
+		s.replyEphemeral(w, plainError(err))
+		return
+	}
+	endsAt, err := ParseEventTime(ends, zone)
+	if err != nil {
+		s.replyEphemeral(w, plainError(err))
+		return
+	}
+	userID, _ := in.actor()
+	// A rule needs a zone to mean anything across a clock change, so one is
+	// stamped if the event had none.
+	patch := EventPatch{RecurrenceRule: &rule, EndsAt: &endsAt}
+	if ev.Timezone == "" {
+		patch.Timezone = &zone
+	}
+	if _, _, err := s.applyEventEdit(ev, patch, userID); err != nil {
+		log.Printf("[discord-signup] repeat form for event %d: %v", ev.ID, err)
+		s.replyEphemeral(w, plainError(err))
+		return
+	}
+	if rule == "" {
+		s.replyEphemeral(w, fmt.Sprintf("**%s** does not repeat.", ev.Name))
+		return
+	}
+	s.replyEphemeral(w, fmt.Sprintf("**%s** repeats %s, starting from its next date. Discord's event repeats with it.",
+		ev.Name, describeRepeat(rule)))
+}

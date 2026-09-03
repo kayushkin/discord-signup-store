@@ -221,8 +221,12 @@ func eventTableButtons(ev *Event) []any {
 // managementButtons is the row on the management table: what an organiser
 // does to an event, and nothing a member does.
 func managementButtons(ev *Event) []any {
-	buttons := []any{map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
-		"label": "Edit", "custom_id": EditCustomID(ev.ID)}}
+	buttons := []any{
+		map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+			"label": "Edit", "custom_id": EditCustomID(ev.ID)},
+		map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+			"label": "Repeat", "custom_id": RepeatCustomID(ev.ID)},
+	}
 	// One toggle whose label says which way it goes. Closed means nobody new
 	// can join while everyone on it stays; it is not cancelled.
 	switch ev.Status {

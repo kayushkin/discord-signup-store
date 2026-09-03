@@ -97,7 +97,7 @@ past-events — the table row folded flat — not a card of dead buttons.
 |---|---|---|
 | **Forum post** | everyone | The card again, plus discussion, in a channel that lists every event. |
 | **Event table** (`#events`) | everyone | Every upcoming event: its thread, its place, the live count and who is going, with Join / Leave / Details. |
-| **Management table** (`#event-management`) | organisers | The same events with **Edit**, **Close/Reopen signups** and **Cancel** on each row, and **Create an event** on the end. Where anything about an event is changed. |
+| **Management table** (`#event-management`) | organisers | The same events with **Edit**, **Repeat**, **Close/Reopen signups** and **Cancel** on each row, and **Create an event** on the end. Where anything about an event is changed. |
 | **Details** | just you | The full roster, by name, read-only, without pinging anyone. |
 | **My events** | just you | The events *you* are on, with Join / Leave in place. |
 | **Discord's own event** | everyone | Discord's native event, linked to a roster here. Its title carries the count. |

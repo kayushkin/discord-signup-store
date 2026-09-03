@@ -347,6 +347,10 @@ func recurrenceRuleText(raw json.RawMessage) string {
 		ByWeekday  []int `json:"by_weekday"`
 		ByMonth    []int `json:"by_month"`
 		ByMonthDay []int `json:"by_month_day"`
+		ByNWeekday []struct {
+			N   int `json:"n"`
+			Day int `json:"day"`
+		} `json:"by_n_weekday"`
 	}
 	if err := json.Unmarshal(raw, &rr); err != nil || rr.Frequency == nil {
 		return ""
@@ -373,6 +377,11 @@ func recurrenceRuleText(raw json.RawMessage) string {
 		if len(days) > 0 {
 			parts = append(parts, "BYDAY="+strings.Join(days, ","))
 		}
+	}
+	// A monthly rule is "the nth weekday": BYDAY=2TU, which is how the form's
+	// "monthly" is stored and how it comes back.
+	if len(rr.ByNWeekday) == 1 && rr.ByNWeekday[0].Day >= 0 && rr.ByNWeekday[0].Day < len(dayNames) {
+		parts = append(parts, fmt.Sprintf("BYDAY=%d%s", rr.ByNWeekday[0].N, dayNames[rr.ByNWeekday[0].Day]))
 	}
 	return strings.Join(parts, ";")
 }
@@ -442,6 +451,11 @@ func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event,
 		"privacy_level":        2, // GUILD_ONLY, the only value Discord accepts
 		"entity_type":          entityNameToDiscordType["external"],
 		"entity_metadata":      map[string]any{"location": location},
+	}
+	if rule, ok := discordRecurrenceRule(ev, s.DefaultTimezone()); ok && rule != nil {
+		payload["recurrence_rule"] = rule
+	} else if !ok {
+		log.Printf("[discord-signup] event %d: rule %q cannot be expressed to Discord; published without it", ev.ID, ev.RecurrenceRule)
 	}
 	created, err := s.discord.CreateScheduledEvent(ev.GuildID, payload)
 	if err != nil {
@@ -892,6 +906,14 @@ func (s *Server) PushEditToDiscord(ev *Event, roster []Signup, rename bool) erro
 	// the live count and names and is not, so it goes every time.
 	if rename {
 		payload["name"] = nativeEventName(ev)
+	}
+	// The rule goes every time too — null clears it, which is how "never"
+	// reaches Discord. A rule Discord cannot express is left out rather than
+	// sent and refused, which would lose the whole edit.
+	if rule, ok := discordRecurrenceRule(ev, s.DefaultTimezone()); ok {
+		payload["recurrence_rule"] = rule
+	} else {
+		log.Printf("[discord-signup] event %d: rule %q cannot be expressed to Discord; pushed without it", ev.ID, ev.RecurrenceRule)
 	}
 	return s.discord.ModifyScheduledEvent(ev.GuildID, ev.DiscordScheduledEventID, payload)
 }

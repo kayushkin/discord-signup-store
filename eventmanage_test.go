@@ -27,6 +27,8 @@ func adminInteraction(t *testing.T, customID string, fields map[string]string) *
 	return &in
 }
 
+func httptestRecorder() *httptest.ResponseRecorder { return httptest.NewRecorder() }
+
 func replyText(rec *httptest.ResponseRecorder) string {
 	var out struct {
 		Data struct {
@@ -47,10 +49,10 @@ func TestTheManagementRowIsEditCloseCancel(t *testing.T) {
 		}
 		return out
 	}
-	if got := labels(&Event{ID: 1, Status: StatusOpen}); strings.Join(got, ",") != "Edit,Close signups,Cancel" {
+	if got := labels(&Event{ID: 1, Status: StatusOpen}); strings.Join(got, ",") != "Edit,Repeat,Close signups,Cancel" {
 		t.Errorf("open row = %v", got)
 	}
-	if got := labels(&Event{ID: 1, Status: StatusClosed}); strings.Join(got, ",") != "Edit,Reopen signups,Cancel" {
+	if got := labels(&Event{ID: 1, Status: StatusClosed}); strings.Join(got, ",") != "Edit,Repeat,Reopen signups,Cancel" {
 		t.Errorf("closed row = %v", got)
 	}
 	for _, b := range managementButtons(&Event{ID: 1, Status: StatusOpen}) {

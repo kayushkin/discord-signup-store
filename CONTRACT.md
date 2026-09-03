@@ -174,8 +174,8 @@ cannot act is a trap, not an affordance.
 
 `PUT /api/guilds/{guildID}/management {"channel_id"}` points the management
 table at a channel and draws it. It is the event table drawn for organisers:
-the same events, the same packing, with **Edit**, **Close signups** / **Reopen
-signups** and **Cancel** on each row instead of Join, Leave and Details, and
+the same events, the same packing, with **Edit**, **Repeat**, **Close signups** /
+**Reopen signups** and **Cancel** on each row instead of Join, Leave and Details, and
 **Create an event** on the last page. Cancel opens a confirm that asks for the
 event's name typed back — it deletes the native Discord event and cannot be
 undone, and that is the one gesture Discord offers that cannot happen by
@@ -344,3 +344,15 @@ grow a decoration per publish.
   round trip through a double.
 - **`discord_scheduled_event_id` is a link, not a source.** Discord's Interested
   count will disagree with this roster and there is no way to make it agree.
+
+## Recurrence
+
+Stored as an RFC 5545 RRULE and **sent to Discord** on every publish — until
+2026-09-03 it was stored, displayed, and never sent. The Repeat form offers the
+four rules Discord can represent and nothing else: `weekly`, `every 2 weeks`,
+`monthly` (the nth weekday of the month) and `never`, each taking its weekday
+from the event's start **in its own zone**. `never` sends `recurrence_rule:
+null`, which is how Discord stops repeating. A rule the web page set that
+Discord cannot express — daily, yearly, several days, an interval over two — is
+left out of the request rather than sent and refused, and logged. A recurring
+event is never auto-archived; it is one row here and a series on Discord.

@@ -269,6 +269,8 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		s.handleCancelButton(w, in, eventID)
 	case "close":
 		s.handleCloseToggle(w, in, eventID)
+	case "repeat":
+		s.handleRepeatButton(w, in, eventID)
 	case "my-events":
 		// The routing bug this fixes: "my-events" matched no case and no
 		// "table-" prefix, so the button shipped answering "Unknown signup
@@ -435,6 +437,16 @@ func CancelModalCustomID(eventID int64) string {
 	return fmt.Sprintf("%s:cancel-modal:%d", customIDPrefix, eventID)
 }
 
+// RepeatCustomID is the management row's Repeat button; RepeatModalCustomID
+// is the form it opens.
+func RepeatCustomID(eventID int64) string {
+	return fmt.Sprintf("%s:repeat:%d", customIDPrefix, eventID)
+}
+
+func RepeatModalCustomID(eventID int64) string {
+	return fmt.Sprintf("%s:repeat-modal:%d", customIDPrefix, eventID)
+}
+
 // CloseCustomID is the management row's Close signups / Reopen signups toggle.
 func CloseCustomID(eventID int64) string {
 	return fmt.Sprintf("%s:close:%d", customIDPrefix, eventID)
@@ -536,6 +548,8 @@ func (s *Server) handleModalSubmit(w http.ResponseWriter, in *Interaction) {
 		s.applyCreateForm(w, in, form)
 	case "cancel-modal":
 		s.applyCancelConfirm(w, in, eventID, form)
+	case "repeat-modal":
+		s.applyRepeatForm(w, in, eventID, in.fieldValue(fieldRepeats), in.fieldValue(fieldEndsAt))
 	case "details-modal":
 		// A viewer's details modal holds no inputs, so there is nothing to
 		// save. It still has a submit button — every modal does — and Discord

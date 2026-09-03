@@ -236,7 +236,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	8  titles carry [X/Y] at the end again, renamed at most every five minutes,
 //	   and [Full] at the front at once
 //	9  management rows carry Close/Reopen and Cancel; My events is gone
-const publishFormatVersion = 9
+//	10 the recurrence rule is sent to Discord, and Repeat sits on the row
+const publishFormatVersion = 10
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //
@@ -256,10 +257,10 @@ const publishFormatVersion = 9
 func eventPublishSignature(ev *Event, roster []Signup) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "v%d\x00", publishFormatVersion)
-	fmt.Fprintf(&b, "%s\x00%s\x00%s\x00%d\x00%d\x00%d\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s",
+	fmt.Fprintf(&b, "%s\x00%s\x00%s\x00%d\x00%d\x00%d\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s",
 		ev.Name, ev.Description, ev.Status, ev.Capacity, ev.StartsAt, ev.EndsAt,
 		ev.Location, ev.Timezone, ev.MessageID, ev.ChannelID,
-		ev.ForumPostID, ev.DiscordScheduledEventID)
+		ev.ForumPostID, ev.DiscordScheduledEventID, ev.RecurrenceRule)
 	for _, sg := range roster {
 		fmt.Fprintf(&b, "\x01%s\x00%s\x00%s", sg.DiscordUserID, sg.DisplayName, sg.State)
 	}
