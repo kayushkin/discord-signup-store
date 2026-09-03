@@ -299,7 +299,14 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 	if existing.EndsAt != endsAt {
 		patch.EndsAt = &endsAt
 	}
-	if existing.Status != status {
+	// Closed is a decision made HERE that Discord cannot represent: its own
+	// statuses are scheduled, active, completed and cancelled, and a closed
+	// event is still scheduled as far as Discord knows. So a native update —
+	// including the one our own publish triggers seconds after every edit —
+	// comes back "scheduled", maps to open, and used to silently reopen
+	// signups somebody had just shut. Discord's word overrides ours only when
+	// it is saying something it alone can know: the event ran, or was deleted.
+	if existing.Status != status && !(existing.Status == StatusClosed && status == StatusOpen) {
 		patch.Status = &status
 	}
 	if incoming := stripLocationPlaceholder(r.EntityMetadata.Location); existing.Location != incoming {

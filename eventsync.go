@@ -237,7 +237,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	   and [Full] at the front at once
 //	9  management rows carry Close/Reopen and Cancel; My events is gone
 //	10 the recurrence rule is sent to Discord, and Repeat sits on the row
-const publishFormatVersion = 10
+//	11 Details shows the description; Create sits under a divider
+const publishFormatVersion = 11
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //

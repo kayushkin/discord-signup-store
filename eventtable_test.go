@@ -99,7 +99,7 @@ func TestTableIsEditedInPlaceAndShrinks(t *testing.T) {
 func TestTheDetailsModalIsBuiltFromTheOnlyShapeThatWorks(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
 	roster := []Signup{{DiscordUserID: "u1", DisplayName: "Al", State: StateAttending}}
-	for i, c := range buildRosterOnlyModal(ev, roster)["components"].([]any) {
+	for i, c := range buildRosterOnlyModal(ev, roster, "America/Los_Angeles")["components"].([]any) {
 		if m := c.(map[string]any); m["type"] != componentTypeActionRow {
 			t.Errorf("component %d is type %v, want an Action Row", i, m["type"])
 		}
@@ -252,7 +252,7 @@ func TestTheRosterFieldNamesPeopleWithoutMentioning(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 1, StartsAt: 1788067881}
 	modal := buildRosterOnlyModal(ev, []Signup{
 		{DiscordUserID: "110122051179687936", DisplayName: "Slava", State: StateAttending},
-	})
+	}, "America/Los_Angeles")
 
 	rendered := fmt.Sprint(modal)
 	if strings.Contains(rendered, "<@") {
@@ -266,7 +266,7 @@ func TestTheRosterFieldNamesPeopleWithoutMentioning(t *testing.T) {
 // TestAnEmptyRosterSaysSoRatherThanShowingNothing.
 func TestAnEmptyRosterSaysSoRatherThanShowingNothing(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, StartsAt: 1788067881}
-	modal := buildRosterOnlyModal(ev, nil)
+	modal := buildRosterOnlyModal(ev, nil, "America/Los_Angeles")
 	if !strings.Contains(fmt.Sprint(modal), "Nobody yet") {
 		t.Errorf("an empty roster renders as %q", fmt.Sprint(modal))
 	}

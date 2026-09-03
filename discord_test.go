@@ -867,3 +867,38 @@ func TestASecondSignupWithinTheWindowSendsNoName(t *testing.T) {
 		t.Errorf("full publish: %d patches, names %v; want the third carrying [Full] Games", n, names)
 	}
 }
+
+// TestASyncDoesNotReopenClosedSignups. Closed is ours; Discord's event stays
+// "scheduled", and every native update — including the one our own publish
+// triggers — used to map that back to open and silently undo the close.
+func TestASyncDoesNotReopenClosedSignups(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	closed := StatusClosed
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Games",
+		Status: StatusOpen, StartsAt: time.Now().Add(48 * time.Hour).Unix(),
+		DiscordScheduledEventID: "native-5", Origin: OriginLocal})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := store.UpdateEvent(ev.ID, EventPatch{Status: &closed}); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	remote := DiscordScheduledEvent{ID: "native-5", GuildID: "g1", Name: "Games",
+		ScheduledStartTime: time.Unix(ev.StartsAt, 0).UTC().Format(time.RFC3339), Status: discordEventScheduled}
+	if _, _, err := srv.syncOneScheduledEvent(remote, "board"); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	if got, _ := store.GetEvent(ev.ID); got.Status != StatusClosed {
+		t.Errorf("after a sync from a scheduled native event, status = %q; the close was undone", got.Status)
+	}
+	// Discord saying it ran still wins.
+	remote.Status = discordEventCompleted
+	if _, _, err := srv.syncOneScheduledEvent(remote, "board"); err != nil {
+		t.Fatalf("sync completed: %v", err)
+	}
+	if got, _ := store.GetEvent(ev.ID); got.Status != StatusCompleted {
+		t.Errorf("after Discord says completed, status = %q, want completed", got.Status)
+	}
+}

@@ -198,9 +198,13 @@ func (s *Server) handleDetailsButton(w http.ResponseWriter, eventID int64) {
 	if err != nil {
 		log.Printf("[discord-signup] roster for details of %d: %v", ev.ID, err)
 	}
+	zone := ev.Timezone
+	if zone == "" {
+		zone = s.DefaultTimezone()
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"type": callbackTypeModal,
-		"data": buildRosterOnlyModal(ev, roster),
+		"data": buildRosterOnlyModal(ev, roster, zone),
 	})
 }
 

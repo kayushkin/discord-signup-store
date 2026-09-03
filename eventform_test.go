@@ -42,7 +42,7 @@ func TestNoModalCarriesATextDisplay(t *testing.T) {
 		{DiscordUserID: "u2", DisplayName: "Bo", State: StateWaitlisted, WaitlistPlace: 1},
 	}
 	for name, modal := range map[string]map[string]any{
-		"details": buildRosterOnlyModal(ev, roster),
+		"details": buildRosterOnlyModal(ev, roster, "America/Los_Angeles"),
 		"edit":    buildEventModal(EditModalCustomID(1), "Edit", ev, "America/Los_Angeles"),
 		"create":  buildEventModal(CreateModalCustomID(), "New event", nil, "America/Los_Angeles"),
 	} {
@@ -59,7 +59,7 @@ func TestNoModalCarriesATextDisplay(t *testing.T) {
 func TestAModalNeverExceedsFiveRows(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, StartsAt: 1788067881}
 	for name, modal := range map[string]map[string]any{
-		"details": buildRosterOnlyModal(ev, nil),
+		"details": buildRosterOnlyModal(ev, nil, "America/Los_Angeles"),
 		"edit":    buildEventModal(EditModalCustomID(1), "Edit", ev, "America/Los_Angeles"),
 		"create":  buildEventModal(CreateModalCustomID(), "New", nil, "America/Los_Angeles"),
 	} {
@@ -78,7 +78,7 @@ func TestDetailsIsTheRosterAndNothingToChange(t *testing.T) {
 		{DiscordUserID: "u2", DisplayName: "Bo", State: StateAttending},
 		{DiscordUserID: "u3", DisplayName: "Cy", State: StateWaitlisted, WaitlistPlace: 1},
 	}
-	modal := buildRosterOnlyModal(ev, roster)
+	modal := buildRosterOnlyModal(ev, roster, "America/Los_Angeles")
 	fields := modalFields(t, modal)
 	if len(fields) != 1 || fields[fieldRoster] == nil {
 		t.Fatalf("Details holds %v, want only the roster", fields)
@@ -161,5 +161,25 @@ func TestEveryInputIdIsUniqueToItsModal(t *testing.T) {
 	}
 	if got := in.fieldValue(fieldCapacity); got != "4" {
 		t.Errorf("fieldValue(capacity) = %q through a bare id", got)
+	}
+}
+
+// TestDetailsShowsTheDescriptionFirst — it did not show it at all.
+func TestDetailsShowsTheDescriptionFirst(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Games", Description: "Bring dice.", Capacity: 4, AttendingCount: 1,
+		StartsAt: 1788067881, Location: "The shed"}
+	fields := modalFields(t, buildRosterOnlyModal(ev, []Signup{
+		{DiscordUserID: "u1", DisplayName: "Al", State: StateAttending}}, "America/Los_Angeles"))
+	if len(fields) != 1 {
+		t.Fatalf("Details holds %d boxes, want one", len(fields))
+	}
+	text := fields[fieldRoster]["value"].(string)
+	if !strings.HasPrefix(text, "Bring dice.") {
+		t.Errorf("Details = %q, want the description first", text)
+	}
+	for _, want := range []string{"The shed", "Going — 1 of 4", "Al", "2026-08-29"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("Details = %q, want %q in it", text, want)
+		}
 	}
 }

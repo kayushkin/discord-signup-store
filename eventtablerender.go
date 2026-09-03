@@ -183,8 +183,11 @@ func RenderEventTablePage(page []eventTableBlock, index, total int, buttons func
 	if total > 1 {
 		body = append(body, textBlock(fmt.Sprintf("-# Page %d of %d", index+1, total)))
 	}
-	// Controls that belong to the table as a whole go on its last page only.
+	// Controls that belong to the table as a whole go on its last page only,
+	// under a rule, so Create does not read as one more button on the last
+	// event's row.
 	if index == total-1 && len(trailing) > 0 {
+		body = append(body, map[string]any{"type": componentTypeSeparator, "divider": true, "spacing": 2})
 		body = append(body, map[string]any{"type": componentTypeActionRow, "components": trailing})
 	}
 	return map[string]any{
@@ -316,7 +319,8 @@ func (s *Server) publishPackedTable(guildID string, surface tableSurface) error 
 		}
 		rosters[events[i].ID] = roster
 	}
-	pages := packEventTable(events, rosters, surface.buttons, len(surface.trailing)+1)
+	// Reserve: the trailing row, its buttons, and the divider above it.
+	pages := packEventTable(events, rosters, surface.buttons, len(surface.trailing)+2)
 
 	existing, err := surface.pages()
 	if err != nil {

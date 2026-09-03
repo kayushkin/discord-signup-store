@@ -164,50 +164,56 @@ func buildEventModal(customID, title string, ev *Event, zone string) map[string]
 	}
 }
 
-// rosterField is the roster shown inside a modal.
+// detailsField is the whole of Details in one read-only-looking box: what the
+// event is, when and where, who is going, who is waiting.
 //
-// A Text Input, not a Text Display, and that is not a preference. Every modal
-// this service sent carrying a Text Display was refused by Discord — the
-// viewer's Details modal since 23 August, silently, because a modal is
-// validated after the interaction is already answered 200, so a refusal reaches
-// no log here and shows only as "didn't respond in time" to the person
-// pressing. The one modal shape known to work in this application is the one
-// the Edit button has always used: Action Rows holding Text Inputs. So the
-// roster travels as one of those.
-//
-// The cost is honest and visible: Discord has no read-only text in this shape,
-// so the box looks editable. It is not required, whatever is typed into it is
-// ignored, and its label says so.
-func rosterField(ev *Event, roster []Signup) map[string]any {
+// A Text Input, and one, not several. Discord refused every modal this service
+// sent carrying a Text Display — the only read-only text a modal offers — so
+// the box is the one vehicle a modal has for words, and one box is less of a
+// form than four. It is not required, is labelled read only, and whatever is
+// typed into it is thrown away: EventForm has no field for it.
+func detailsField(ev *Event, roster []Signup, zone string) map[string]any {
 	attending, waiting := splitRoster(roster)
 	var b strings.Builder
+	if ev.Description != "" {
+		b.WriteString(ev.Description + "\n\n")
+	}
+	if ev.StartsAt > 0 {
+		b.WriteString(FormatEventTime(ev.StartsAt, zone))
+		if ev.EndsAt > 0 {
+			b.WriteString(" – " + FormatEventTime(ev.EndsAt, zone))
+		}
+		b.WriteString(" (" + zone + ")\n")
+	}
+	if ev.Location != "" {
+		b.WriteString("📍 " + ev.Location + "\n")
+	}
+	if ev.Capacity > 0 {
+		fmt.Fprintf(&b, "\nGoing — %d of %d\n", ev.AttendingCount, ev.Capacity)
+	} else {
+		fmt.Fprintf(&b, "\nGoing — %d\n", ev.AttendingCount)
+	}
 	if len(attending) == 0 {
 		b.WriteString("Nobody yet.")
 	} else {
 		b.WriteString(rosterNames(attending))
 	}
 	if len(waiting) > 0 {
-		fmt.Fprintf(&b, "\n\nWaitlist:\n%s", rosterNames(waiting))
+		fmt.Fprintf(&b, "\n\nWaitlist — %d\n%s", len(waiting), rosterNames(waiting))
 	}
-	label := fmt.Sprintf("Going — %d", ev.AttendingCount)
-	if ev.Capacity > 0 {
-		label = fmt.Sprintf("Going — %d of %d (read only)", ev.AttendingCount, ev.Capacity)
-	} else {
-		label += " (read only)"
-	}
-	return modalTextInput(fieldRoster, label, trimTo(b.String(), 4000), "",
+	return modalTextInput(fieldRoster, truncate(ev.Name, 40)+" (read only)", trimTo(b.String(), 4000), "",
 		textInputStyleParagraph, false, 4000)
 }
 
 // buildRosterOnlyModal is Details: the roster, and nothing to change. Editing
 // lives on the management table.
-func buildRosterOnlyModal(ev *Event, roster []Signup) map[string]any {
+func buildRosterOnlyModal(ev *Event, roster []Signup, zone string) map[string]any {
 	return map[string]any{
 		"custom_id": DetailsModalCustomID(ev.ID),
 		"title":     truncate(ev.Name, 45),
 		"components": []any{
 			map[string]any{"type": componentTypeActionRow,
-				"components": []any{rosterField(ev, roster)}},
+				"components": []any{detailsField(ev, roster, zone)}},
 		},
 	}
 }

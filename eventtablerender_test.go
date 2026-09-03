@@ -263,3 +263,21 @@ func TestThePublicTableCarriesNoTrailingControls(t *testing.T) {
 		t.Error("the public table carries management controls")
 	}
 }
+
+// TestCreateSitsUnderADividerNotOnTheLastRow.
+func TestCreateSitsUnderADividerNotOnTheLastRow(t *testing.T) {
+	events := rosterTableEvents(2)
+	pages := packEventTable(events, nil, managementButtons, len(managementTrailing())+2)
+	body := RenderEventTablePage(pages[0], 0, 1, managementButtons, managementTrailing())["components"].([]any)[0].(map[string]any)["components"].([]any)
+	last := body[len(body)-1].(map[string]any)
+	beforeLast := body[len(body)-2].(map[string]any)
+	if last["type"] != componentTypeActionRow || fmt.Sprint(last["components"]) == "" {
+		t.Fatalf("last component is %v, want the Create row", last)
+	}
+	if beforeLast["type"] != componentTypeSeparator {
+		t.Errorf("component before Create is type %v, want a divider", beforeLast["type"])
+	}
+	if n := countComponents([]any{map[string]any{"components": body}}); n > eventTableComponentBudget {
+		t.Errorf("page renders %d components, over %d", n, eventTableComponentBudget)
+	}
+}

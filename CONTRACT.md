@@ -180,7 +180,10 @@ the same events, the same packing, with **Edit**, **Repeat**, **Close signups** 
 event's name typed back — it deletes the native Discord event and cannot be
 undone, and that is the one gesture Discord offers that cannot happen by
 accident. Close is reversible with the same button and is not cancel: the event
-still happens, everyone on it stays, nobody new can join.
+still happens, everyone on it stays, nobody new can join. Closed is a decision
+Discord cannot represent — its event stays "scheduled" — so a native update
+never reopens a closed event; only *completed* or *cancelled* from Discord
+override a local status.
 It hangs off the event table — `management_channel_id` on `guild_tables` — so
 the call is a 404 until `PUT .../table` has been made. One trigger redraws both
 tables, so they cannot show different rosters.
