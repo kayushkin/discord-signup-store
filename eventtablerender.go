@@ -59,6 +59,9 @@ func eventTableHeadline(ev *Event) string {
 	if ev.Location != "" {
 		line += "  📍  " + ev.Location
 	}
+	if repeats := repeatsLabel(ev); repeats != "" {
+		line += "  " + repeats
+	}
 	return line
 }
 

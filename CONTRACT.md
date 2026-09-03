@@ -249,13 +249,22 @@ A forum post is a thread whose required first message **shares the thread's
 id**. That message is `RenderSignupMessage` verbatim — the same card and the
 same button custom_ids as the board, so one handler serves both surfaces. The
 post's title carries the count at the end (`Games — 8/29 4pm [3/8]`), renamed
-at most every five minutes, or `[Full]` at the front the moment it fills — and
-its tag
-flips with the roster; the sweep tags `finished` and archives.
+at most every ten minutes, or `[Full]` at the front the moment it fills — and
+its tag flips with the roster; the sweep tags `finished` and archives.
 
 ⚠️ Discord rate-limits **thread renames** to roughly two per ten minutes per
 thread — far harder than message edits. Under signup churn the title badge may
-lag; the card inside stays current.
+lag; the card inside stays current. Every rename also leaves a *"changed the
+title"* system message in the post, and those **cannot be deleted by anyone**
+(`403 code 50021`, measured 2026-09-03) — the count in the title is judged
+worth them, and the throttle is what keeps them to a few.
+
+⚠️ The `finished` and `cancelled` tags are **moderated**, and applying a
+moderated tag needs **Manage Threads** on the forum channel for the bot's
+role. Without it the PATCH is `403 code 50001 Missing Access` — measured, the
+same PATCH with the `open` tag succeeds — and a finished event's post stays
+tagged `open` and unarchived. The log names the permission to grant. There is
+no moving a post to another forum: Discord has no API for it.
 
 ⚠️ `429 code 30046` — "Maximum number of edits to messages older than 1 hour
 reached" — exists, and **is not what its name suggests**. Measured 2026-09-02
@@ -317,14 +326,19 @@ too.
 
 Both carry the count — at the **end**, as `[3/8]` — and both are **renames**,
 which Discord rate-limits to about two per ten minutes per thread. So the count
-is renamed at most **every five minutes**, and the live number lives on the card
+is renamed at most **every ten minutes**, and the live number lives on the card
 and the table row meanwhile, which are message edits and have no such limit.
 
 Two changes rename at once, because they are rare and they are what a reader
 most needs: becoming **Full**, which replaces the count with `[Full]` at the
-**front**, and ceasing to be Full, which puts the count back. A rename by the
-organiser or a moved date is also immediate. That spends the budget as one
-scheduled count and one flip.
+**front**, and a rename by the organiser. Everything else waits its ten
+minutes — the count moving, a **moved date**, and **ceasing to be Full**. The
+last is deliberate: a place that opens is usually taken within minutes, and a
+title that says open after the place has gone sends people to a waitlist they
+were told did not exist; `[Full]` for ten minutes after someone leaves is the
+smaller lie. Ten and not five because one count rename every five plus one
+fill in the same window is three, which is a 429 and the writer asleep for as
+long as Discord says, with every change to that event queued behind it.
 
     Board game night — 8/29 4pm [3/8]           capped, room left
     [Full] Board game night — 8/29 4pm          capped, no room
@@ -332,7 +346,9 @@ scheduled count and one flip.
 
 `title_written_at`, `native_title_written` and `forum_title_written` on the
 event row are what makes the decision possible; `titleRenameDue` is the whole
-of it. A due-but-throttled rename is picked up by the minute sweep, which wakes
+of it, and reads both records — the native pair says whether the name changed,
+the forum pair (which carries the date) whether anything a forum reader sees
+did. A due-but-throttled rename is picked up by the minute sweep, which wakes
 an event for that alone even when nothing else about it has changed.
 
 Every form this service has ever written — `[3/8]` at the front, `· 8 places` at
@@ -357,5 +373,33 @@ four rules Discord can represent and nothing else: `weekly`, `every 2 weeks`,
 from the event's start **in its own zone**. `never` sends `recurrence_rule:
 null`, which is how Discord stops repeating. A rule the web page set that
 Discord cannot express — daily, yearly, several days, an interval over two — is
-left out of the request rather than sent and refused, and logged. A recurring
-event is never auto-archived; it is one row here and a series on Discord.
+left out of the request rather than sent and refused, and logged.
+
+A recurring event is **one row**, the way Discord holds it as one scheduled
+event, and it is never completed by the sweep. When an occurrence ends — its
+end time passes, or start + 6 h with no end — the row **rolls forward**
+(`Store.RollOverOccurrence`): the start and end move to the next date the rule
+gives, keeping the run time; status goes back to `open`; **everyone on the
+roster is withdrawn** (actor `recurrence` in `signup_updates`), their roles
+revoked and their ✅ cleared; the reminder stamps clear so the next date gets
+its own; and the occurrence that ran leaves its line in past events. The
+roster does not carry over, deliberately — a capped weekly event that kept
+last week's people would be full forever after the first week.
+
+Discord does the same to its own copy — measured 2026-09-03: a weekly probe
+kept its id and its `scheduled_start_time` moved a week on within a minute of
+the occurrence ending — so the import treats a native start that moved
+**forward past an occurrence that had ended** as the same rollover, with
+Discord's date, and whichever of the sweep or the import notices first does
+the whole job. A moved date that has not happened yet is an organiser's edit
+and resets nothing.
+
+There is **no series end**: Discord accepts neither `COUNT` nor `UNTIL` from
+a client, so none is offered. The Repeat form's second field is *this
+occurrence's* end time, labelled as such. To stop a series, set it to `never`.
+Every surface that shows the event says it repeats — `🔁 weekly`, `🔁 every 2
+weeks`, `🔁 monthly` — on the table row, the card, Details and the web pages;
+the forum title does not, because that would be a rename.
+
+Every event has a start: `CreateEvent` refuses `starts_at = 0` and a PATCH
+cannot clear it, so "is it over" always has an answer.

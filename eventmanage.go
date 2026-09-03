@@ -145,7 +145,11 @@ func (s *Server) handleRepeatButton(w http.ResponseWriter, in *Interaction, even
 			"components": []any{
 				row(modalTextInput(fieldRepeats+"@"+modalID, "Repeats — weekly, every 2 weeks, monthly, or never",
 					describeRepeat(ev.RecurrenceRule), "weekly", textInputStyleShort, true, 40)),
-				row(modalTextInput(fieldEndsAt+"@"+modalID, "Ends — "+zone,
+				// This occurrence's end, not the series' — Discord has no series
+				// end a client can set, so there is none to offer. The label
+				// says which, because "Ends" on a form titled Repeat reads as
+				// the other one.
+				row(modalTextInput(fieldEndsAt+"@"+modalID, "Each occurrence ends — "+zone,
 					FormatEventTime(ev.EndsAt, zone), "9/29 5pm   (blank for none)", textInputStyleShort, false, 40)),
 			},
 		},
@@ -194,6 +198,7 @@ func (s *Server) applyRepeatForm(w http.ResponseWriter, in *Interaction, eventID
 		s.replyEphemeral(w, fmt.Sprintf("**%s** does not repeat.", ev.Name))
 		return
 	}
-	s.replyEphemeral(w, fmt.Sprintf("**%s** repeats %s, starting from its next date. Discord's event repeats with it.",
+	s.replyEphemeral(w, fmt.Sprintf("**%s** repeats %s. Discord's event repeats with it. "+
+		"When a date has passed the next one takes its place and signups open again from nobody.",
 		ev.Name, describeRepeat(rule)))
 }

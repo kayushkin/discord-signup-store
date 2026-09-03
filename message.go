@@ -57,6 +57,12 @@ func renderSignupMessage(ev *Event, roster []Signup) map[string]any {
 		// timezone has to be chosen or stated here.
 		fmt.Fprintf(&b, "\n🗓️ <t:%d:F>\n", ev.StartsAt)
 	}
+	if repeats := repeatsLabel(ev); repeats != "" {
+		// Discord shows the rule on its own event; the card is the one place
+		// the roster is, so it is the one place to say that the roster is for
+		// this date only.
+		fmt.Fprintf(&b, "%s — signups are for this date; they open again after it.\n", repeats)
+	}
 
 	switch {
 	case ev.Status == StatusCancelled:

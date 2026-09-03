@@ -6,6 +6,11 @@ import (
 	"testing"
 )
 
+// farFutureStart is the start time for an event whose date does not matter to
+// the test. Every event needs one — CreateEvent refuses a row without — and
+// far enough out that no sweep in the suite can mistake it for finished.
+const farFutureStart int64 = 4102444800 // 2100-01-01T00:00:00Z
+
 func testStore(t *testing.T) *Store {
 	t.Helper()
 	store, err := Open(t.TempDir())
@@ -19,7 +24,7 @@ func testStore(t *testing.T) *Store {
 func testEvent(t *testing.T, store *Store, capacity int) *Event {
 	t.Helper()
 	ev, err := store.CreateEvent(Event{
-		GuildID: "g1", ChannelID: "c1", Name: "Test event", Capacity: capacity,
+		GuildID: "g1", StartsAt: farFutureStart, ChannelID: "c1", Name: "Test event", Capacity: capacity,
 	})
 	if err != nil {
 		t.Fatalf("create event: %v", err)

@@ -10,7 +10,7 @@
   <div class="meta">
     {{if .Event.StartsAt}}{{localTime .Event.StartsAt}}{{else}}no date set{{end}}
     {{if .Event.Location}} · {{.Event.Location}}{{end}}
-    {{if .Event.RecurrenceRule}} · repeats ({{.Event.RecurrenceRule}}){{end}}
+    {{if .Event.RecurrenceRule}} · 🔁 repeats {{repeats .Event.RecurrenceRule}}{{end}}
     {{if .Event.Timezone}}<br><span class="muted">Times above are shown in your own timezone.
       This event was scheduled in {{.Event.Timezone}}.</span>{{end}}
   </div>

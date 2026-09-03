@@ -82,6 +82,9 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 	// back in arrival order, so the number IS the row's position and does not
 	// need storing beside it.
 	"add": func(a, b int) int { return a + b },
+	// repeats is the rule in the words the forms use, so a page says "weekly"
+	// rather than FREQ=WEEKLY;BYDAY=TU.
+	"repeats": describeRepeat,
 	// localTime emits the instant and lets the browser format it.
 	//
 	// The server does not know the reader's timezone and must not guess: an

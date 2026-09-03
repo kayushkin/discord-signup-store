@@ -197,3 +197,89 @@ func dayIndex(name string) (int, bool) {
 	}
 	return 0, false
 }
+
+// nextOccurrence is the first time the rule fires strictly after `after`,
+// counting from `start`, both wall-clock times in the event's zone. Discord
+// carries a series as one event whose start slides forward when an occurrence
+// ends — measured 2026-09-03: a weekly probe kept its id and its start moved
+// exactly a week — and this is the same arithmetic done locally, so the row
+// can move on before Discord's copy is read back.
+//
+// ok is false for a rule this service cannot expand, which is the same set
+// discordRecurrenceRule refuses; such a rule never sends and never rolls.
+func nextOccurrence(rule string, start, after time.Time) (next time.Time, ok bool) {
+	parsed, valid := parseRRule(rule)
+	if !valid {
+		return time.Time{}, false
+	}
+	loc := start.Location()
+	hour, minute, second := start.Clock()
+	switch parsed.freq {
+	case "WEEKLY":
+		if parsed.interval < 1 || parsed.interval > 2 {
+			return time.Time{}, false
+		}
+		day := discordWeekday(start)
+		if parsed.byDay != "" {
+			d, found := dayIndex(parsed.byDay)
+			if !found {
+				return time.Time{}, false
+			}
+			day = d
+		}
+		// The first candidate is the rule's weekday in the start's own week,
+		// then every interval weeks after; the date arithmetic is done on
+		// calendar days so a clock change moves the instant, not the hour.
+		candidate := time.Date(start.Year(), start.Month(), start.Day()-(discordWeekday(start)-day), hour, minute, second, 0, loc)
+		step := 7 * parsed.interval
+		for !candidate.After(after) {
+			candidate = time.Date(candidate.Year(), candidate.Month(), candidate.Day()+step, hour, minute, second, 0, loc)
+		}
+		return candidate, true
+	case "MONTHLY":
+		if parsed.interval != 1 {
+			return time.Time{}, false
+		}
+		n, day := (start.Day()-1)/7+1, discordWeekday(start)
+		if parsed.byDay != "" {
+			digits := strings.TrimRight(parsed.byDay, "MOTUWEHFRSA")
+			name := strings.TrimLeft(parsed.byDay, "-0123456789")
+			if digits != "" {
+				v, err := strconv.Atoi(digits)
+				if err != nil || v < 1 || v > 5 {
+					return time.Time{}, false
+				}
+				n = v
+			}
+			d, found := dayIndex(name)
+			if !found {
+				return time.Time{}, false
+			}
+			day = d
+		}
+		// Month by month from the start's own month. A fifth weekday exists
+		// in some months and not others; a month without one is skipped, as
+		// Discord skips it.
+		year, month := start.Year(), start.Month()
+		for tries := 0; tries < 60; tries++ {
+			if candidate, exists := nthWeekdayOfMonth(year, month, n, day, hour, minute, second, loc); exists && candidate.After(after) {
+				return candidate, true
+			}
+			month++
+			if month > time.December {
+				month, year = time.January, year+1
+			}
+		}
+		return time.Time{}, false
+	}
+	return time.Time{}, false
+}
+
+// nthWeekdayOfMonth is the nth `day` (Monday = 0) of a month at a wall-clock
+// time, and whether the month has one.
+func nthWeekdayOfMonth(year int, month time.Month, n, day, hour, minute, second int, loc *time.Location) (time.Time, bool) {
+	first := time.Date(year, month, 1, hour, minute, second, 0, loc)
+	offset := (day - discordWeekday(first) + 7) % 7
+	candidate := time.Date(year, month, 1+offset+7*(n-1), hour, minute, second, 0, loc)
+	return candidate, candidate.Month() == month
+}

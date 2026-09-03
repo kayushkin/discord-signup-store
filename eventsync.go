@@ -154,12 +154,12 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 
 	// Two separate questions. Has anything a reader can see changed since the
 	// last successful publish? And, separately, is a throttled title rename now
-	// due? The second can be yes while the first is no: five minutes pass with
+	// due? The second can be yes while the first is no: ten minutes pass with
 	// nobody joining, and the count the title shows is still the one from
 	// before the last three signups.
 	signature := eventPublishSignature(ev, roster)
-	wantNative := nativeEventName(ev)
-	rename := titleRenameDue(ev, wantNative, now())
+	wantNative, wantForum := nativeEventName(ev), forumPostTitle(ev)
+	rename := titleRenameDue(ev, wantNative, wantForum, now())
 	if signature == ev.PublishedSignature && !rename {
 		return
 	}
@@ -174,7 +174,7 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 			log.Printf("[discord-signup] rename native event %d: %v", ev.ID, err)
 			return
 		}
-		if err := s.store.SetTitlesWritten(ev.ID, wantNative, forumPostTitle(ev)); err != nil {
+		if err := s.store.SetTitlesWritten(ev.ID, wantNative, wantForum); err != nil {
 			log.Printf("[discord-signup] record titles for event %d: %v", ev.ID, err)
 		}
 		return
@@ -208,7 +208,7 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 		log.Printf("[discord-signup] record published signature for event %d: %v", ev.ID, err)
 	}
 	if rename {
-		if err := s.store.SetTitlesWritten(ev.ID, wantNative, forumPostTitle(ev)); err != nil {
+		if err := s.store.SetTitlesWritten(ev.ID, wantNative, wantForum); err != nil {
 			log.Printf("[discord-signup] record titles for event %d: %v", ev.ID, err)
 		}
 	}
@@ -238,7 +238,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	9  management rows carry Close/Reopen and Cancel; My events is gone
 //	10 the recurrence rule is sent to Discord, and Repeat sits on the row
 //	11 Details shows the description; Create sits under a divider
-const publishFormatVersion = 11
+//	12 a recurring event says so on the row, the card and Details
+const publishFormatVersion = 12
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //
@@ -295,14 +296,14 @@ func (s *Server) RepublishStaleEvents(guildID string) {
 			continue
 		}
 		stale := eventPublishSignature(ev, roster) != ev.PublishedSignature
-		renameDue := titleRenameDue(ev, nativeEventName(ev), now())
+		renameDue := titleRenameDue(ev, nativeEventName(ev), forumPostTitle(ev), now())
 		if !stale && !renameDue {
 			continue
 		}
 		if !stale {
 			// Not a discrepancy — a throttled count rename has come due, which
 			// is the sweep doing its other job. Quiet, because it happens every
-			// five minutes on every busy event and would drown the line below.
+			// ten minutes on every busy event and would drown the line below.
 			s.syncAfterChange(ev.ID, nil)
 			continue
 		}

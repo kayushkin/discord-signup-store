@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS events (
     -- 0 means unlimited, matching Discord's own convention for channel
     -- user_limit and invite max_uses. It does not mean "unset".
     capacity                   INTEGER NOT NULL DEFAULT 0,
-    status                     TEXT NOT NULL DEFAULT 'open',-- 'open' | 'closed' | 'cancelled'
+    status                     TEXT NOT NULL DEFAULT 'open',-- 'open' | 'closed' | 'completed' | 'cancelled'
     -- Roles this service grants and revokes as people move between states.
     -- Both optional: leave them '' and the roster is the only record. The bot's
     -- own highest role must sit ABOVE these in the guild's role list or every

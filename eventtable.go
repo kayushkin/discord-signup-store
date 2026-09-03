@@ -260,6 +260,9 @@ func eventLine(ev *Event) string {
 	if ev.StartsAt > 0 {
 		parts = append(parts, compactWhen(ev))
 	}
+	if repeats := repeatsLabel(ev); repeats != "" {
+		parts = append(parts, repeats)
+	}
 	if ev.ForumPostID != "" {
 		// The same reference the #events card uses: a 💬 and a thread mention.
 		// A mention renders the post's full title, which repeats much of this

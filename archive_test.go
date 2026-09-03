@@ -115,7 +115,7 @@ func TestCancelledEventsAreNotRelabelledAsCompleted(t *testing.T) {
 }
 
 // TestRecurringEventsSurviveTheSweep stops a whole series disappearing because
-// one occurrence is over.
+// one occurrence is over: the store's sweep completes only one-off events.
 func TestRecurringEventsSurviveTheSweep(t *testing.T) {
 	store := testStore(t)
 	past := time.Now().Add(-30 * 24 * time.Hour).Unix()

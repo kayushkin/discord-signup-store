@@ -186,10 +186,11 @@ func (s *Server) AdoptForum(guildID, channelID string) (*GuildForum, error) {
 }
 
 // forumPostTitle is the name and the compact date, decorated the way every
-// title is: "[Full]" in front when there is no room, the limit at the end when
-// there is. Never the live count — a thread rename is rate-limited to about two
-// per ten minutes, and a count that is usually two renames old is worse than
-// none.
+// title is: "[Full]" in front when there is no room, "[3/8]" at the end when
+// there is. A thread rename is rate-limited to about two per ten minutes and
+// every one leaves a system message in the post that nobody can delete, so
+// titleRenameDue spends them sparingly; the count in the title is worth that,
+// because the forum's list view shows nothing else.
 func forumPostTitle(ev *Event) string {
 	core := ev.Name
 	if ev.StartsAt > 0 {
@@ -221,9 +222,11 @@ func forumTagFor(ev *Event, f *GuildForum) string {
 // cannot drift.
 //
 // ⚠️ Discord rate-limits THREAD RENAMES far harder than message edits — about
-// two per ten minutes per thread. So the thread PATCH is skipped unless the
-// title or tag actually changed; under signup churn the title badge may lag,
-// and the card inside (edited freely) stays current.
+// two per ten minutes per thread — and every rename leaves a "changed the
+// title" system message in the post that Discord refuses to let anyone delete
+// (error 50021, measured). So the name goes only when titleRenameDue says so;
+// under signup churn the title badge may lag, and the card inside (edited
+// freely) stays current.
 func (s *Server) refreshForumPost(ev *Event, rename bool) error {
 	if s.discord == nil {
 		return nil
@@ -269,14 +272,15 @@ func (s *Server) refreshForumPost(ev *Event, rename bool) error {
 	if err := s.discord.EditMessage(ev.ForumPostID, ev.ForumPostID, card); err != nil {
 		return fmt.Errorf("edit forum card: %w", err)
 	}
-	return s.patchForumThread(ev, title, tag, rename)
+	return s.patchForumThread(ev, forum, title, tag, rename)
 }
 
 // patchForumThread writes the thread's tag, its archived flag, and — only
 // when a rename is due — its name. The tag flips only with the Full state
-// and is not a rename; the name is, and renames are rate-limited to about two
-// per ten minutes per thread, so it goes out on titleRenameDue's say-so.
-func (s *Server) patchForumThread(ev *Event, title, tag string, rename bool) error {
+// and is not a rename, so it costs no system message; the name is, and
+// renames are rate-limited to about two per ten minutes per thread, so it
+// goes out on titleRenameDue's say-so.
+func (s *Server) patchForumThread(ev *Event, forum *GuildForum, title, tag string, rename bool) error {
 	patch := map[string]any{"applied_tags": []string{tag}}
 	if rename {
 		patch["name"] = title
@@ -285,9 +289,35 @@ func (s *Server) patchForumThread(ev *Event, title, tag string, rename bool) err
 		patch["archived"] = true
 	}
 	if err := s.discord.ModifyThread(ev.ForumPostID, patch); err != nil {
+		// The finished and cancelled tags are moderated — only someone with
+		// Manage Threads may apply them — and Discord reports a bot without it
+		// as 50001 Missing Access, which reads like the post is invisible.
+		// Measured: the same PATCH with the open tag succeeds. Named here so
+		// the log says what to grant rather than what failed.
+		var apiErr *APIError
+		if errors.As(err, &apiErr) && apiErr.Code == errorCodeMissingAccess &&
+			(tag == forum.TagFinished || tag == forum.TagCancelled) {
+			return fmt.Errorf("apply the moderated %q tag: the bot's role needs Manage Threads on the forum channel: %w",
+				forumTagName(tag, forum), err)
+		}
 		return fmt.Errorf("retitle forum post: %w", err)
 	}
 	return nil
+}
+
+// forumTagName is the managed name behind a tag id, for a log line.
+func forumTagName(id string, f *GuildForum) string {
+	switch id {
+	case f.TagOpen:
+		return "open"
+	case f.TagFull:
+		return "full"
+	case f.TagFinished:
+		return "finished"
+	case f.TagCancelled:
+		return "cancelled"
+	}
+	return id
 }
 
 // renameForumPostOnly is the title-only publish: nothing about the roster has
@@ -304,7 +334,7 @@ func (s *Server) renameForumPostOnly(ev *Event) error {
 	if err != nil {
 		return err
 	}
-	return s.patchForumThread(ev, forumPostTitle(ev), forumTagFor(ev, forum), true)
+	return s.patchForumThread(ev, forum, forumPostTitle(ev), forumTagFor(ev, forum), true)
 }
 
 // refreshForumPostQuietly always renames: its callers are a finish, a cancel

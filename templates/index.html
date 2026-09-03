@@ -8,7 +8,7 @@
     <div class="meta">
       {{if .StartsAt}}{{localTime .StartsAt}}{{else}}no date set{{end}}
       {{if .Location}} · {{.Location}}{{end}}
-      {{if .RecurrenceRule}} · repeats ({{.RecurrenceRule}}){{end}}
+      {{if .RecurrenceRule}} · 🔁 repeats {{repeats .RecurrenceRule}}{{end}}
     </div>
     <div class="meta count" style="margin-top:7px">
       {{if .Capacity}}<strong>{{.AttendingCount}}/{{.Capacity}}</strong> places{{else}}<strong>{{.AttendingCount}}</strong> signed up · no limit{{end}}

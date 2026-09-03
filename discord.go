@@ -26,6 +26,11 @@ const DiscordAPIBase = "https://discord.com/api/v10"
 // than a DM.
 const errorCodeCannotMessageUser = 50007
 
+// errorCodeMissingAccess is Discord's 50001. It covers more than the name
+// says: a bot applying a moderated forum tag without Manage Threads gets it
+// too, and the post is perfectly visible.
+const errorCodeMissingAccess = 50001
+
 // ErrCannotMessageUser reports a DM that Discord refused to deliver.
 var ErrCannotMessageUser = errors.New("cannot send direct message to this user")
 

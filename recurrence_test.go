@@ -166,3 +166,41 @@ func TestTheManagementRowHasRepeat(t *testing.T) {
 		t.Errorf("row = %v", labels)
 	}
 }
+
+// TestTheNextOccurrenceIsTheOneAfterNow is the arithmetic a rollover runs on:
+// the next time the rule fires, in the event's own zone, after the occurrence
+// that just finished.
+func TestTheNextOccurrenceIsTheOneAfterNow(t *testing.T) {
+	la, _ := time.LoadLocation("America/Los_Angeles")
+	// Tuesday 2026-03-03 19:00 Los Angeles — the week DST starts on the 8th.
+	start := time.Date(2026, 3, 3, 19, 0, 0, 0, la)
+	for _, c := range []struct {
+		name  string
+		rule  string
+		after time.Time
+		want  time.Time
+	}{
+		{"weekly, across the clock change, same wall clock", "FREQ=WEEKLY;BYDAY=TU",
+			start.Add(time.Hour), time.Date(2026, 3, 10, 19, 0, 0, 0, la)},
+		{"weekly, two occurrences already missed", "FREQ=WEEKLY;BYDAY=TU",
+			time.Date(2026, 3, 18, 0, 0, 0, 0, la), time.Date(2026, 3, 24, 19, 0, 0, 0, la)},
+		{"every two weeks counts from the anchor", "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU",
+			start.Add(time.Hour), time.Date(2026, 3, 17, 19, 0, 0, 0, la)},
+		{"monthly, first Tuesday", "FREQ=MONTHLY;BYDAY=1TU",
+			start.Add(time.Hour), time.Date(2026, 4, 7, 19, 0, 0, 0, la)},
+		{"monthly, fifth Tuesday skips months without one", "FREQ=MONTHLY;BYDAY=5TU",
+			time.Date(2026, 3, 31, 20, 0, 0, 0, la), time.Date(2026, 6, 30, 19, 0, 0, 0, la)},
+	} {
+		got, ok := nextOccurrence(c.rule, start, c.after)
+		if !ok {
+			t.Errorf("%s: rule refused", c.name)
+			continue
+		}
+		if !got.Equal(c.want) {
+			t.Errorf("%s: next = %s, want %s", c.name, got, c.want)
+		}
+	}
+	if _, ok := nextOccurrence("FREQ=DAILY", start, start); ok {
+		t.Error("a rule Discord cannot express must not roll either")
+	}
+}

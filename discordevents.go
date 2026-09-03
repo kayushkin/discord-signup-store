@@ -283,6 +283,21 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 		return false, false, err
 	}
 
+	// Discord holds a recurring event as one object whose start slides to the
+	// next occurrence once the current one ends (measured 2026-09-03: same id,
+	// start a week on). A start that moved forward past an occurrence that had
+	// already ended is that slide, and the roster it carried was for the date
+	// that has gone. Rolled here, through the same path the sweep uses, so
+	// whichever of the two notices first does the whole job and the other
+	// finds nothing left to do. A moved date that has not happened yet is an
+	// organiser's edit and is patched like any other.
+	if existing.RecurrenceRule != "" && startsAt > existing.StartsAt && finishedBy(existing) < now() {
+		s.rollOverOccurrence(existing, startsAt, endsAt)
+		if existing, err = s.store.GetEvent(existing.ID); err != nil {
+			return false, false, err
+		}
+	}
+
 	// Only push fields Discord owns. Capacity, roles and message_id are ours
 	// and must survive a sync — overwriting them here would reset the cap to
 	// unlimited every few minutes.
@@ -508,11 +523,19 @@ func stripLocationPlaceholder(location string) string {
 //	Open house — 8/29 4pm                       no limit
 //
 // The count IS in the title again — at the end — but a title is a rename and
-// renames are rate-limited, so the count is only renamed every five minutes.
-// Becoming full, or stopping being full, renames at once: that is the change a
-// reader most needs and it is rare, so the budget of about two renames per ten
-// minutes is spent as one scheduled count and one flip. titleRenameDue is the
-// whole of that decision.
+// renames are rate-limited, so a count change alone is renamed at most every
+// ten minutes. Becoming full renames at once: that is the change a reader most
+// needs and it is rare. Stopping being full does NOT — a place that opens is
+// usually taken within minutes, and a title that says open when the place has
+// already gone sends people to a waitlist they were told did not exist. Seeing
+// "[Full]" for ten minutes after someone leaves is the smaller lie. A moved
+// date waits its turn the same way. titleRenameDue is the whole of that
+// decision, and the budget is why it is ten and not five: Discord allows a
+// thread about two renames per ten minutes, and one count rename every five
+// plus one fill inside the same window is three, which is a 429 and a writer
+// asleep for as long as Discord says — every change to that event queued
+// behind it. One count rename per ten minutes leaves the second slot free for
+// the fill, whenever it comes.
 //
 // Every form this service has ever written is stripped on the way back,
 // because a name read from Discord is stored as the event's own: miss one and
@@ -528,10 +551,11 @@ var titleDecorationPrefixes = regexp.MustCompile(`^(\[\d+/\d+\]|\[Full\])\s+`)
 // title: the current "[3/8]", and the " · 8 places" form it briefly wrote.
 var titleDecorationSuffix = regexp.MustCompile(`(\s+·\s+\d+ places?|\s+\[\d+/\d+\])$`)
 
-// titleRenameInterval is how often a title is renamed for a count change alone.
-// Five minutes spends one of the roughly two renames Discord allows a thread
-// per ten minutes, leaving the other for becoming full.
-const titleRenameInterval = 5 * 60
+// titleRenameInterval is how often a title is renamed for anything short of
+// becoming full or being renamed by a person: a count change, a place opening
+// up, a moved date. Ten minutes spends one of the roughly two renames Discord
+// allows a thread per ten minutes, leaving the other for becoming full.
+const titleRenameInterval = 10 * 60
 
 // discordEventNameLimit is Discord's cap on a scheduled event name and a
 // thread name alike.
@@ -558,23 +582,30 @@ func titleSuffix(ev *Event) string {
 // titleIsFull reports whether a title, as written or as wanted, says Full.
 func titleIsFull(title string) bool { return strings.HasPrefix(title, "[Full] ") }
 
-// titleRenameDue decides whether the native title is renamed on this publish.
+// titleRenameDue decides whether the titles are renamed on this publish. One
+// decision for both titles — the native event's and the forum post's — because
+// they are renamed together and recorded together.
 //
-// A title is renamed when it has never been written, when the words changed
-// (a rename, a moved date), when it flipped into or out of Full, or — for a
-// count change and nothing else — when the last rename was at least
-// titleRenameInterval ago. Everything else keeps the title Discord already
-// has, and the card and table carry the live number meanwhile.
-func titleRenameDue(ev *Event, want string, at int64) bool {
-	written := ev.NativeTitleWritten
+// A rename goes at once when a title has never been written, when the event
+// became full, or when a person renamed it. Everything else that changes a
+// title — the count moving, a place opening up, the date moving — waits until
+// titleRenameInterval has passed since the last rename. Meanwhile the card,
+// the table and the native description carry the live state.
+//
+// The forum title is what carries the date, and the native title is what
+// carries the name without one, so the two are compared to their own records:
+// the native pair says whether the name changed, the forum pair whether
+// anything a forum reader sees did.
+func titleRenameDue(ev *Event, wantNative, wantForum string, at int64) bool {
+	writtenNative, writtenForum := ev.NativeTitleWritten, ev.ForumTitleWritten
 	switch {
-	case written == "":
+	case writtenNative == "" && writtenForum == "":
 		return true
-	case want == written:
+	case wantNative == writtenNative && wantForum == writtenForum:
 		return false
-	case titleIsFull(want) != titleIsFull(written):
+	case titleIsFull(wantNative) && !titleIsFull(writtenNative):
 		return true
-	case stripTitleDecorations(want) != stripTitleDecorations(written):
+	case stripTitleDecorations(wantNative) != stripTitleDecorations(writtenNative):
 		return true
 	default:
 		return at-ev.TitleWrittenAt >= titleRenameInterval
@@ -780,16 +811,14 @@ func DiscordEventURL(guildID, scheduledEventID string) string {
 // normal evening event is not archived while people are still at it.
 const assumedRunTimeWithoutEndTime = 6 * 3600
 
-// finishedBy reports the instant an event stops being current.
+// finishedBy reports the instant an event stops being current. Every event
+// has a start — CreateEvent refuses one without — so there is always an
+// answer.
 func finishedBy(ev *Event) int64 {
 	if ev.EndsAt > 0 {
 		return ev.EndsAt
 	}
-	if ev.StartsAt > 0 {
-		return ev.StartsAt + assumedRunTimeWithoutEndTime
-	}
-	// No times at all: nothing can be concluded, so it is never auto-archived.
-	return 0
+	return ev.StartsAt + assumedRunTimeWithoutEndTime
 }
 
 // CompleteFinishedEvents moves events whose time has passed to completed.
@@ -797,10 +826,9 @@ func finishedBy(ev *Event) int64 {
 // Only touches open and closed events. A cancelled one is already archived and
 // must not be relabelled as having happened — it did not.
 //
-// Recurring events are skipped: a rule means the event comes round again, so
-// the row is not finished just because this occurrence is. Expanding a series
-// into per-occurrence rows is a separate piece of work, and quietly archiving
-// the parent would make the whole series vanish.
+// Recurring events are not completed here: a rule means the event comes round
+// again, so an ended occurrence rolls the row forward instead — see
+// FinishedRecurringOccurrences and RollOverOccurrence.
 func (s *Store) CompleteFinishedEvents() ([]int64, error) {
 	rows, err := s.db.Query(`SELECT `+eventColumns+`
 		FROM events
@@ -818,7 +846,7 @@ func (s *Store) CompleteFinishedEvents() ([]int64, error) {
 		if err != nil {
 			return nil, fmt.Errorf("scan event: %w", err)
 		}
-		if end := finishedBy(ev); end > 0 && end < cutoff {
+		if finishedBy(ev) < cutoff {
 			finished = append(finished, ev.ID)
 		}
 	}
@@ -852,6 +880,11 @@ func (s *Server) CompleteFinishedEvents() ([]int64, error) {
 	}
 	for _, id := range finished {
 		s.finishEventEverywhere(id)
+	}
+	// The same tick moves recurring events on to their next date. Reported
+	// separately in the log and not in the count: they did not finish.
+	if _, err := s.rollOverFinishedOccurrences(); err != nil {
+		log.Printf("[discord-signup] roll over finished occurrences: %v", err)
 	}
 	return finished, nil
 }

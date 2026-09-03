@@ -185,6 +185,9 @@ func detailsField(ev *Event, roster []Signup, zone string) map[string]any {
 		}
 		b.WriteString(" (" + zone + ")\n")
 	}
+	if repeats := repeatsLabel(ev); repeats != "" {
+		b.WriteString(repeats + "\n")
+	}
 	if ev.Location != "" {
 		b.WriteString("📍 " + ev.Location + "\n")
 	}

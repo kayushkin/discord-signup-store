@@ -37,11 +37,11 @@ the event at all but the addresses of messages this service has written about it
 | `status` | TEXT | `open`, `closed`, `completed` or `cancelled`. `closed` still happens; signups are shut. |
 | `attending_role_id` | TEXT | Role granted to whoever has a place. Optional. Written, never read back — a projection for channel permissions. |
 | `waitlist_role_id` | TEXT | The same for the waitlist. |
-| `starts_at` | INTEGER | When it starts. `0` means unset, which blocks publishing to Discord. |
+| `starts_at` | INTEGER | When it starts. Required: `CreateEvent` refuses `0` and a PATCH cannot clear it, so every event can answer whether it is over. |
 | `ends_at` | INTEGER | When it ends. `0` means unset, and a run time is assumed — by one constant, so the archive sweep and the publisher cannot assume different lengths. |
 | `location` | TEXT | Free text. Sent to Discord with a placeholder when empty, because Discord refuses an EXTERNAL event without one; the placeholder is stripped on the way back. |
 | `entity_type` | TEXT | Discord's kind of event: `stage`, `voice` or `external`. |
-| `recurrence_rule` | TEXT | RFC 5545 RRULE. Encoded into Discord's `recurrence_rule` object on every publish since 2026-09-03 — before that it was stored and never sent. `''` means the event does not repeat, and sends `null`. |
+| `recurrence_rule` | TEXT | RFC 5545 RRULE. Encoded into Discord's `recurrence_rule` object on every publish since 2026-09-03 — before that it was stored and never sent. `''` means the event does not repeat, and sends `null`. A row with a rule is never completed by the sweep: when its occurrence ends, `starts_at`/`ends_at` move to the next date, the roster is withdrawn and the reminder stamps clear (`RollOverOccurrence`). |
 | `timezone` | TEXT | IANA zone name, never an offset — an offset cannot survive a daylight-saving change. Mandatory whenever `recurrence_rule` is set. |
 | `origin` | TEXT | `local` (made here) or `discord` (imported). **Not** derivable from `discord_scheduled_event_id`: a local event published to Discord also has one. This records who owns the thing. |
 | `discord_interested_count` | INTEGER | Discord's own Interested tally. Stored for display, labelled as Discord's, and **never** feeds a capacity decision. |
@@ -52,7 +52,7 @@ the event at all but the addresses of messages this service has written about it
 | `published_signature` | TEXT | Fingerprint of everything that feeds a Discord copy, written only when a publish fully succeeds. `''` means never published, or the last publish failed part way. The minute sweep republishes anything that does not match. |
 | `reminded_before_at` | INTEGER | When the hour-before reminder went out, **or** when it was written off as too late. `0` means still owed. |
 | `reminded_start_at` | INTEGER | The same for the starting reminder. |
-| `title_written_at` | INTEGER | When the titles were last renamed. A title is a rename, rate-limited to about two per ten minutes, so a count change alone renames at most every five; this is how the publisher knows whether one is due. |
+| `title_written_at` | INTEGER | When the titles were last renamed. A title is a rename, rate-limited to about two per ten minutes, so anything short of becoming Full or an organiser's rename waits ten; this is how the publisher knows whether one is due. |
 | `native_title_written` | TEXT | What the native event's name last said, e.g. `Games [3/8]` or `[Full] Games`. Compared to what it *should* say to spot a Full flip or an organiser's rename, both of which go at once. |
 | `forum_title_written` | TEXT | The same for the forum post's title. |
 | `created_at` / `updated_at` | INTEGER | `updated_at` deliberately does **not** move when a publish signature or a reminder stamp is written — those are the service noting what it did, not somebody editing the event. |

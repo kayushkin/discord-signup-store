@@ -273,17 +273,17 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	{"events", "reminded_before_at", "INTEGER NOT NULL DEFAULT 0"},
 	{"events", "reminded_start_at", "INTEGER NOT NULL DEFAULT 0"},
 
-	// What the titles last said, and when. A title is a rename, and Discord
-	// rate-limits thread renames to about two per ten minutes, so a count
-	// change alone renames at most every five; becoming or ceasing to be Full
-	// renames at once. Deciding that needs the last title written and when,
-	// which nothing else records. Bookkeeping, like published_signature:
-	// written by the publisher, read only by the publisher.
 	// Where the management table lives, beside the public table's channel.
 	// On guild_tables because it is the same table drawn for a different
 	// audience, not a second thing to configure from scratch.
 	{"guild_tables", "management_channel_id", "TEXT NOT NULL DEFAULT ''"},
 
+	// What the titles last said, and when. A title is a rename, and Discord
+	// rate-limits thread renames to about two per ten minutes, so a count
+	// change alone renames at most every ten; becoming Full renames at once.
+	// Deciding that needs the last title written and when, which nothing else
+	// records. Bookkeeping, like published_signature: written by the
+	// publisher, read only by the publisher.
 	{"events", "title_written_at", "INTEGER NOT NULL DEFAULT 0"},
 	{"events", "native_title_written", "TEXT NOT NULL DEFAULT ''"},
 	{"events", "forum_title_written", "TEXT NOT NULL DEFAULT ''"},
@@ -530,7 +530,15 @@ func (s *Store) CreateEvent(e Event) (*Event, error) {
 	if err := validateRecurrence(e.RecurrenceRule, e.Timezone); err != nil {
 		return nil, err
 	}
-	if e.EndsAt != 0 && e.StartsAt != 0 && e.EndsAt < e.StartsAt {
+	// An event is a thing that happens at a time. Without one nothing can
+	// say whether it is over, so it would sit in the live list forever, and
+	// no reminder, table order or title could place it. The Discord form and
+	// the web form both require it; this is where the machine API and the
+	// import are held to the same rule.
+	if e.StartsAt <= 0 {
+		return nil, fmt.Errorf("%w: starts_at is required", ErrInvalidEvent)
+	}
+	if e.EndsAt != 0 && e.EndsAt < e.StartsAt {
 		return nil, fmt.Errorf("%w: ends_at is before starts_at", ErrInvalidEvent)
 	}
 
@@ -766,6 +774,9 @@ func (s *Store) UpdateEvent(id int64, patch EventPatch) (*Event, error) {
 		add("waitlist_role_id", *patch.WaitlistRoleID)
 	}
 	if patch.StartsAt != nil {
+		if *patch.StartsAt <= 0 {
+			return nil, fmt.Errorf("%w: starts_at cannot be cleared", ErrInvalidEvent)
+		}
 		add("starts_at", *patch.StartsAt)
 	}
 	if patch.EndsAt != nil {

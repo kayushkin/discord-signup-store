@@ -91,6 +91,16 @@ On a timer, and nothing else: **finished events archived** every 5 minutes;
 **reminders checked** every minute. A finished event leaves **one line** in
 past-events — the table row folded flat — not a card of dead buttons.
 
+**A recurring event does not finish; it rolls.** It is one row, like Discord's
+one scheduled event. When an occurrence ends the date moves to the next one
+the rule gives, everyone on the roster is withdrawn and told nothing (the
+occurrence they signed up for happened), the reminders are owed again, and the
+occurrence that ran leaves its line in past events. Discord slides its own
+event forward the same way, and the import treats that as the same rollover.
+Every surface says `🔁 weekly` (or every 2 weeks, or monthly) beside the
+event; the card adds that signups are for this date. There is no series end,
+because Discord has none to give.
+
 ## 4. What each surface is for
 
 | surface | who sees it | what it is |
@@ -127,4 +137,14 @@ private no rather than a form that fails after being filled in.
 - **The table moves to the bottom of the channel every hour.** That is the price
   of it staying editable.
 - **A forum post's title can lag** under fast signups: Discord rate-limits
-  thread renames to about two per ten minutes. The card inside it stays current.
+  thread renames to about two per ten minutes, so the count in it moves at
+  most every ten. Becoming Full shows at once; a place opening up waits, on
+  purpose — it is usually taken again before the title could say so. The card
+  inside stays current.
+- **Every rename leaves "Event-Manager changed the title" in the post.** That
+  is Discord's system message, and Discord refuses to let anyone delete it
+  (measured: `403 code 50021`). The count in the title is worth the line; the
+  throttle keeps it to a few.
+- **Last week's people are gone from a recurring event.** The roster is per
+  date, not per series. Discord's Interested list carries over because it is a
+  subscription, not a seat.

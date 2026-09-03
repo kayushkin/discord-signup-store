@@ -146,7 +146,7 @@ func TestRoleSyncGrantsAndRevokesForEachState(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	ev, err := store.CreateEvent(Event{
-		GuildID: "g1", ChannelID: "c1", Name: "Roles", Capacity: 1,
+		GuildID: "g1", StartsAt: farFutureStart, ChannelID: "c1", Name: "Roles", Capacity: 1,
 		AttendingRoleID: "going", WaitlistRoleID: "waiting",
 	})
 	if err != nil {
@@ -781,18 +781,31 @@ func TestStripTitleDecorationsLeavesRealNamesAlone(t *testing.T) {
 	}
 }
 
-// TestACountRenameWaitsFiveMinutesButFullDoesNot is the budget. Discord allows
-// a thread about two renames per ten minutes; a count change alone spends one
-// every five, and becoming full — or stopping being full — spends the other
-// at once, because that is the change a reader most needs and it is rare.
-func TestACountRenameWaitsFiveMinutesButFullDoesNot(t *testing.T) {
+// TestACountRenameWaitsTenMinutesButFillingDoesNot pins the rename budget.
+// Discord allows a thread about two renames per ten minutes; a count change
+// alone spends one every ten, and becoming full spends the other at once,
+// because that is the change a reader most needs and it is rare. A place
+// opening up waits like a count change: it is usually taken again within
+// minutes, and a title that says open when the place has gone is the worse
+// lie. A moved date waits too — only the forum title carries it, and the
+// forum pair is what says it changed.
+func TestACountRenameWaitsTenMinutesButFillingDoesNot(t *testing.T) {
 	const at = int64(1_000_000)
 	base := func(attending int) *Event {
-		return &Event{Name: "Games", Capacity: 4, AttendingCount: attending,
-			NativeTitleWritten: "Games [1/4]", TitleWrittenAt: at}
+		ev := &Event{Name: "Games", Capacity: 4, AttendingCount: attending,
+			StartsAt: 1_700_000_000, Timezone: "UTC", TitleWrittenAt: at}
+		ev.NativeTitleWritten = nativeEventName(&Event{Name: "Games", Capacity: 4, AttendingCount: 1})
+		ev.ForumTitleWritten = forumPostTitle(&Event{Name: "Games", Capacity: 4, AttendingCount: 1,
+			StartsAt: 1_700_000_000, Timezone: "UTC"})
+		return ev
 	}
 	renamed := base(1)
 	renamed.Name = "Board games"
+	moved := base(1)
+	moved.StartsAt += 86400
+	wasFull := base(3)
+	wasFull.NativeTitleWritten = "[Full] Games"
+	wasFull.ForumTitleWritten = "[Full] Games — 11/14 10:13pm"
 	for _, c := range []struct {
 		name string
 		ev   *Event
@@ -802,18 +815,62 @@ func TestACountRenameWaitsFiveMinutesButFullDoesNot(t *testing.T) {
 		{"never written", &Event{Name: "Games", Capacity: 4, AttendingCount: 1}, at, true},
 		{"same title", base(1), at + 10, false},
 		{"count moved, 10s later", base(2), at + 10, false},
-		{"count moved, 4m59s later", base(2), at + 299, false},
-		{"count moved, 5m later", base(2), at + 300, true},
+		{"count moved, 9m59s later", base(2), at + 599, false},
+		{"count moved, 10m later", base(2), at + 600, true},
 		{"became full, at once", base(4), at + 1, true},
 		{"renamed by the organiser, at once", renamed, at + 1, true},
-		{"was full, someone left, at once", &Event{Name: "Games", Capacity: 4, AttendingCount: 3,
-			NativeTitleWritten: "[Full] Games", TitleWrittenAt: at}, at + 1, true},
+		{"date moved, waits its turn", moved, at + 1, false},
+		{"date moved, 10m later", moved, at + 600, true},
+		{"was full, someone left, waits its turn", wasFull, at + 1, false},
+		{"was full, someone left, 10m later", wasFull, at + 600, true},
 		{"uncapped, nothing to rename", &Event{Name: "Open", AttendingCount: 9,
-			NativeTitleWritten: "Open", TitleWrittenAt: at}, at + 9999, false},
+			NativeTitleWritten: "Open", ForumTitleWritten: "Open", TitleWrittenAt: at}, at + 9999, false},
 	} {
-		if got := titleRenameDue(c.ev, nativeEventName(c.ev), c.now); got != c.want {
+		if got := titleRenameDue(c.ev, nativeEventName(c.ev), forumPostTitle(c.ev), c.now); got != c.want {
 			t.Errorf("%s: due=%v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// TestFillingRenamesAtOnceAndAPlaceOpeningDoesNot is the budget end to end:
+// three renames inside ten minutes is a 429, so the fill takes the one slot a
+// count rename has left and the un-fill waits.
+func TestFillingRenamesAtOnceAndAPlaceOpeningDoesNot(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil, "board")
+	ev, err := store.CreateEvent(Event{
+		GuildID: "g1", ChannelID: "board", Name: "Games", Capacity: 2,
+		StartsAt:                time.Now().Add(48 * time.Hour).Unix(),
+		DiscordScheduledEventID: "native-5",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	names := func() (out []any) {
+		for _, c := range fake.recorded() {
+			if c.Method == http.MethodPatch && c.Path == "/guilds/g1/scheduled-events/native-5" {
+				out = append(out, c.Body["name"])
+			}
+		}
+		return
+	}
+	store.Join(ev.ID, "alice", "Alice", JoinedViaButton)
+	srv.syncAfterChange(ev.ID, nil)
+	store.Join(ev.ID, "bob", "Bob", JoinedViaButton)
+	srv.syncAfterChange(ev.ID, nil) // full: at once
+	if got := names(); len(got) != 2 || got[0] != "Games [1/2]" || got[1] != "[Full] Games" {
+		t.Fatalf("names = %v; want Games [1/2] then [Full] Games", got)
+	}
+	store.Leave(ev.ID, "bob", "")
+	srv.syncAfterChange(ev.ID, nil) // a place opened: the description goes, the name waits
+	got := names()
+	if len(got) != 3 {
+		t.Fatalf("%d native writes after the leave, want 3 — the description must still go", len(got))
+	}
+	if got[2] != nil {
+		t.Errorf("a place opening renamed the title to %v inside the window", got[2])
 	}
 }
 
