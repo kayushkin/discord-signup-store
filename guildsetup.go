@@ -11,7 +11,7 @@ import (
 
 // Setting a server up in one go: the category and the five channels this
 // service posts into, recorded on the guild's row, the forum adopted, the
-// how-to pinned, the tables drawn. Runs when the bot joins a server and on
+// tables drawn. Runs when the bot joins a server and on
 // POST /api/guilds/{id}/setup, and is safe to run again: a channel that
 // already exists under its name is reused, and a channel already recorded
 // that still exists is kept.
@@ -47,8 +47,8 @@ func (c *DiscordClient) ListGuildChannels(guildID string) ([]Channel, error) {
 }
 
 // SetUpGuild makes a server ready: every channel found or created, the row
-// written, the forum adopted, the how-to pinned, the tables drawn. Returns
-// the row as it now stands.
+// written, the forum adopted, the tables drawn. Returns the row as it now
+// stands.
 func (s *Server) SetUpGuild(guildID string) (*GuildTable, error) {
 	if s.discord == nil {
 		return nil, errors.New("no discord client configured")
@@ -137,9 +137,6 @@ func (s *Server) SetUpGuild(guildID string) (*GuildTable, error) {
 	}
 	if _, err := s.AdoptForum(guildID, forum); err != nil {
 		return nil, fmt.Errorf("adopt forum: %w", err)
-	}
-	if _, err := s.PublishHowToMessage(board, ""); err != nil {
-		return nil, fmt.Errorf("how-to: %w", err)
 	}
 	if err := s.RefreshEventTable(guildID); err != nil {
 		return nil, fmt.Errorf("draw table: %w", err)

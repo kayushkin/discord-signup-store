@@ -452,7 +452,7 @@ func CloseCustomID(eventID int64) string {
 	return fmt.Sprintf("%s:close:%d", customIDPrefix, eventID)
 }
 
-// CreateCustomID is the button on the how-to message. It carries event id 0,
+// CreateCustomID is the Create button on the management table. It carries event id 0,
 // because there is no event yet — the id slot is kept so one parser handles
 // every custom_id this service issues.
 func CreateCustomID() string {

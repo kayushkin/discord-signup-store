@@ -174,23 +174,6 @@ func TestCompactWhenKeepsMinutesOnlyWhenTheyMatter(t *testing.T) {
 	}
 }
 
-// TestTheStandingMessageOpensTheDashboard is the other half, and the reason
-// the button had to go somewhere rather than just go: the dashboard has no
-// entry point of its own, so deleting the only button that opens it would
-// strand the whole feature behind nothing.
-func TestTheStandingMessageOpensTheDashboard(t *testing.T) {
-	msg := RenderHowToMessage("board", "America/Los_Angeles")
-	rendered := fmt.Sprint(msg)
-	if !strings.Contains(rendered, myEventsButtonID) {
-		t.Error("the standing how-to message does not open the dashboard")
-	}
-	if !strings.Contains(rendered, CreateCustomID()) {
-		t.Error("the standing how-to message lost its Create button")
-	}
-}
-
-// TestUserSignupsInGuildAnswersThePerViewerQuestion: attending and waitlisted
-// events with their place, withdrawn and archived ones excluded.
 func TestUserSignupsInGuildAnswersThePerViewerQuestion(t *testing.T) {
 	store := testStore(t)
 	base := time.Now().Add(24 * time.Hour).Unix()

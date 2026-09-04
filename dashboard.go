@@ -39,9 +39,10 @@ const (
 	dashboardEventLimit = 6
 )
 
-// myEventsButtonID opens the per-viewer dashboard. It sits on the standing
-// how-to message, which is the one place in the channel that is about starting
-// something rather than about one event.
+// myEventsButtonID opens the per-viewer dashboard. Nothing renders the button
+// any more — it sat on the standing how-to message, retired 2026-09-04 — but
+// the handler stays so a press on a copy somebody kept still answers rather
+// than failing as an unknown action.
 const myEventsButtonID = customIDPrefix + ":my-events:0"
 
 // renderMyEventsDashboard draws the per-viewer table.

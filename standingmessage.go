@@ -4,12 +4,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
-	"net/http"
 )
 
-// standingMessageHowTo is the pinned "press this button" message.
-const standingMessageHowTo = "how-to"
+// Standing messages: ones this service keeps written rather than posts once.
+// The only kind there ever was, the pinned how-to, was retired 2026-09-04 —
+// it told people to press a Create button that had moved to the management
+// table, and carried a My events button retired before that — so nothing
+// writes a row here today. The table and these methods stay for the next
+// kind, and so that an old row means what it meant.
 
 // StandingMessage is a message this service keeps written rather than posts
 // once.
@@ -58,74 +60,4 @@ func (s *Store) ForgetStandingMessage(kind, channelID string) error {
 		return fmt.Errorf("forget standing message: %w", err)
 	}
 	return nil
-}
-
-// PublishHowToMessage writes the standing how-to into a channel: editing the
-// one already there, or posting and pinning a new one.
-//
-// It edits rather than re-posts because the wording changes and the message
-// does not. Re-posting was the only option before there was anywhere to record
-// the id, so every improvement to the text meant a second pinned how-to and
-// somebody deleting the first by hand.
-//
-// adoptMessageID lets an existing message be taken over — the one already
-// pinned in the channel, posted before any of this was recorded. Without it
-// the first publish after this change would post the duplicate it exists to
-// prevent.
-func (s *Server) PublishHowToMessage(channelID, adoptMessageID string) (string, error) {
-	if s.discord == nil {
-		return "", errors.New("no discord client configured")
-	}
-	messageID, err := s.store.StandingMessageID(standingMessageHowTo, channelID)
-	if err != nil {
-		return "", err
-	}
-	if messageID == "" && adoptMessageID != "" {
-		messageID = adoptMessageID
-	}
-	// The how-to names the guild's board channel, and the channel it is
-	// posted in tells us the guild.
-	guildID, err := s.discord.ChannelGuildID(channelID)
-	if err != nil {
-		return "", err
-	}
-	boardChannelID := s.guildChannels(guildID).Board
-	if boardChannelID == "" {
-		return "", fmt.Errorf("guild %s has no board channel recorded; PUT /api/guilds/%s/channels first", guildID, guildID)
-	}
-	body := RenderHowToMessage(boardChannelID, s.DefaultTimezone())
-
-	if messageID != "" {
-		err := s.discord.EditMessage(channelID, messageID, body)
-		if err == nil {
-			return messageID, s.store.RememberStandingMessage(standingMessageHowTo, channelID, messageID)
-		}
-		// Gone means somebody deleted it, which is a fine way to ask for a
-		// fresh one. Anything else is a real failure and must not be papered
-		// over by quietly posting a second copy.
-		var apiErr *APIError
-		if !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound {
-			return "", fmt.Errorf("edit how-to: %w", err)
-		}
-		log.Printf("[discord-signup] the how-to in %s is gone; posting a new one", channelID)
-		if err := s.store.ForgetStandingMessage(standingMessageHowTo, channelID); err != nil {
-			return "", err
-		}
-	}
-
-	messageID, err = s.discord.CreateMessage(channelID, body)
-	if err != nil {
-		return "", fmt.Errorf("post how-to: %w", err)
-	}
-	if err := s.discord.PinMessage(channelID, messageID); err != nil {
-		// Almost always a 403 for want of PIN_MESSAGES. Discord split that out
-		// of MANAGE_MESSAGES into its own permission (bit 51), so a bot invited
-		// before the split — or with an invite link that predates it — can
-		// delete messages and still not pin one. Logged rather than fatal: an
-		// unpinned how-to in an otherwise empty channel is still the first
-		// thing anyone reads.
-		log.Printf("[discord-signup] could not pin the how-to (needs PIN_MESSAGES, "+
-			"which is separate from MANAGE_MESSAGES): %v", err)
-	}
-	return messageID, s.store.RememberStandingMessage(standingMessageHowTo, channelID, messageID)
 }

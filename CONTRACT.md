@@ -34,7 +34,7 @@ service's, and proxying any other route publishes roster editing to the world.
 | POST | `/api/sync` | Pull native events from **every** server the bot is in and post a card for any new one. What the scheduler job calls; names no guild, so adding a server needs no change. |
 | POST | `/api/guilds/{guildID}/sync` | The same, for one guild. |
 | PUT | `/api/guilds/{guildID}/channels` | Record the guild's board, past-events and reminder channels: `{"board_channel_id","past_channel_id","reminder_channel_id"}`. Board is required; the other two may be empty, and an empty reminder channel turns reminders off for that guild. Needs no table first. |
-| POST | `/api/guilds/{guildID}/setup` | Make a server ready in one call: an **Events** category with `#events` (board and table), `#event-management`, `#event-forum` (tags added), `#past-events` and `#event-reminders` — each reused if a channel of that name exists, created otherwise — then the row written, the forum adopted, the how-to pinned and both tables drawn. Runs by itself when the bot joins a server. Safe to repeat. |
+| POST | `/api/guilds/{guildID}/setup` | Make a server ready in one call: an **Events** category with `#events` (board and table), `#event-management`, `#event-forum` (tags added), `#past-events` and `#event-reminders` — each reused if a channel of that name exists, created otherwise — then the row written, the forum adopted and both tables drawn. Runs by itself when the bot joins a server. Safe to repeat. |
 | GET | `/api/guilds/{guildID}/channels` | The guild's row back: table, management and the three channels. |
 | POST | `/api/events/complete-finished` | Archive events whose time has passed and strip the buttons off their cards. Also runs on a five-minute ticker. |
 
@@ -191,8 +191,7 @@ recorded refuses the Create form ("no board channel set up yet") rather than
 posting somewhere else; a guild with no past channel keeps finished cards
 where they are; a guild with no reminder channel is skipped by the reminder
 tick and nothing is stamped, so setting it later starts reminding about
-events that already exist. The how-to (`POST /api/channels/{id}/how-to`)
-reads its guild off the channel and needs the board recorded first.
+events that already exist.
 
 `PUT /api/guilds/{guildID}/management {"channel_id"}` points the management
 table at a channel and draws it. It is the event table drawn for organisers:
@@ -223,28 +222,10 @@ the management table's job.
 
 ## The personal dashboard
 
-`signup:my-events:0`, on the **standing how-to message**, opens an **ephemeral**
-Components V2 view — the one surface that is genuinely per-viewer, because a
-channel message renders identically for everyone and Discord fires no event when
-someone opens a channel.
-
-It used to sit on the table's last page, which put a control about the reader on
-a message about everybody. The table is about events now, and only events. ⚠️
-This paragraph previously claimed the button was on the table's last page *and*
-the standing message; it was only ever on the table, and the standing message
-carried nothing but **Create an event**. The button is the dashboard's only
-entry point, so moving it had to mean moving it somewhere — deleting it would
-have stranded the whole feature behind nothing.
-
-Each row conditions its buttons on the viewer: **Join** or **Leave** depending
-on whether they are in the event, their own state written on the row ("going",
-"waitlist #2"), and **Edit** only with `MANAGE_EVENTS`/`ADMINISTRATOR` or for
-the event's creator. `signup:dash-join:{id}` and `signup:dash-leave:{id}`
-answer with callback type 7 (**UPDATE_MESSAGE**), re-rendering the dashboard in
-place so the row flips under the cursor.
-
-Capped at six events: a row costs up to five components plus a separator, so
-six is 37 of the 40 budget — seven measured out at 43.
+Gone, with the standing how-to message that carried its button (retired
+2026-09-04: the how-to told people to press a Create button that had moved
+to the management table). Nothing per-viewer is left on any channel
+message; Details is the per-viewer surface and is opened from a row.
 
 ## Discussion threads
 
