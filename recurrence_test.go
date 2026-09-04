@@ -28,6 +28,9 @@ func TestTheFourWordsBecomeTheFourRules(t *testing.T) {
 		{"Every 2 Weeks", "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"},
 		{"every other week", "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"},
 		{"monthly", "FREQ=MONTHLY;BYDAY=2TU"}, // the 8th is in the second week
+		{"daily", "FREQ=DAILY"},
+		{"weekdays", "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"},
+		{"yearly", "FREQ=YEARLY;BYMONTH=9;BYMONTHDAY=8"},
 		{"never", ""},
 		{"", ""},
 	} {
@@ -64,9 +67,28 @@ func TestTheRulesBecomeDiscordsObject(t *testing.T) {
 	if !ok || fmt.Sprint(rule["by_weekday"]) != "[1]" {
 		t.Errorf("weekly with no day -> %v, want Tuesday (1) from the LA start", rule)
 	}
-	for _, unsupported := range []string{"FREQ=DAILY", "FREQ=WEEKLY;INTERVAL=3", "FREQ=WEEKLY;BYDAY=MO,TU", "FREQ=MONTHLY;BYMONTHDAY=8"} {
+	rule, ok = discordRecurrenceRule(mk("FREQ=DAILY"), "UTC")
+	if !ok || rule["frequency"] != discordFrequencyDaily || rule["by_weekday"] != nil {
+		t.Errorf("daily -> %v ok=%v, want frequency 3 and no weekday set", rule, ok)
+	}
+	rule, ok = discordRecurrenceRule(mk("FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"), "UTC")
+	if !ok || fmt.Sprint(rule["by_weekday"]) != "[0 1 2 3 4]" {
+		t.Errorf("weekdays -> %v ok=%v, want Discord's every-weekday example", rule, ok)
+	}
+	rule, ok = discordRecurrenceRule(mk("FREQ=YEARLY"), "UTC")
+	if !ok || rule["frequency"] != discordFrequencyYearly || fmt.Sprint(rule["by_month"]) != "[9]" || fmt.Sprint(rule["by_month_day"]) != "[8]" {
+		t.Errorf("yearly -> %v ok=%v, want September 8 from the LA start", rule, ok)
+	}
+	// Outside Discord's business rules: refused, and validateRecurrence
+	// refuses the same set so none of them is ever stored.
+	for _, unsupported := range []string{"FREQ=WEEKLY;INTERVAL=3", "FREQ=WEEKLY;BYDAY=MO,TU",
+		"FREQ=MONTHLY;BYMONTHDAY=8", "FREQ=DAILY;BYDAY=MO,WE", "FREQ=DAILY;INTERVAL=2",
+		"FREQ=YEARLY;BYMONTH=6", "FREQ=WEEKLY;COUNT=4", "FREQ=HOURLY"} {
 		if _, ok := discordRecurrenceRule(mk(unsupported), "UTC"); ok {
 			t.Errorf("%q was offered to Discord, which would refuse it", unsupported)
+		}
+		if err := validateRecurrence(unsupported, "UTC"); err == nil {
+			t.Errorf("%q would be stored, and nothing could act on it", unsupported)
 		}
 	}
 }
@@ -192,6 +214,14 @@ func TestTheNextOccurrenceIsTheOneAfterNow(t *testing.T) {
 			start.Add(time.Hour), time.Date(2026, 4, 7, 19, 0, 0, 0, la)},
 		{"monthly, fifth Tuesday skips months without one", "FREQ=MONTHLY;BYDAY=5TU",
 			time.Date(2026, 3, 31, 20, 0, 0, 0, la), time.Date(2026, 6, 30, 19, 0, 0, 0, la)},
+		{"daily is tomorrow at the same wall clock", "FREQ=DAILY",
+			start.Add(time.Hour), time.Date(2026, 3, 4, 19, 0, 0, 0, la)},
+		{"daily, a week missed, is the day after now", "FREQ=DAILY",
+			time.Date(2026, 3, 10, 12, 0, 0, 0, la), time.Date(2026, 3, 10, 19, 0, 0, 0, la)},
+		{"weekdays skip the weekend", "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR",
+			time.Date(2026, 3, 6, 20, 0, 0, 0, la), time.Date(2026, 3, 9, 19, 0, 0, 0, la)},
+		{"yearly is the same date next year", "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=3",
+			start.Add(time.Hour), time.Date(2027, 3, 3, 19, 0, 0, 0, la)},
 	} {
 		got, ok := nextOccurrence(c.rule, start, c.after)
 		if !ok {
@@ -202,7 +232,36 @@ func TestTheNextOccurrenceIsTheOneAfterNow(t *testing.T) {
 			t.Errorf("%s: next = %s, want %s", c.name, got, c.want)
 		}
 	}
-	if _, ok := nextOccurrence("FREQ=DAILY", start, start); ok {
+	if _, ok := nextOccurrence("FREQ=WEEKLY;INTERVAL=3", start, start); ok {
 		t.Error("a rule Discord cannot express must not roll either")
+	}
+}
+
+// TestEveryRuleIsDescribedInWords is the table showing "FREQ=DAILY" beside
+// "weekly": no surface may ever show an RRULE.
+func TestEveryRuleIsDescribedInWords(t *testing.T) {
+	for rule, want := range map[string]string{
+		"":                                    "never",
+		"FREQ=DAILY":                          "daily",
+		"FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR":     "every weekday",
+		"FREQ=DAILY;BYDAY=SA,SU":              "weekends",
+		"FREQ=WEEKLY;BYDAY=FR":                "weekly",
+		"FREQ=WEEKLY;INTERVAL=2;BYDAY=FR":     "every 2 weeks",
+		"FREQ=MONTHLY;BYDAY=2TU":              "monthly",
+		"FREQ=YEARLY;BYMONTH=7;BYMONTHDAY=24": "yearly",
+	} {
+		if got := describeRepeat(rule); got != want {
+			t.Errorf("%q described as %q, want %q", rule, got, want)
+		}
+		if strings.Contains(describeRepeat(rule), "FREQ") {
+			t.Errorf("%q leaked the RRULE", rule)
+		}
+	}
+	// What Discord's own "every day" form sends, through the import.
+	if got := recurrenceRuleText(json.RawMessage(`{"frequency":3,"interval":1,"by_weekday":null}`)); got != "FREQ=DAILY" {
+		t.Errorf("Discord's daily came in as %q", got)
+	}
+	if got := recurrenceRuleText(json.RawMessage(`{"frequency":0,"interval":1,"by_month":[7],"by_month_day":[24]}`)); got != "FREQ=YEARLY;BYMONTH=7;BYMONTHDAY=24" {
+		t.Errorf("Discord's yearly came in as %q", got)
 	}
 }

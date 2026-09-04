@@ -35,11 +35,13 @@ type recurrenceChoice struct {
 	Rule  string
 }
 
+// Exactly the shapes Discord's own form can make, so every choice here can
+// be sent, described and rolled. The day, week and date come from the start.
 var recurrenceChoices = []recurrenceChoice{
 	{"Every day", "FREQ=DAILY"},
+	{"Every weekday", "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"},
 	{"Every week", "FREQ=WEEKLY"},
 	{"Every other week", "FREQ=WEEKLY;INTERVAL=2"},
-	{"Every weekday", "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"},
 	{"Every month", "FREQ=MONTHLY"},
 	{"Every year", "FREQ=YEARLY"},
 }

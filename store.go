@@ -876,8 +876,13 @@ func validateRecurrence(rule, timezone string) error {
 	if _, err := time.LoadLocation(timezone); err != nil {
 		return fmt.Errorf("%w: timezone %q is not an IANA zone name: %v", ErrInvalidEvent, timezone, err)
 	}
-	if !strings.Contains(strings.ToUpper(rule), "FREQ=") {
-		return fmt.Errorf("%w: recurrence_rule %q is not an RRULE (it needs FREQ=)", ErrInvalidEvent, rule)
+	// Only a rule this service can describe, send to Discord and roll forward
+	// is stored. Anything else would sit on a row as text nothing can act on
+	// — which is how the table came to show "FREQ=DAILY" beside "weekly".
+	if _, ok := parseRRule(rule); !ok {
+		return fmt.Errorf("%w: recurrence_rule %q is not one this service can act on — "+
+			"daily (or a weekday set Discord allows), weekly on one day (interval 1 or 2), "+
+			"monthly on the nth weekday, or yearly on one date", ErrInvalidEvent, rule)
 	}
 	return nil
 }

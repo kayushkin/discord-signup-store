@@ -239,7 +239,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	10 the recurrence rule is sent to Discord, and Repeat sits on the row
 //	11 Details shows the description; Create sits under a divider
 //	12 a recurring event says so on the row, the card and Details
-const publishFormatVersion = 12
+//	13 daily and yearly rules are described in words, never as an RRULE
+const publishFormatVersion = 13
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //

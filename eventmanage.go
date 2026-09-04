@@ -143,7 +143,7 @@ func (s *Server) handleRepeatButton(w http.ResponseWriter, in *Interaction, even
 			"custom_id": modalID,
 			"title":     truncate("Repeat "+ev.Name, 45),
 			"components": []any{
-				row(modalTextInput(fieldRepeats+"@"+modalID, "Repeats — weekly, every 2 weeks, monthly, or never",
+				row(modalTextInput(fieldRepeats+"@"+modalID, "Repeats — "+repeatWords,
 					describeRepeat(ev.RecurrenceRule), "weekly", textInputStyleShort, true, 40)),
 				// This occurrence's end, not the series' — Discord has no series
 				// end a client can set, so there is none to offer. The label

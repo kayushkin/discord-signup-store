@@ -12,26 +12,47 @@ import (
 // Storage is an RFC 5545 RRULE string; Discord speaks a structured object with
 // its own constraints. Until 2026-09-03 only the import direction existed: a
 // rule set on the web page was stored, displayed, and never sent, so Discord's
-// event never repeated. The four rules an organiser can set from a Discord
-// form are exactly the four Discord can represent, and nothing else is offered.
+// event never repeated. Until 2026-09-04 only weekly, every-other-week and
+// monthly were understood, and an event made "every day" in Discord's own
+// form came in as FREQ=DAILY, which nothing could describe, send or roll —
+// the table showed the raw RRULE beside "weekly" on the next row.
 //
-// Discord's constraints (guild scheduled event recurrence_rule):
+// What is understood now is exactly what Discord's form can make, read from
+// its documented business rules (docs.discord.com, guild-scheduled-event):
 //
+//	DAILY    every day, or a "known set" of weekdays: Mon–Fri, Tue–Sat,
+//	         Sun–Thu, Fri–Sat, Sat–Sun, Sun–Mon; interval 1
 //	WEEKLY   by_weekday of exactly one day; interval 1 or 2 — the only
 //	         frequency that may have interval 2
-//	MONTHLY  by_n_weekday of exactly one {n 1..5, day}
-//	DAILY, YEARLY: not offered here
-//	count, end, by_year_day: not settable by clients
+//	MONTHLY  by_n_weekday of exactly one {n 1..5, day}; interval 1
+//	YEARLY   by_month and by_month_day of exactly one each; interval 1
+//	count, end, by_year_day: not settable by clients, so no series end
 //
-// Discord numbers frequency downward (YEARLY 0, MONTHLY 1, WEEKLY 2, DAILY 3)
-// and weekdays from Monday = 0.
+// Anything else is refused at write time (validateRecurrence), so a rule that
+// cannot be described, sent and rolled is never stored. Discord numbers
+// frequency downward (YEARLY 0, MONTHLY 1, WEEKLY 2, DAILY 3) and weekdays
+// from Monday = 0.
 
 const (
+	discordFrequencyYearly  = 0
 	discordFrequencyMonthly = 1
 	discordFrequencyWeekly  = 2
+	discordFrequencyDaily   = 3
 )
 
 var rruleDayNames = []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"} // Monday first, as Discord counts
+
+// dailyKnownSets are the only weekday sets Discord accepts on a DAILY rule,
+// keyed by the RRULE BYDAY list in Discord's own order, with the word each
+// form uses for it.
+var dailyKnownSets = map[string]string{
+	"MO,TU,WE,TH,FR": "every weekday",
+	"TU,WE,TH,FR,SA": "Tuesday to Saturday",
+	"SU,MO,TU,WE,TH": "Sunday to Thursday",
+	"FR,SA":          "Fridays and Saturdays",
+	"SA,SU":          "weekends",
+	"SU,MO":          "Sundays and Mondays",
+}
 
 // discordWeekday is Discord's weekday number for a Go time, Monday = 0.
 func discordWeekday(t time.Time) int { return (int(t.Weekday()) + 6) % 7 }
@@ -51,16 +72,24 @@ func startInZone(ev *Event, fallbackZone string) time.Time {
 	return time.Unix(ev.StartsAt, 0).In(loc)
 }
 
+// repeatWords is what the Repeat form accepts, for its label and its error.
+const repeatWords = "daily, weekdays, weekly, every 2 weeks, monthly, yearly, or never"
+
 // repeatWordToRRule turns what somebody typed into the rule stored.
 //
-// The weekday, and for monthly the week of the month, come from the event's
-// start: "weekly" means every week on the day it starts. Returns "" for never.
+// The weekday, the week of the month and the date of the year come from the
+// event's start: "weekly" means every week on the day it starts. Returns ""
+// for never.
 func repeatWordToRRule(word string, start time.Time) (string, error) {
 	w := strings.ToLower(strings.Join(strings.Fields(word), " "))
 	day := rruleDayNames[discordWeekday(start)]
 	switch w {
 	case "", "never", "none", "no", "once", "one off", "one-off", "does not repeat":
 		return "", nil
+	case "daily", "every day", "each day":
+		return "FREQ=DAILY", nil
+	case "weekdays", "every weekday", "each weekday", "mon-fri", "monday to friday":
+		return "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR", nil
 	case "weekly", "every week", "each week":
 		return "FREQ=WEEKLY;BYDAY=" + day, nil
 	case "every 2 weeks", "every two weeks", "every other week", "biweekly", "fortnightly", "2 weeks":
@@ -68,36 +97,55 @@ func repeatWordToRRule(word string, start time.Time) (string, error) {
 	case "monthly", "every month", "each month":
 		n := (start.Day()-1)/7 + 1
 		return fmt.Sprintf("FREQ=MONTHLY;BYDAY=%d%s", n, day), nil
+	case "yearly", "annually", "every year", "each year":
+		return fmt.Sprintf("FREQ=YEARLY;BYMONTH=%d;BYMONTHDAY=%d", int(start.Month()), start.Day()), nil
 	}
-	return "", fmt.Errorf("%w: could not read %q — try weekly, every 2 weeks, monthly, or never",
-		ErrInvalidEvent, word)
+	return "", fmt.Errorf("%w: could not read %q — try %s", ErrInvalidEvent, word, repeatWords)
 }
 
-// describeRepeat is the rule in the words the form accepts, so the form opens
-// with something editable rather than an RRULE to decode by eye.
+// describeRepeat is the rule in words, for every surface that says an event
+// repeats. Never the RRULE: a rule this cannot describe cannot be stored,
+// because validateRecurrence runs the same parser first.
 func describeRepeat(rrule string) string {
-	parsed, ok := parseRRule(rrule)
-	switch {
-	case rrule == "":
+	if rrule == "" {
 		return "never"
-	case !ok:
-		return rrule // something the web page set that this form cannot express; shown as is
-	case parsed.freq == "WEEKLY" && parsed.interval == 2:
-		return "every 2 weeks"
-	case parsed.freq == "WEEKLY":
-		return "weekly"
-	case parsed.freq == "MONTHLY":
-		return "monthly"
 	}
-	return rrule
+	parsed, ok := parseRRule(rrule)
+	if !ok {
+		return "on a schedule this service cannot read" // unreachable for stored rules
+	}
+	switch parsed.freq {
+	case "DAILY":
+		if parsed.byDay == "" {
+			return "daily"
+		}
+		return dailyKnownSets[parsed.byDay]
+	case "WEEKLY":
+		if parsed.interval == 2 {
+			return "every 2 weeks"
+		}
+		return "weekly"
+	case "MONTHLY":
+		return "monthly"
+	case "YEARLY":
+		return "yearly"
+	}
+	return "on a schedule this service cannot read"
 }
 
+// rrule is a parsed rule, holding only the shapes Discord can take.
 type rrule struct {
 	freq     string
 	interval int
-	byDay    string // "TU" or "2TU"
+	byDay    string // "TU", "2TU", or for DAILY a known set "MO,TU,WE,TH,FR"
+	byMonth  int    // YEARLY only
+	monthDay int    // YEARLY only
 }
 
+// parseRRule reads a rule and reports whether it is one this service can
+// describe, send to Discord and roll forward. ok is false for everything
+// outside Discord's business rules — COUNT, UNTIL, an interval over two, a
+// weekly rule with several days, a daily set Discord does not know.
 func parseRRule(s string) (rrule, bool) {
 	out := rrule{interval: 1}
 	if s == "" {
@@ -115,15 +163,84 @@ func parseRRule(s string) (rrule, bool) {
 			}
 			out.interval = n
 		case "BYDAY":
-			if strings.Contains(v, ",") {
-				return out, false // Discord takes one day
-			}
 			out.byDay = v
+		case "BYMONTH":
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return out, false
+			}
+			out.byMonth = n
+		case "BYMONTHDAY":
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return out, false
+			}
+			out.monthDay = n
 		default:
-			return out, false // COUNT, UNTIL, BYMONTHDAY…: not something Discord accepts from us
+			return out, false // COUNT, UNTIL, BYSETPOS…: not something Discord accepts from us
 		}
 	}
-	return out, out.freq != ""
+	switch out.freq {
+	case "DAILY":
+		if out.interval != 1 || out.byMonth != 0 || out.monthDay != 0 {
+			return out, false
+		}
+		if out.byDay != "" {
+			if _, known := dailyKnownSets[out.byDay]; !known {
+				return out, false
+			}
+		}
+	case "WEEKLY":
+		if out.interval < 1 || out.interval > 2 || out.byMonth != 0 || out.monthDay != 0 {
+			return out, false
+		}
+		if out.byDay != "" {
+			if _, found := dayIndex(out.byDay); !found {
+				return out, false
+			}
+		}
+	case "MONTHLY":
+		if out.interval != 1 || out.byMonth != 0 || out.monthDay != 0 {
+			return out, false
+		}
+		if out.byDay != "" {
+			if _, _, ok := nthWeekday(out.byDay); !ok {
+				return out, false
+			}
+		}
+	case "YEARLY":
+		if out.interval != 1 || out.byDay != "" {
+			return out, false
+		}
+		if (out.byMonth == 0) != (out.monthDay == 0) {
+			return out, false // both or neither: neither means "the start's date"
+		}
+		if out.byMonth != 0 && (out.byMonth < 1 || out.byMonth > 12 || out.monthDay < 1 || out.monthDay > 31) {
+			return out, false
+		}
+	default:
+		return out, false
+	}
+	return out, true
+}
+
+// nthWeekday reads "2TU" as (2, Tuesday).
+func nthWeekday(byDay string) (n, day int, ok bool) {
+	digits := strings.TrimRight(byDay, "MOTUWEHFRSA")
+	name := strings.TrimLeft(byDay, "-0123456789")
+	n = 0
+	if digits != "" {
+		v, err := strconv.Atoi(digits)
+		if err != nil || v < 1 || v > 5 {
+			return 0, 0, false
+		}
+		n = v
+	}
+	day, found := dayIndex(name)
+	if !found {
+		return 0, 0, false
+	}
+	return n, day, true
 }
 
 // discordRecurrenceRule is the object to send Discord for an event's rule.
@@ -146,44 +263,45 @@ func discordRecurrenceRule(ev *Event, fallbackZone string) (rule map[string]any,
 		"interval": parsed.interval,
 	}
 	switch parsed.freq {
-	case "WEEKLY":
-		if parsed.interval < 1 || parsed.interval > 2 {
-			return nil, false
+	case "DAILY":
+		base["frequency"] = discordFrequencyDaily
+		if parsed.byDay != "" {
+			days := []int{}
+			for _, name := range strings.Split(parsed.byDay, ",") {
+				d, _ := dayIndex(name)
+				days = append(days, d)
+			}
+			base["by_weekday"] = days
 		}
+		return base, true
+	case "WEEKLY":
 		day := discordWeekday(start)
 		if parsed.byDay != "" {
-			d, found := dayIndex(parsed.byDay)
-			if !found {
-				return nil, false
-			}
-			day = d
+			day, _ = dayIndex(parsed.byDay)
 		}
 		base["frequency"] = discordFrequencyWeekly
 		base["by_weekday"] = []int{day}
 		return base, true
 	case "MONTHLY":
-		if parsed.interval != 1 {
-			return nil, false
-		}
 		n, day := (start.Day()-1)/7+1, discordWeekday(start)
 		if parsed.byDay != "" {
-			digits := strings.TrimRight(parsed.byDay, "MOTUWEHFRSA")
-			name := strings.TrimLeft(parsed.byDay, "-0123456789")
-			if digits != "" {
-				v, err := strconv.Atoi(digits)
-				if err != nil || v < 1 || v > 5 {
-					return nil, false
-				}
-				n = v
+			pn, pd, _ := nthWeekday(parsed.byDay)
+			if pn != 0 {
+				n = pn
 			}
-			d, found := dayIndex(name)
-			if !found {
-				return nil, false
-			}
-			day = d
+			day = pd
 		}
 		base["frequency"] = discordFrequencyMonthly
 		base["by_n_weekday"] = []map[string]any{{"n": n, "day": day}}
+		return base, true
+	case "YEARLY":
+		month, day := int(start.Month()), start.Day()
+		if parsed.byMonth != 0 {
+			month, day = parsed.byMonth, parsed.monthDay
+		}
+		base["frequency"] = discordFrequencyYearly
+		base["by_month"] = []int{month}
+		base["by_month_day"] = []int{day}
 		return base, true
 	}
 	return nil, false
@@ -206,7 +324,7 @@ func dayIndex(name string) (int, bool) {
 // can move on before Discord's copy is read back.
 //
 // ok is false for a rule this service cannot expand, which is the same set
-// discordRecurrenceRule refuses; such a rule never sends and never rolls.
+// parseRRule refuses; such a rule never sends and never rolls.
 func nextOccurrence(rule string, start, after time.Time) (next time.Time, ok bool) {
 	parsed, valid := parseRRule(rule)
 	if !valid {
@@ -214,48 +332,53 @@ func nextOccurrence(rule string, start, after time.Time) (next time.Time, ok boo
 	}
 	loc := start.Location()
 	hour, minute, second := start.Clock()
+	// Date arithmetic is done on calendar days so a clock change moves the
+	// instant, not the hour.
+	at := func(year int, month time.Month, day int) time.Time {
+		return time.Date(year, month, day, hour, minute, second, 0, loc)
+	}
 	switch parsed.freq {
-	case "WEEKLY":
-		if parsed.interval < 1 || parsed.interval > 2 {
-			return time.Time{}, false
+	case "DAILY":
+		allowed := map[int]bool{}
+		if parsed.byDay != "" {
+			for _, name := range strings.Split(parsed.byDay, ",") {
+				d, _ := dayIndex(name)
+				allowed[d] = true
+			}
 		}
+		candidate := at(start.Year(), start.Month(), start.Day())
+		for tries := 0; tries < 14; tries++ {
+			candidate = at(candidate.Year(), candidate.Month(), candidate.Day()+1)
+			if candidate.After(after) && (len(allowed) == 0 || allowed[discordWeekday(candidate)]) {
+				return candidate, true
+			}
+			if !candidate.After(after) {
+				tries-- // catching up to `after` does not spend a try
+				if candidate.Sub(after) < -400*24*time.Hour {
+					candidate = at(after.Year(), after.Month(), after.Day()-1)
+				}
+			}
+		}
+		return time.Time{}, false
+	case "WEEKLY":
 		day := discordWeekday(start)
 		if parsed.byDay != "" {
-			d, found := dayIndex(parsed.byDay)
-			if !found {
-				return time.Time{}, false
-			}
-			day = d
+			day, _ = dayIndex(parsed.byDay)
 		}
-		// The first candidate is the rule's weekday in the start's own week,
-		// then every interval weeks after; the date arithmetic is done on
-		// calendar days so a clock change moves the instant, not the hour.
-		candidate := time.Date(start.Year(), start.Month(), start.Day()-(discordWeekday(start)-day), hour, minute, second, 0, loc)
+		candidate := at(start.Year(), start.Month(), start.Day()-(discordWeekday(start)-day))
 		step := 7 * parsed.interval
 		for !candidate.After(after) {
-			candidate = time.Date(candidate.Year(), candidate.Month(), candidate.Day()+step, hour, minute, second, 0, loc)
+			candidate = at(candidate.Year(), candidate.Month(), candidate.Day()+step)
 		}
 		return candidate, true
 	case "MONTHLY":
-		if parsed.interval != 1 {
-			return time.Time{}, false
-		}
 		n, day := (start.Day()-1)/7+1, discordWeekday(start)
 		if parsed.byDay != "" {
-			digits := strings.TrimRight(parsed.byDay, "MOTUWEHFRSA")
-			name := strings.TrimLeft(parsed.byDay, "-0123456789")
-			if digits != "" {
-				v, err := strconv.Atoi(digits)
-				if err != nil || v < 1 || v > 5 {
-					return time.Time{}, false
-				}
-				n = v
+			pn, pd, _ := nthWeekday(parsed.byDay)
+			if pn != 0 {
+				n = pn
 			}
-			d, found := dayIndex(name)
-			if !found {
-				return time.Time{}, false
-			}
-			day = d
+			day = pd
 		}
 		// Month by month from the start's own month. A fifth weekday exists
 		// in some months and not others; a month without one is skipped, as
@@ -268,6 +391,18 @@ func nextOccurrence(rule string, start, after time.Time) (next time.Time, ok boo
 			month++
 			if month > time.December {
 				month, year = time.January, year+1
+			}
+		}
+		return time.Time{}, false
+	case "YEARLY":
+		month, day := start.Month(), start.Day()
+		if parsed.byMonth != 0 {
+			month, day = time.Month(parsed.byMonth), parsed.monthDay
+		}
+		for year := start.Year(); year < start.Year()+8; year++ {
+			candidate := at(year, month, day)
+			if candidate.Month() == month && candidate.After(after) {
+				return candidate, true // a 29 February rolls to the next leap year
 			}
 		}
 		return time.Time{}, false

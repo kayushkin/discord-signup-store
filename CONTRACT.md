@@ -389,13 +389,20 @@ grow a decoration per publish.
 ## Recurrence
 
 Stored as an RFC 5545 RRULE and **sent to Discord** on every publish — until
-2026-09-03 it was stored, displayed, and never sent. The Repeat form offers the
-four rules Discord can represent and nothing else: `weekly`, `every 2 weeks`,
-`monthly` (the nth weekday of the month) and `never`, each taking its weekday
+2026-09-03 it was stored, displayed, and never sent. What is understood is
+exactly what Discord's own form can make, from its documented business rules:
+`daily` (every day, or one of the six weekday sets Discord allows — `weekdays`
+is Mon–Fri), `weekly` on one day, `every 2 weeks`, `monthly` on the nth
+weekday, `yearly` on one date, and `never`, each taking its day, week or date
 from the event's start **in its own zone**. `never` sends `recurrence_rule:
-null`, which is how Discord stops repeating. A rule the web page set that
-Discord cannot express — daily, yearly, several days, an interval over two — is
-left out of the request rather than sent and refused, and logged.
+null`, which is how Discord stops repeating. **Anything else is refused at
+write time** — an interval over two, several days on a weekly rule, `COUNT`,
+`UNTIL`, a daily set Discord does not know — so a rule nothing can describe,
+send or roll is never stored, and no surface ever shows an RRULE. Until
+2026-09-04 an event made "every day" in Discord's form came in as
+`FREQ=DAILY` that nothing understood, and the table showed it raw beside
+"weekly". An imported rule takes the server's default zone, not UTC: a
+Friday-evening Los Angeles event worked out in UTC is a Saturday.
 
 A recurring event is **one row**, the way Discord holds it as one scheduled
 event, and it is never completed by the sweep. When an occurrence ends — its

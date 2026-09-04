@@ -268,7 +268,7 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 			Location:               stripLocationPlaceholder(r.EntityMetadata.Location),
 			EntityType:             discordEntityTypeNames[r.EntityType],
 			RecurrenceRule:         recurrenceRuleText(r.RecurrenceRule),
-			Timezone:               recurrenceTimezone(r.RecurrenceRule),
+			Timezone:               recurrenceTimezone(r.RecurrenceRule, s.DefaultTimezone()),
 			Origin:                 OriginDiscord,
 			DiscordInterestedCount: r.UserCount,
 			DiscordSyncedAt:        now(),
@@ -406,21 +406,26 @@ func recurrenceRuleText(raw json.RawMessage) string {
 	if len(rr.ByNWeekday) == 1 && rr.ByNWeekday[0].Day >= 0 && rr.ByNWeekday[0].Day < len(dayNames) {
 		parts = append(parts, fmt.Sprintf("BYDAY=%d%s", rr.ByNWeekday[0].N, dayNames[rr.ByNWeekday[0].Day]))
 	}
+	// A yearly rule is one date.
+	if len(rr.ByMonth) == 1 && len(rr.ByMonthDay) == 1 {
+		parts = append(parts, fmt.Sprintf("BYMONTH=%d;BYMONTHDAY=%d", rr.ByMonth[0], rr.ByMonthDay[0]))
+	}
 	return strings.Join(parts, ";")
 }
 
 // recurrenceTimezone reports the zone a recurring Discord event runs in.
 //
-// Discord does not send one: its recurrence_rule carries no tzid, and the start
-// time is an absolute instant. UTC is therefore the only honest answer for an
-// imported rule — it is what Discord actually means — and the web page is where
-// a real zone gets set. Returning "" instead would fail validateRecurrence and
-// make the import refuse every recurring event.
-func recurrenceTimezone(raw json.RawMessage) string {
+// Discord does not send one: its recurrence_rule carries no tzid, and the
+// start time is an absolute instant. The server's default zone is the one a
+// person made the event in, and it is the zone the next occurrence is worked
+// out in — UTC, which this returned until 2026-09-04, put a Friday-evening
+// Los Angeles event on Saturday. Returning "" instead would fail
+// validateRecurrence and make the import refuse every recurring event.
+func recurrenceTimezone(raw json.RawMessage, defaultZone string) string {
 	if len(raw) == 0 || string(raw) == "null" {
 		return ""
 	}
-	return "UTC"
+	return defaultZone
 }
 
 // PublishToDiscord creates a native scheduled event for a local roster, so it
