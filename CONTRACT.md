@@ -34,6 +34,7 @@ service's, and proxying any other route publishes roster editing to the world.
 | POST | `/api/sync` | Pull native events from **every** server the bot is in and post a card for any new one. What the scheduler job calls; names no guild, so adding a server needs no change. |
 | POST | `/api/guilds/{guildID}/sync` | The same, for one guild. |
 | PUT | `/api/guilds/{guildID}/channels` | Record the guild's board, past-events and reminder channels: `{"board_channel_id","past_channel_id","reminder_channel_id"}`. Board is required; the other two may be empty, and an empty reminder channel turns reminders off for that guild. Needs no table first. |
+| POST | `/api/guilds/{guildID}/setup` | Make a server ready in one call: an **Events** category with `#events` (board and table), `#event-management`, `#event-forum` (tags added), `#past-events` and `#event-reminders` — each reused if a channel of that name exists, created otherwise — then the row written, the forum adopted, the how-to pinned and both tables drawn. Runs by itself when the bot joins a server. Safe to repeat. |
 | GET | `/api/guilds/{guildID}/channels` | The guild's row back: table, management and the three channels. |
 | POST | `/api/events/complete-finished` | Archive events whose time has passed and strip the buttons off their cards. Also runs on a five-minute ticker. |
 

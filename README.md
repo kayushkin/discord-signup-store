@@ -143,8 +143,13 @@ operation.
    save by sending a PING and some deliberately bad signatures; `deploy.sh`
    checks both behaviours before it reports success.
 8. **Per server.** Invite the bot with the OAuth2 URL from the Developer
-   Portal (scopes `bot` and `applications.commands`), then record where it
-   posts — every channel is per guild, none is an env var:
+   Portal (scopes `bot` and `applications.commands`). On joining it sets the
+   server up by itself — an **Events** category with `#events`,
+   `#event-management`, `#event-forum`, `#past-events` and
+   `#event-reminders`, reusing any channel of that name — and
+   `POST /api/guilds/{id}/setup` does the same on demand. To point it at
+   channels of your own instead, record them — every channel is per guild,
+   none is an env var:
    ```bash
    G=<guild id>; S=http://127.0.0.1:8312
    curl -s -X PUT $S/api/guilds/$G/channels -H 'Content-Type: application/json' \

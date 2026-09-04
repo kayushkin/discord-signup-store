@@ -52,8 +52,10 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver) (*GatewayLis
 	// does not need would be asking for data it should not hold.
 	// Scheduled events for the Interested bridge, reactions for the ✅ join on
 	// forum posts. Both standard intents — nothing privileged.
+	// GUILDS is what delivers GUILD_CREATE, which is how the bot notices it
+	// was added to a server and sets it up.
 	session.Identify.Intents = discordgo.IntentGuildScheduledEvents |
-		discordgo.IntentGuildMessageReactions
+		discordgo.IntentGuildMessageReactions | discordgo.IntentGuilds
 
 	listener := &GatewayListener{session: session, server: server}
 	session.AddHandler(listener.onUserAdd)
@@ -63,6 +65,7 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver) (*GatewayLis
 	session.AddHandler(listener.onScheduledEventCreated)
 	session.AddHandler(listener.onScheduledEventDeleted)
 	session.AddHandler(listener.onScheduledEventChanged)
+	session.AddHandler(listener.onGuildCreate)
 	session.AddHandler(func(_ *discordgo.Session, r *discordgo.Ready) {
 		log.Printf("[discord-signup] gateway ready as %s#%s, %d guild(s)",
 			r.User.Username, r.User.Discriminator, len(r.Guilds))
@@ -276,6 +279,23 @@ func (g *GatewayListener) onScheduledEventDeleted(_ *discordgo.Session, e *disco
 	}
 	if err := g.server.cancelEventEverywhere(ev, "its Discord event was deleted"); err != nil {
 		log.Printf("[discord-signup] cancel after native delete %s: %v", e.ID, err)
+	}
+}
+
+// onGuildCreate sets a server up the moment the bot is added to it. Discord
+// also sends GUILD_CREATE for every server on every connect, so this asks the
+// store first and does nothing for a server already set up — a reconnect must
+// not redraw every table in every server.
+func (g *GatewayListener) onGuildCreate(_ *discordgo.Session, e *discordgo.GuildCreate) {
+	if e.Guild == nil || e.Unavailable {
+		return
+	}
+	if ch, err := g.server.store.GuildChannels(e.ID); err != nil || ch.Board != "" {
+		return
+	}
+	log.Printf("[discord-signup] joined %q (%s); setting it up", e.Name, e.ID)
+	if _, err := g.server.SetUpGuild(e.ID); err != nil {
+		log.Printf("[discord-signup] set up guild %s: %v", e.ID, err)
 	}
 }
 
