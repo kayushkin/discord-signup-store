@@ -296,3 +296,41 @@ func TestTheWebFormAcceptsATypedTime(t *testing.T) {
 			"9/29 5pm", got.Format("2006-01-02 15:04 MST"))
 	}
 }
+
+// TestARunningEventIsPushedWithoutItsTimes: Discord refuses scheduled_start_time
+// on an event that has begun, whether or not it changed, and used to refuse
+// the whole PATCH with it — so a roster change on a running event never
+// reached the native description and the sweep retried it every minute.
+func TestARunningEventIsPushedWithoutItsTimes(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
+	started := time.Now().Add(-10 * time.Minute).Unix()
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Games", Capacity: 4,
+		StartsAt: started, EndsAt: started + 2*3600, DiscordScheduledEventID: "native-9"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Join(ev.ID, "alice", "Alice", JoinedViaButton)
+	srv.syncAfterChange(ev.ID, nil)
+	var patched bool
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPatch && c.Path == "/guilds/g1/scheduled-events/native-9" {
+			patched = true
+			if _, has := c.Body["scheduled_start_time"]; has {
+				t.Error("a running event's PATCH carried scheduled_start_time, which Discord refuses")
+			}
+			if _, has := c.Body["scheduled_end_time"]; has {
+				t.Error("a running event's PATCH carried scheduled_end_time")
+			}
+			if desc, _ := c.Body["description"].(string); !strings.Contains(desc, "1 of 4 places taken") {
+				t.Errorf("the count did not reach the description: %q", desc)
+			}
+		}
+	}
+	if !patched {
+		t.Fatal("the native event was not written at all")
+	}
+}

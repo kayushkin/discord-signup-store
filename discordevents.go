@@ -944,10 +944,19 @@ func (s *Server) PushEditToDiscord(ev *Event, roster []Signup, rename bool) erro
 		location = locationPlaceholder
 	}
 	payload := map[string]any{
-		"description":          nativeEventDescription(ev, roster, s.guildChannels(ev.GuildID).Board),
-		"scheduled_start_time": time.Unix(ev.StartsAt, 0).UTC().Format(time.RFC3339),
-		"scheduled_end_time":   time.Unix(endsAt, 0).UTC().Format(time.RFC3339),
-		"entity_metadata":      map[string]any{"location": location},
+		"description":     nativeEventDescription(ev, roster, s.guildChannels(ev.GuildID).Board),
+		"entity_metadata": map[string]any{"location": location},
+	}
+	// The times go only while the event is still ahead. Discord refuses a
+	// start in the past (GUILD_SCHEDULED_EVENT_SCHEDULE_PAST) and any start on
+	// an event that is running (…INVALID_START_BY_STATUS), whether or not the
+	// value changed — measured 2026-09-04, when every roster change on three
+	// running events failed the whole PATCH and the sweep retried each of them
+	// every minute. Once it has begun there is nothing about its time left to
+	// push: the description and the count are what still move.
+	if ev.StartsAt > now() {
+		payload["scheduled_start_time"] = time.Unix(ev.StartsAt, 0).UTC().Format(time.RFC3339)
+		payload["scheduled_end_time"] = time.Unix(endsAt, 0).UTC().Format(time.RFC3339)
 	}
 	// The name is a rename and renames are throttled; the description carries
 	// the live count and names and is not, so it goes every time.

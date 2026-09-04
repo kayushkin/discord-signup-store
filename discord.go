@@ -152,8 +152,17 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
+	// 50035 is "Invalid Form Body" and says nothing on its own; the body names
+	// the field and the reason, and a log line without them sends somebody to
+	// reproduce the call by hand to learn what this line could have said.
+	if e.Code == errorCodeInvalidFormBody && e.Raw != "" {
+		return fmt.Sprintf("discord api %d (code %d): %s: %s", e.Status, e.Code, e.Message, e.Raw)
+	}
 	return fmt.Sprintf("discord api %d (code %d): %s", e.Status, e.Code, e.Message)
 }
+
+// errorCodeInvalidFormBody is Discord's 50035, whose detail is in the body.
+const errorCodeInvalidFormBody = 50035
 
 // escapePathSegment makes a value safe to place in exactly one path segment.
 //
