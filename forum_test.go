@@ -14,7 +14,8 @@ func forumFake(t *testing.T) (*fakeDiscord, *Store, *Server) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	if err := store.SetGuildForum(GuildForum{
 		GuildID: "g1", ChannelID: "forum-ch",
 		TagOpen: "t-open", TagFull: "t-full",

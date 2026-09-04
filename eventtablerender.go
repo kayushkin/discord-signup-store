@@ -272,8 +272,8 @@ type tableSurface struct {
 // RefreshEventTable rewrites the public table in place.
 func (s *Server) RefreshEventTable(guildID string) error {
 	table, err := s.store.GuildTable(guildID)
-	if errors.Is(err, ErrNotFound) {
-		return nil
+	if errors.Is(err, ErrNotFound) || (err == nil && table.ChannelID == "") {
+		return nil // a row that only carries the guild's channels has no table
 	}
 	if err != nil {
 		return err

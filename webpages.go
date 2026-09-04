@@ -333,9 +333,14 @@ func (s *Server) handleWebCreateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	capacity, _ := strconv.Atoi(r.FormValue("capacity"))
 
+	boardChannelID := s.guildChannels(guildID).Board
+	if boardChannelID == "" {
+		s.renderFormError(w, session, nil, fmt.Errorf("%w: this server has no board channel set up yet", ErrInvalidEvent))
+		return
+	}
 	ev, err := s.createEventAndJoinOrganiser(Event{
 		GuildID:         guildID,
-		ChannelID:       s.boardChannelID,
+		ChannelID:       boardChannelID,
 		Name:            r.FormValue("name"),
 		Description:     r.FormValue("description"),
 		Capacity:        capacity,

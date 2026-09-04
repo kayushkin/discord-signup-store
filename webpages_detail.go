@@ -258,7 +258,7 @@ func (s *Server) handleWebPublish(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "you cannot edit this event", http.StatusForbidden)
 		return
 	}
-	if _, err := s.PublishToDiscord(ev.ID, s.boardChannelID); err != nil {
+	if _, err := s.PublishToDiscord(ev.ID); err != nil {
 		s.redirectWithNotice(w, r, ev.ID, "Could not publish it: "+err.Error())
 		return
 	}
@@ -279,7 +279,7 @@ func (s *Server) handleWebSync(w http.ResponseWriter, r *http.Request) {
 	}
 	total := SyncResult{}
 	for _, g := range guilds {
-		result, err := s.SyncScheduledEvents(g.ID, s.boardChannelID)
+		result, err := s.SyncScheduledEvents(g.ID)
 		if err != nil {
 			total.Problems = append(total.Problems, g.Name+": "+err.Error())
 			continue

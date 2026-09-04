@@ -90,9 +90,7 @@ func main() {
 				envOr("DISCORD_CREDENTIAL_PROVIDER", "discord"),
 				envOr("DISCORD_OAUTH_CREDENTIAL_ACCOUNT", "oauth-client"),
 			),
-		}, os.Getenv("DISCORD_BOARD_CHANNEL_ID"))
-		srvAPI.SetPastChannelID(os.Getenv("DISCORD_PAST_CHANNEL_ID"))
-		srvAPI.SetReminderChannelID(os.Getenv("DISCORD_REMINDER_CHANNEL_ID"))
+		})
 		log.Printf("web surface enabled, callback %s", redirect)
 	} else {
 		log.Print("web surface disabled (DISCORD_OAUTH_REDIRECT_URL unset)")

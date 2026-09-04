@@ -608,9 +608,14 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 		return
 	}
 	userID, displayName := in.actor()
+	boardChannelID := s.guildChannels(in.GuildID).Board
+	if boardChannelID == "" {
+		s.replyEphemeral(w, "This server has no board channel set up yet, so there is nowhere to post the event. An admin sets one with PUT /api/guilds/{id}/channels.")
+		return
+	}
 	ev, err := s.createEventAndJoinOrganiser(Event{
 		GuildID:     in.GuildID,
-		ChannelID:   s.BoardChannelID(),
+		ChannelID:   boardChannelID,
 		Name:        values.Name,
 		Description: values.Description,
 		Capacity:    values.Capacity,
@@ -632,12 +637,12 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 	go s.refreshTablesQuietly(ev.GuildID)
 
 	published := true
-	if _, err := s.PublishToDiscord(ev.ID, s.BoardChannelID()); err != nil {
+	if _, err := s.PublishToDiscord(ev.ID); err != nil {
 		log.Printf("[discord-signup] publish event %d to discord: %v", ev.ID, err)
 		published = false
 	}
 	reply := fmt.Sprintf("**%s** is up in <#%s>.\n%s",
-		ev.Name, s.BoardChannelID(), describeEventLine(ev, values.Capacity))
+		ev.Name, boardChannelID, describeEventLine(ev, values.Capacity))
 	if published {
 		reply += "\n\nIt is also in the server's own event list. Pressing **Interested** " +
 			"there signs people up here too."

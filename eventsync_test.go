@@ -61,7 +61,8 @@ func TestTheLastWriteWinsWhenChangesOverlap(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	ev := syncTestEvent(t, store, 3, "alice")
 
 	var writes int32
@@ -119,7 +120,8 @@ func TestAPassWithNothingToSayWritesNothing(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	ev := syncTestEvent(t, store, 3, "alice")
 
 	srv.syncAfterChange(ev.ID, nil)
@@ -143,7 +145,8 @@ func TestARosterChangeAfterAnIdlePassStillPublishes(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	ev := syncTestEvent(t, store, 3, "alice")
 
 	srv.syncAfterChange(ev.ID, nil)
@@ -169,7 +172,8 @@ func TestAFailedWriteIsRepairedByTheSweep(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	ev := syncTestEvent(t, store, 3, "alice")
 
 	var attempts int32
@@ -253,7 +257,8 @@ func TestTheSweepOnlyTouchesDiscordForStaleEvents(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	ev := syncTestEvent(t, store, 3, "alice")
 
 	srv.syncAfterChange(ev.ID, nil) // first publish, records the signature

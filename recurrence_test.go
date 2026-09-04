@@ -87,7 +87,8 @@ func TestTheRepeatFormReachesDiscord(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	srv.SetDefaultTimezone("America/Los_Angeles")
 	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Games",
 		Status: StatusOpen, StartsAt: laTuesdayEvening(t).Unix(), DiscordScheduledEventID: "native-9"})
@@ -138,7 +139,8 @@ func TestNeverSendsNullSoDiscordStopsRepeating(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	ev, _ := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Games", Status: StatusOpen,
 		StartsAt: time.Now().Add(48 * time.Hour).Unix(), Timezone: "UTC",
 		RecurrenceRule: "FREQ=WEEKLY;BYDAY=TU", DiscordScheduledEventID: "native-9"})

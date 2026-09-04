@@ -163,6 +163,9 @@ service has written. They are why a *UI* change needs storage at all.
 | `channel_id` | TEXT | The channel it is posted in. |
 | `message_id` | TEXT | The header message. `''` if never posted. |
 | `management_channel_id` | TEXT | Where the management table lives — the same events with Edit on each row and Create on the end. `''` means there is not one. On this row because it is the same table for a different audience, not a second thing to configure. |
+| `board_channel_id` | TEXT | Where this guild's cards are posted and what its native events point at. Per guild since 2026-09-04; before that a process-wide env var. Required before the Create form works. |
+| `past_channel_id` | TEXT | Where this guild's finished events leave their line. `''` keeps finished cards where they are. |
+| `reminder_channel_id` | TEXT | Where this guild's hour-before and starting-now reminders go. `''` turns reminders off for the guild without stamping anything. |
 | `updated_at` | INTEGER | |
 
 ⚠️ **"Table" here means the UI thing** — a Discord message listing every

@@ -33,6 +33,8 @@ service's, and proxying any other route publishes roster editing to the world.
 | GET | `/api/events/{id}/history?limit=` | The append-only transition log. |
 | POST | `/api/sync` | Pull native events from **every** server the bot is in and post a card for any new one. What the scheduler job calls; names no guild, so adding a server needs no change. |
 | POST | `/api/guilds/{guildID}/sync` | The same, for one guild. |
+| PUT | `/api/guilds/{guildID}/channels` | Record the guild's board, past-events and reminder channels: `{"board_channel_id","past_channel_id","reminder_channel_id"}`. Board is required; the other two may be empty, and an empty reminder channel turns reminders off for that guild. Needs no table first. |
+| GET | `/api/guilds/{guildID}/channels` | The guild's row back: table, management and the three channels. |
 | POST | `/api/events/complete-finished` | Archive events whose time has passed and strip the buttons off their cards. Also runs on a five-minute ticker. |
 
 ## Browser surface (YOUR_DOMAIN — Discord login required)
@@ -171,6 +173,25 @@ A closed event keeps Details and Edit and loses Join and Leave: a button that
 cannot act is a trap, not an affordance.
 
 ## The management table
+
+## Per-guild channels
+
+Every channel this service posts into is recorded **per guild**, on the
+`guild_tables` row: the event table and the management table (below), and
+since 2026-09-04 the **board** (where cards go and what a native event's
+description points at), **past-events** (where a finished event's line goes)
+and **reminders** (where the hour-before and starting-now messages go). Until
+then the last three were one process-wide env var each, which made the
+service single-guild in every way but the tables — a second server's cards,
+past lines and reminders all landed in the first server's channels.
+
+`PUT /api/guilds/{guildID}/channels` sets the three. A guild with no board
+recorded refuses the Create form ("no board channel set up yet") rather than
+posting somewhere else; a guild with no past channel keeps finished cards
+where they are; a guild with no reminder channel is skipped by the reminder
+tick and nothing is stamped, so setting it later starts reminding about
+events that already exist. The how-to (`POST /api/channels/{id}/how-to`)
+reads its guild off the channel and needs the board recorded first.
 
 `PUT /api/guilds/{guildID}/management {"channel_id"}` points the management
 table at a channel and draws it. It is the event table drawn for organisers:

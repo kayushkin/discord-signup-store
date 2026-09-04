@@ -277,6 +277,12 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// On guild_tables because it is the same table drawn for a different
 	// audience, not a second thing to configure from scratch.
 	{"guild_tables", "management_channel_id", "TEXT NOT NULL DEFAULT ''"},
+	// The board, past-events and reminder channels, per guild. Until
+	// 2026-09-04 these were process-wide env vars, so a second server's
+	// cards and reminders landed in the first server's channels.
+	{"guild_tables", "board_channel_id", "TEXT NOT NULL DEFAULT ''"},
+	{"guild_tables", "past_channel_id", "TEXT NOT NULL DEFAULT ''"},
+	{"guild_tables", "reminder_channel_id", "TEXT NOT NULL DEFAULT ''"},
 
 	// What the titles last said, and when. A title is a rename, and Discord
 	// rate-limits thread renames to about two per ten minutes, so a count

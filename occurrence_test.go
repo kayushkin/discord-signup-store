@@ -50,8 +50,9 @@ func TestAFinishedOccurrenceRollsTheEventForward(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
-	srv.pastChannelID = "past"
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
+	store.SetGuildChannels("g1", GuildChannels{Board: "board", Past: "past"})
 	ev := recurringTestEvent(t, store, "FREQ=WEEKLY")
 
 	if _, err := srv.CompleteFinishedEvents(); err != nil {
@@ -131,7 +132,8 @@ func TestDiscordSlidingTheStartForwardIsARollover(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	ev := recurringTestEvent(t, store, "FREQ=WEEKLY")
 	next := ev.StartsAt + 7*86400
 
@@ -158,7 +160,8 @@ func TestMovingAFutureDateIsAnEditNotARollover(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	start := time.Now().Add(48 * time.Hour).Unix()
 	ev, err := store.CreateEvent(Event{
 		GuildID: "g1", ChannelID: "board", Name: "Games", Capacity: 4,

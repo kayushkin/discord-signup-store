@@ -212,7 +212,11 @@ func (s *Server) rollOverFinishedOccurrences() ([]int64, error) {
 // Unlike a finished event's, it does not repoint the event's channel: the
 // event is not over, only this date is.
 func (s *Server) postOccurrencePastLine(ev *Event) error {
-	if s.discord == nil || s.pastChannelID == "" {
+	if s.discord == nil {
+		return nil
+	}
+	pastChannelID := s.guildChannels(ev.GuildID).Past
+	if pastChannelID == "" {
 		return nil
 	}
 	// Re-read rather than trust the caller's copy: the counts are filled in by
@@ -225,7 +229,7 @@ func (s *Server) postOccurrencePastLine(ev *Event) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.discord.CreateMessage(s.pastChannelID, map[string]any{
+	_, err = s.discord.CreateMessage(pastChannelID, map[string]any{
 		"content":          pastEventLine(ev, roster),
 		"allowed_mentions": map[string]any{"parse": []string{}},
 	})

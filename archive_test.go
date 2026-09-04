@@ -271,8 +271,9 @@ func TestFinishedEventLeavesOneLineInPastEvents(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
-	srv.SetPastChannelID("past")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
+	store.SetGuildChannels("g1", GuildChannels{Board: "board", Past: "past"})
 
 	past := time.Now().Add(-10 * time.Hour).Unix()
 	ev, err := store.CreateEvent(Event{
@@ -330,8 +331,9 @@ func TestTheOriginalCardSurvivesAFailedMove(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
-	srv.SetPastChannelID("past")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
+	store.SetGuildChannels("g1", GuildChannels{Board: "board", Past: "past"})
 	fake.on(http.MethodPost, "/channels/past/messages", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprint(w, `{"code":50013,"message":"Missing Permissions"}`)

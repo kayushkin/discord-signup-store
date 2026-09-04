@@ -24,7 +24,8 @@ func webTestServer(t *testing.T) (*Server, *Store, *fakeDiscord, http.Handler, s
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 
 	session, err := store.CreateWebSession("manager", "Manager", "",
 		map[string]uint64{"g1": permissionManageEvents})

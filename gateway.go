@@ -253,7 +253,7 @@ func (g *GatewayListener) onScheduledEventCreated(_ *discordgo.Session, e *disco
 	if e.GuildScheduledEvent == nil {
 		return
 	}
-	result, err := g.server.SyncScheduledEvents(e.GuildID, g.server.BoardChannelID())
+	result, err := g.server.SyncScheduledEvents(e.GuildID)
 	if err != nil {
 		log.Printf("[discord-signup] import new discord event %s: %v", e.ID, err)
 		return
@@ -285,7 +285,7 @@ func (g *GatewayListener) onScheduledEventChanged(_ *discordgo.Session, e *disco
 	if e.GuildScheduledEvent == nil {
 		return
 	}
-	if _, err := g.server.SyncScheduledEvents(e.GuildID, g.server.BoardChannelID()); err != nil {
+	if _, err := g.server.SyncScheduledEvents(e.GuildID); err != nil {
 		log.Printf("[discord-signup] resync after event update in %s: %v", e.GuildID, err)
 	}
 }
@@ -304,7 +304,7 @@ func (g *GatewayListener) localEventFor(discordEventID, guildID string) (*Event,
 	if !errors.Is(err, ErrNotFound) {
 		return nil, err
 	}
-	if _, err := g.server.SyncScheduledEvents(guildID, g.server.BoardChannelID()); err != nil {
+	if _, err := g.server.SyncScheduledEvents(guildID); err != nil {
 		return nil, fmt.Errorf("sync on miss: %w", err)
 	}
 	return g.server.store.EventByDiscordScheduledEventID(discordEventID)

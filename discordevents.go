@@ -151,7 +151,8 @@ type SyncResult struct {
 // Discord drops COMPLETED events out of the list endpoint, so absence means
 // "not listed", never "deleted", and auto-cancelling on absence would quietly
 // kill every event the day after it happened.
-func (s *Server) SyncScheduledEvents(guildID, boardChannelID string) (*SyncResult, error) {
+func (s *Server) SyncScheduledEvents(guildID string) (*SyncResult, error) {
+	boardChannelID := s.guildChannels(guildID).Board
 	if s.discord == nil {
 		return nil, errors.New("no discord client configured")
 	}
@@ -205,7 +206,7 @@ func (s *Server) SyncAllGuilds() (*SyncResult, error) {
 	}
 	total := &SyncResult{}
 	for _, g := range guilds {
-		result, err := s.SyncScheduledEvents(g.ID, s.boardChannelID)
+		result, err := s.SyncScheduledEvents(g.ID)
 		if err != nil {
 			total.Problems = append(total.Problems, g.Name+": "+err.Error())
 			continue
@@ -429,11 +430,12 @@ func recurrenceTimezone(raw json.RawMessage) string {
 // native event's own Interested button cannot be capped or removed. Without
 // that line, a full event still shows a live Interested button and nothing
 // tells the person pressing it that it does not hold them a place.
-func (s *Server) PublishToDiscord(eventID int64, boardChannelID string) (*Event, error) {
+func (s *Server) PublishToDiscord(eventID int64) (*Event, error) {
 	ev, err := s.store.GetEvent(eventID)
 	if err != nil {
 		return nil, err
 	}
+	boardChannelID := s.guildChannels(ev.GuildID).Board
 	if s.discord == nil {
 		return nil, errors.New("no discord client configured")
 	}
@@ -937,7 +939,7 @@ func (s *Server) PushEditToDiscord(ev *Event, roster []Signup, rename bool) erro
 		location = locationPlaceholder
 	}
 	payload := map[string]any{
-		"description":          nativeEventDescription(ev, roster, s.boardChannelID),
+		"description":          nativeEventDescription(ev, roster, s.guildChannels(ev.GuildID).Board),
 		"scheduled_start_time": time.Unix(ev.StartsAt, 0).UTC().Format(time.RFC3339),
 		"scheduled_end_time":   time.Unix(endsAt, 0).UTC().Format(time.RFC3339),
 		"entity_metadata":      map[string]any{"location": location},
@@ -1026,7 +1028,7 @@ func (s *Server) reconcileWithNative(guildID string, remote []DiscordScheduledEv
 			if ev.StartsAt <= now() {
 				continue
 			}
-			if _, err := s.PublishToDiscord(ev.ID, s.boardChannelID); err != nil {
+			if _, err := s.PublishToDiscord(ev.ID); err != nil {
 				problems = append(problems, fmt.Sprintf("publish %q: %v", ev.Name, err))
 				continue
 			}

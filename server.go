@@ -40,22 +40,6 @@ type Server struct {
 	// fields and a timezone picker is not worth one of them. Printed on the
 	// form's own label so nobody has to guess which zone they are typing in.
 	defaultTimezone string
-	// pastChannelID is where a card goes once its event is over. Empty means
-	// finished cards stay on the board, which is a legitimate way to run it —
-	// the archive is a tidiness feature, not a correctness one.
-	pastChannelID string
-	// boardChannelID is the channel signup cards are posted to. Imported
-	// Discord events land here rather than in their own channel, which for a
-	// voice event is the room people talk in and where a card would be unread.
-	boardChannelID string
-	// reminderChannelID is where the hour-before and starting-now messages go.
-	//
-	// Its own channel because those two are the only messages this service
-	// sends that deliberately ping, and mixing them into the board means every
-	// card and every table redraw shares a channel with notifications people
-	// cannot mute separately. Empty means reminders are not sent at all —
-	// silence rather than pinging a channel nobody chose.
-	reminderChannelID string
 	// syncs serialises Discord writes per event. Without it, two roster
 	// changes seconds apart raced and the older one could land last, leaving
 	// every public surface showing a count that was already wrong.
@@ -66,24 +50,21 @@ type Server struct {
 //
 // Separate from NewServer because the roster, the buttons and the interaction
 // endpoint all work without it — the web page is management, not the product.
-func (s *Server) EnableWeb(oauth *OAuthConfig, boardChannelID string) {
+func (s *Server) EnableWeb(oauth *OAuthConfig) {
 	s.oauth = oauth
-	s.boardChannelID = boardChannelID
 }
 
-// SetReminderChannelID names the channel reminders are posted in. Empty turns
-// reminders off, which is the right default: a service that starts pinging a
-// channel nobody picked is worse than one that says nothing.
-func (s *Server) SetReminderChannelID(channelID string) { s.reminderChannelID = channelID }
-
-// ReminderChannelID reports it.
-func (s *Server) ReminderChannelID() string { return s.reminderChannelID }
-
-// SetPastChannelID names the channel finished cards move to.
-func (s *Server) SetPastChannelID(channelID string) { s.pastChannelID = channelID }
-
-// PastChannelID reports it.
-func (s *Server) PastChannelID() string { return s.pastChannelID }
+// guildChannels is where a guild's cards, past-events lines and reminders go.
+// Per guild since 2026-09-04; before that one env var each, and a second
+// server posted into the first server's channels. A guild with nothing
+// recorded gets empty strings, and every caller treats empty as "not here".
+func (s *Server) guildChannels(guildID string) GuildChannels {
+	ch, err := s.store.GuildChannels(guildID)
+	if err != nil {
+		log.Printf("[discord-signup] read channels for guild %s: %v", guildID, err)
+	}
+	return ch
+}
 
 // SetDefaultTimezone names the zone Discord forms are read in.
 func (s *Server) SetDefaultTimezone(zone string) { s.defaultTimezone = zone }
@@ -97,9 +78,6 @@ func (s *Server) DefaultTimezone() string {
 	}
 	return s.defaultTimezone
 }
-
-// BoardChannelID reports where signup cards are posted.
-func (s *Server) BoardChannelID() string { return s.boardChannelID }
 
 // NewServer wires the pieces. discord may be nil, in which case the roster
 // still works and nothing is pushed to Discord — useful in tests and for a
@@ -142,6 +120,8 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/channels/{channelID}/how-to", s.handlePostHowTo)
 	mux.HandleFunc("PUT /api/guilds/{guildID}/table", s.handleSetGuildTable)
 	mux.HandleFunc("PUT /api/guilds/{guildID}/management", s.handleSetGuildManagement)
+	mux.HandleFunc("PUT /api/guilds/{guildID}/channels", s.handleSetGuildChannels)
+	mux.HandleFunc("GET /api/guilds/{guildID}/channels", s.handleGetGuildChannels)
 	mux.HandleFunc("POST /api/guilds/{guildID}/table/refresh", s.handleRefreshGuildTable)
 	mux.HandleFunc("PUT /api/guilds/{guildID}/forum", s.handleSetGuildForum)
 	mux.HandleFunc("POST /api/events/complete-finished", s.handleCompleteFinished)
@@ -212,6 +192,43 @@ func (s *Server) handleSetGuildTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	table, err := s.store.GuildTable(guildID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, table)
+}
+
+// handleSetGuildChannels records where a guild's cards, past-events lines and
+// reminders go. All three every time — a PUT is the whole value — and an
+// empty reminder channel turns reminders off for that guild.
+func (s *Server) handleSetGuildChannels(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		BoardChannelID    string `json:"board_channel_id"`
+		PastChannelID     string `json:"past_channel_id"`
+		ReminderChannelID string `json:"reminder_channel_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "malformed JSON"})
+		return
+	}
+	if in.BoardChannelID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "board_channel_id is required: it is where cards are posted"})
+		return
+	}
+	guildID := r.PathValue("guildID")
+	if err := s.store.SetGuildChannels(guildID, GuildChannels{
+		Board: in.BoardChannelID, Past: in.PastChannelID, Reminder: in.ReminderChannelID}); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	s.handleGetGuildChannels(w, r)
+}
+
+// handleGetGuildChannels reads the guild's row back: table, management and the
+// three channels.
+func (s *Server) handleGetGuildChannels(w http.ResponseWriter, r *http.Request) {
+	table, err := s.store.GuildTable(r.PathValue("guildID"))
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -382,7 +399,7 @@ func (s *Server) handleCompleteFinished(w http.ResponseWriter, r *http.Request) 
 // handleSyncGuild pulls a guild's native Discord events into the store. This is
 // the endpoint the scheduler job calls.
 func (s *Server) handleSyncGuild(w http.ResponseWriter, r *http.Request) {
-	result, err := s.SyncScheduledEvents(r.PathValue("guildID"), s.boardChannelID)
+	result, err := s.SyncScheduledEvents(r.PathValue("guildID"))
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -518,7 +535,7 @@ func (s *Server) handlePublish(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id must be an integer"})
 		return
 	}
-	ev, err := s.PublishToDiscord(id, s.boardChannelID)
+	ev, err := s.PublishToDiscord(id)
 	if err != nil {
 		writeStoreError(w, err)
 		return

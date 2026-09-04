@@ -254,6 +254,24 @@ func retryAfter(resp *http.Response, body []byte) time.Duration {
 	return time.Second
 }
 
+// ChannelGuildID reads which guild a channel belongs to.
+func (c *DiscordClient) ChannelGuildID(channelID string) (string, error) {
+	raw, err := c.do(http.MethodGet, "/channels/"+escapePathSegment(channelID), nil)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		GuildID string `json:"guild_id"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", fmt.Errorf("decode channel: %w", err)
+	}
+	if out.GuildID == "" {
+		return "", fmt.Errorf("channel %s belongs to no guild", channelID)
+	}
+	return out.GuildID, nil
+}
+
 // AddMemberRole grants a role.
 //
 // Needs MANAGE_ROLES, and needs the bot's own highest role to sit ABOVE the

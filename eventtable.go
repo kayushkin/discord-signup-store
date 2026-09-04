@@ -38,7 +38,52 @@ type GuildTable struct {
 	// events with Edit on each row and Create on the end. Empty means there
 	// is not one.
 	ManagementChannelID string `json:"management_channel_id"`
-	UpdatedAt           int64  `json:"updated_at"`
+	// The guild's other three channels. They were one env var each until
+	// 2026-09-04, which made the service single-guild in every way but the
+	// tables: a second server's cards, past-events lines and reminders all
+	// landed in the first server's channels. Empty reminder channel means
+	// reminders are off for that guild.
+	BoardChannelID    string `json:"board_channel_id"`    // where cards go, and what the native description points at
+	PastChannelID     string `json:"past_channel_id"`     // where a finished event's line goes
+	ReminderChannelID string `json:"reminder_channel_id"` // where the hour-before and starting-now messages go
+	UpdatedAt         int64  `json:"updated_at"`
+}
+
+// GuildChannels is the three channels a guild's events post into, read off
+// its guild_tables row. All empty for a guild that has none recorded.
+type GuildChannels struct {
+	Board, Past, Reminder string
+}
+
+// SetGuildChannels records a guild's board, past-events and reminder
+// channels. It does not need the event table to exist first: the row is
+// created with no table channel, and the table drawers treat that as no table.
+func (s *Store) SetGuildChannels(guildID string, ch GuildChannels) error {
+	_, err := s.db.Exec(`
+		INSERT INTO guild_tables (guild_id, channel_id, message_id, updated_at,
+		                          board_channel_id, past_channel_id, reminder_channel_id)
+		VALUES (?,'','',?,?,?,?)
+		ON CONFLICT(guild_id) DO UPDATE SET board_channel_id = excluded.board_channel_id,
+			past_channel_id = excluded.past_channel_id,
+			reminder_channel_id = excluded.reminder_channel_id,
+			updated_at = excluded.updated_at`,
+		guildID, now(), ch.Board, ch.Past, ch.Reminder)
+	if err != nil {
+		return fmt.Errorf("set guild channels: %w", err)
+	}
+	return nil
+}
+
+// GuildChannels reads a guild's three channels; a guild with no row has none.
+func (s *Store) GuildChannels(guildID string) (GuildChannels, error) {
+	t, err := s.GuildTable(guildID)
+	if errors.Is(err, ErrNotFound) {
+		return GuildChannels{}, nil
+	}
+	if err != nil {
+		return GuildChannels{}, err
+	}
+	return GuildChannels{Board: t.BoardChannelID, Past: t.PastChannelID, Reminder: t.ReminderChannelID}, nil
 }
 
 // SetGuildManagementChannel points the management table at a channel.
@@ -83,8 +128,11 @@ func (s *Store) SetGuildTableMessage(guildID, messageID string) error {
 func (s *Store) GuildTable(guildID string) (*GuildTable, error) {
 	var t GuildTable
 	err := s.db.QueryRow(
-		`SELECT guild_id, channel_id, message_id, management_channel_id, updated_at FROM guild_tables WHERE guild_id = ?`,
-		guildID).Scan(&t.GuildID, &t.ChannelID, &t.MessageID, &t.ManagementChannelID, &t.UpdatedAt)
+		`SELECT guild_id, channel_id, message_id, management_channel_id,
+		        board_channel_id, past_channel_id, reminder_channel_id, updated_at
+		 FROM guild_tables WHERE guild_id = ?`,
+		guildID).Scan(&t.GuildID, &t.ChannelID, &t.MessageID, &t.ManagementChannelID,
+		&t.BoardChannelID, &t.PastChannelID, &t.ReminderChannelID, &t.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -360,7 +408,7 @@ func (s *Server) RebuildEventTable(guildID string) error {
 		return nil
 	}
 	table, err := s.store.GuildTable(guildID)
-	if errors.Is(err, ErrNotFound) {
+	if errors.Is(err, ErrNotFound) || (err == nil && table.ChannelID == "") {
 		return nil
 	}
 	if err != nil {

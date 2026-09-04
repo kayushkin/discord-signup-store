@@ -244,7 +244,8 @@ func TestCreatingFromDiscordAlsoMakesANativeEvent(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	srv.SetDefaultTimezone("UTC")
 
 	fake.on(http.MethodPost, "/guilds/g1/scheduled-events", func(w http.ResponseWriter, r *http.Request) {
@@ -260,7 +261,7 @@ func TestCreatingFromDiscordAlsoMakesANativeEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := srv.PublishToDiscord(ev.ID, "board"); err != nil {
+	if _, err := srv.PublishToDiscord(ev.ID); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 
@@ -319,7 +320,8 @@ func TestSyncSkipsEventsThisBotJustPublished(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 
 	fake.on(http.MethodGet, "/users/@me", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"id":"the-bot"}`)
@@ -333,7 +335,7 @@ func TestSyncSkipsEventsThisBotJustPublished(t *testing.T) {
 		]`)
 	})
 
-	result, err := srv.SyncScheduledEvents("g1", "board")
+	result, err := srv.SyncScheduledEvents("g1")
 	if err != nil {
 		t.Fatalf("sync: %v", err)
 	}
@@ -356,7 +358,8 @@ func TestEditingPushesThroughToTheNativeEvent(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 
 	start := time.Now().Add(48 * time.Hour).Unix()
 	ev, err := store.CreateEvent(Event{
@@ -522,7 +525,8 @@ func TestTheTitleIsPushedOnEveryRosterChange(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 
 	ev, err := store.CreateEvent(Event{
 		GuildID: "g1", ChannelID: "board", Name: "Games", Capacity: 3,
@@ -560,7 +564,8 @@ func TestReconcilePublishesEventsThatMissedIt(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	fake.on(http.MethodPost, "/guilds/g1/scheduled-events", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"id":"native-new","name":"x"}`)
 	})
@@ -597,7 +602,8 @@ func TestReconcileCancelsWhenTheNativeEventIsGone(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 
 	// deleted: direct GET answers 404. completedNative: direct GET still finds
 	// it, status COMPLETED — must NOT be cancelled, the time sweep owns it.
@@ -655,7 +661,8 @@ func TestReconcileDeletesTheNativeEventWhenCancelledLocally(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 
 	future := time.Now().Add(72 * time.Hour).Unix()
 	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Called off",
@@ -839,7 +846,8 @@ func TestFillingRenamesAtOnceAndAPlaceOpeningDoesNot(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	ev, err := store.CreateEvent(Event{
 		GuildID: "g1", ChannelID: "board", Name: "Games", Capacity: 2,
 		StartsAt:                time.Now().Add(48 * time.Hour).Unix(),
@@ -880,7 +888,8 @@ func TestASecondSignupWithinTheWindowSendsNoName(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	ev, err := store.CreateEvent(Event{
 		GuildID: "g1", ChannelID: "board", Name: "Games", Capacity: 4,
 		StartsAt:                time.Now().Add(48 * time.Hour).Unix(),

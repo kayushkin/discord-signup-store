@@ -248,29 +248,32 @@ func (s *Server) ApplyEventForm(before *Event, values *EventFormResult, zone, ac
 // The event's channel and message are repointed at the line so the archive
 // knows where it wrote, and so this runs once.
 func (s *Server) postPastEventLine(eventID int64) error {
-	if s.discord == nil || s.pastChannelID == "" {
+	if s.discord == nil {
 		return nil
 	}
 	ev, err := s.store.GetEvent(eventID)
 	if err != nil {
 		return err
 	}
-	if ev.ChannelID == s.pastChannelID {
+	pastChannelID := s.guildChannels(ev.GuildID).Past
+	if pastChannelID == "" {
+		return nil
+	}
+	if ev.ChannelID == pastChannelID {
 		return nil // already there
 	}
 	roster, err := s.store.Roster(eventID, false)
 	if err != nil {
 		return err
 	}
-	messageID, err := s.discord.CreateMessage(s.pastChannelID, map[string]any{
+	messageID, err := s.discord.CreateMessage(pastChannelID, map[string]any{
 		"content":          pastEventLine(ev, roster),
 		"allowed_mentions": map[string]any{"parse": []string{}},
 	})
 	if err != nil {
 		return fmt.Errorf("post to past events: %w", err)
 	}
-	past := s.pastChannelID
-	if _, err := s.store.UpdateEvent(eventID, EventPatch{ChannelID: &past, MessageID: &messageID}); err != nil {
+	if _, err := s.store.UpdateEvent(eventID, EventPatch{ChannelID: &pastChannelID, MessageID: &messageID}); err != nil {
 		return fmt.Errorf("record past-events line: %w", err)
 	}
 	log.Printf("[discord-signup] event %d finished; one line left in past events", eventID)

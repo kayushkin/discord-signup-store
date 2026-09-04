@@ -46,7 +46,8 @@ func TestTheGuildIsTheRouteNotTheBody(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	srv.SetDefaultTimezone("UTC")
 
 	fake.on(http.MethodPost, "/guilds/g1/scheduled-events", func(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +62,7 @@ func TestTheGuildIsTheRouteNotTheBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := srv.PublishToDiscord(ev.ID, "board"); err != nil {
+	if _, err := srv.PublishToDiscord(ev.ID); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 

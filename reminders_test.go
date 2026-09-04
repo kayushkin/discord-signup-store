@@ -42,8 +42,9 @@ func reminderServer(t *testing.T) (*Server, *Store, *fakeDiscord) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
-	srv.SetReminderChannelID("reminders")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
+	store.SetGuildChannels("g1", GuildChannels{Board: "board", Reminder: "reminders"})
 	return srv, store, fake
 }
 
@@ -204,7 +205,8 @@ func TestRemindersAreSilentUntilAChannelIsNamed(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
-	srv.EnableWeb(nil, "board")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 
 	ev := reminderEvent(t, store, 30*time.Minute, "alice")
 	if sent, err := srv.SendDueReminders(); err != nil || sent != 0 {
@@ -221,7 +223,7 @@ func TestRemindersAreSilentUntilAChannelIsNamed(t *testing.T) {
 		t.Error("stamped while unconfigured, so naming the channel later reminds nobody")
 	}
 
-	srv.SetReminderChannelID("reminders")
+	store.SetGuildChannels("g1", GuildChannels{Board: "board", Reminder: "reminders"})
 	if sent, _ := srv.SendDueReminders(); sent != 1 {
 		t.Error("naming the channel did not start reminding about an event that already existed")
 	}

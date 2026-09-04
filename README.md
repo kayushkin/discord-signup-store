@@ -142,6 +142,20 @@ operation.
    `https://YOUR_EXISTING_DOMAIN/discord/interactions`. Discord validates it on
    save by sending a PING and some deliberately bad signatures; `deploy.sh`
    checks both behaviours before it reports success.
+8. **Per server.** Invite the bot with the OAuth2 URL from the Developer
+   Portal (scopes `bot` and `applications.commands`), then record where it
+   posts — every channel is per guild, none is an env var:
+   ```bash
+   G=<guild id>; S=http://127.0.0.1:8312
+   curl -s -X PUT $S/api/guilds/$G/channels -H 'Content-Type: application/json' \
+     -d '{"board_channel_id":"…","past_channel_id":"…","reminder_channel_id":"…"}'
+   curl -s -X PUT $S/api/guilds/$G/table      -H 'Content-Type: application/json' -d '{"channel_id":"…"}'
+   curl -s -X PUT $S/api/guilds/$G/management -H 'Content-Type: application/json' -d '{"channel_id":"…"}'
+   curl -s -X PUT $S/api/guilds/$G/forum      -H 'Content-Type: application/json' -d '{"channel_id":"…"}'
+   ```
+   The board is required; past and reminders may be empty. The bot's role
+   needs **Manage Threads** on the forum channel, or it cannot apply the
+   moderated `finished` and `cancelled` tags.
 
 ## Running one
 

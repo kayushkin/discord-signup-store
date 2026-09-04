@@ -412,7 +412,8 @@ func TestCreateButtonMakesAnEvent(t *testing.T) {
 		t.Fatalf("verifier: %v", err)
 	}
 	srv := NewServer(store, verifier, fake.client())
-	srv.EnableWeb(nil, "board-channel")
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board-channel"})
 	srv.SetDefaultTimezone("America/Los_Angeles")
 
 	rec := httptest.NewRecorder()

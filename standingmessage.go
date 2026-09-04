@@ -83,7 +83,17 @@ func (s *Server) PublishHowToMessage(channelID, adoptMessageID string) (string, 
 	if messageID == "" && adoptMessageID != "" {
 		messageID = adoptMessageID
 	}
-	body := RenderHowToMessage(s.BoardChannelID(), s.DefaultTimezone())
+	// The how-to names the guild's board channel, and the channel it is
+	// posted in tells us the guild.
+	guildID, err := s.discord.ChannelGuildID(channelID)
+	if err != nil {
+		return "", err
+	}
+	boardChannelID := s.guildChannels(guildID).Board
+	if boardChannelID == "" {
+		return "", fmt.Errorf("guild %s has no board channel recorded; PUT /api/guilds/%s/channels first", guildID, guildID)
+	}
+	body := RenderHowToMessage(boardChannelID, s.DefaultTimezone())
 
 	if messageID != "" {
 		err := s.discord.EditMessage(channelID, messageID, body)
