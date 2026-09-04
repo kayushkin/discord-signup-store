@@ -334,3 +334,30 @@ func TestARunningEventIsPushedWithoutItsTimes(t *testing.T) {
 		t.Fatal("the native event was not written at all")
 	}
 }
+
+// TestAVoiceEventIsPushedWithoutALocation: Discord refuses entity_metadata on
+// a voice or stage event, and used to refuse the whole PATCH with it.
+func TestAVoiceEventIsPushedWithoutALocation(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Voice chat", Capacity: 4,
+		StartsAt: time.Now().Add(2 * time.Hour).Unix(), EntityType: "voice",
+		DiscordScheduledEventID: "native-9", Origin: OriginDiscord})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Join(ev.ID, "alice", "Alice", JoinedViaButton)
+	srv.syncAfterChange(ev.ID, nil)
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPatch && c.Path == "/guilds/g1/scheduled-events/native-9" {
+			if _, has := c.Body["entity_metadata"]; has {
+				t.Error("a voice event's PATCH carried entity_metadata, which Discord refuses")
+			}
+			return
+		}
+	}
+	t.Fatal("the native event was not written")
+}

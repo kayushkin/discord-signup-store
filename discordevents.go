@@ -614,10 +614,33 @@ func titleRenameDue(ev *Event, wantNative, wantForum string, at int64) bool {
 		return true
 	case stripTitleDecorations(wantNative) != stripTitleDecorations(writtenNative):
 		return true
+	case !titleIsFull(writtenNative) && titleLimit(wantNative) != titleLimit(writtenNative):
+		// The limit changed, or a limit appeared or went: an organiser's edit,
+		// as rare as a rename and as deliberate. It used to wait its ten
+		// minutes like a signup, so a limit set on an uncapped event showed
+		// nothing in the title for ten minutes while the roster filled. Not
+		// when the written title says Full: it carries no limit to compare,
+		// and a place opening up is the one change that must wait.
+		return true
 	default:
 		return at-ev.TitleWrittenAt >= titleRenameInterval
 	}
 }
+
+// titleLimit is the Y of a "[X/Y]" suffix, or "full" for a [Full] title, or
+// "" for an uncapped one — the part of a decoration that only an edit moves.
+func titleLimit(title string) string {
+	if titleIsFull(title) {
+		return "full"
+	}
+	if m := titleCountSuffix.FindStringSubmatch(title); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// titleCountSuffix captures the limit out of a trailing "[3/8]".
+var titleCountSuffix = regexp.MustCompile(`\[\d+/(\d+)\]$`)
 
 // decorateTitle wraps a title in its decorations inside a length limit.
 //
@@ -671,7 +694,14 @@ var retiredPointerMarkers = []string{
 func stripSignupPointer(description string) string {
 	cut := -1
 	for _, marker := range append([]string{signupPointerMarker}, retiredPointerMarkers...) {
-		if i := strings.Index(description, marker); i >= 0 && (cut < 0 || i < cut) {
+		// Matched without the leading newlines as well: Discord trims leading
+		// whitespace, so a block appended to an EMPTY description comes back
+		// starting at the dash, the marker with its "\n\n" never matches, and
+		// the block is stored as the organiser's own text — after which every
+		// publish appends a second copy. Measured 2026-09-04 on an imported
+		// event whose native description carried the block twice.
+		bare := strings.TrimLeft(marker, "\n")
+		if i := strings.Index(description, bare); i >= 0 && (cut < 0 || i < cut) {
 			cut = i
 		}
 	}
@@ -944,8 +974,16 @@ func (s *Server) PushEditToDiscord(ev *Event, roster []Signup, rename bool) erro
 		location = locationPlaceholder
 	}
 	payload := map[string]any{
-		"description":     nativeEventDescription(ev, roster, s.guildChannels(ev.GuildID).Board),
-		"entity_metadata": map[string]any{"location": location},
+		"description": nativeEventDescription(ev, roster, s.guildChannels(ev.GuildID).Board),
+	}
+	// A location is an EXTERNAL event's; a voice or stage event lives in its
+	// channel and Discord refuses entity_metadata on it outright
+	// (GUILD_SCHEDULED_EVENT_ENTITY_METADATA_UNSUPPORTED, measured 2026-09-04
+	// on two imported voice events, which then failed every publish). Events
+	// this service creates are external and carry no entity type of their
+	// own, so "" counts as external.
+	if ev.EntityType == "" || ev.EntityType == "external" {
+		payload["entity_metadata"] = map[string]any{"location": location}
 	}
 	// The times go only while the event is still ahead. Discord refuses a
 	// start in the past (GUILD_SCHEDULED_EVENT_SCHEDULE_PAST) and any start on

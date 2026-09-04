@@ -830,6 +830,16 @@ func TestACountRenameWaitsTenMinutesButFillingDoesNot(t *testing.T) {
 		{"date moved, 10m later", moved, at + 600, true},
 		{"was full, someone left, waits its turn", wasFull, at + 1, false},
 		{"was full, someone left, 10m later", wasFull, at + 600, true},
+		{"a limit set on an uncapped event, at once", func() *Event {
+			ev := base(1)
+			ev.NativeTitleWritten, ev.ForumTitleWritten = "Games", "Games — 11/14 10:13pm"
+			return ev
+		}(), at + 1, true},
+		{"the limit raised, at once", func() *Event {
+			ev := base(1)
+			ev.Capacity = 6
+			return ev
+		}(), at + 1, true},
 		{"uncapped, nothing to rename", &Event{Name: "Open", AttendingCount: 9,
 			NativeTitleWritten: "Open", ForumTitleWritten: "Open", TitleWrittenAt: at}, at + 9999, false},
 	} {
@@ -966,5 +976,20 @@ func TestASyncDoesNotReopenClosedSignups(t *testing.T) {
 	}
 	if got, _ := store.GetEvent(ev.ID); got.Status != StatusCompleted {
 		t.Errorf("after Discord says completed, status = %q, want completed", got.Status)
+	}
+}
+
+// TestABlockAppendedToAnEmptyDescriptionIsStrippedOnTheWayBack: Discord trims
+// leading whitespace, so the block comes home without its "\n\n" and used to be
+// stored as the organiser's text, then appended to again on every publish.
+func TestABlockAppendedToAnEmptyDescriptionIsStrippedOnTheWayBack(t *testing.T) {
+	ev := &Event{ID: 3, GuildID: "g1", Name: "Games", Capacity: 2, AttendingCount: 1}
+	written := nativeEventDescription(ev, []Signup{{DiscordUserID: "u1", DisplayName: "Slava", State: StateAttending}}, "board")
+	asDiscordReturnsIt := strings.TrimLeft(written, "\n")
+	if got := stripSignupPointer(asDiscordReturnsIt); got != "" {
+		t.Errorf("an empty description came back as %q", got)
+	}
+	if got := stripSignupPointer("Bring dice." + written); got != "Bring dice." {
+		t.Errorf("a real description came back as %q", got)
 	}
 }
