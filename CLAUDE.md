@@ -20,7 +20,7 @@ A Join click enforces the cap inside one `BEGIN IMMEDIATE` transaction, so two p
 
 ## Arrival order, state and history
 
-**`(signed_up_at, id)` is arrival order, and the only ordering that exists** — it cannot be recovered from Discord. There is no `position` column any more: it was a second copy of `signed_up_at` that could disagree with it; older notes and one line of `BEHAVIOUR.md` still name it. A signup's `state` (`attending`, `waitlisted`, `withdrawn`) is **stored, not derived**, on purpose: it records a decision that was made and told to a person. `signup_updates` and `event_updates` are the append-only histories (the first was once called `transitions`).
+**`(signed_up_at, id)` is arrival order, and the only ordering that exists** — it cannot be recovered from Discord. There is no `position` column any more: it was a second copy of `signed_up_at` that could disagree with it; older notes still name it. A signup's `state` (`attending`, `waitlisted`, `withdrawn`) is **stored, not derived**, on purpose: it records a decision that was made and told to a person. `signup_updates` and `event_updates` are the append-only histories (the first was once called `transitions`).
 
 ## Roles are a projection
 
@@ -28,7 +28,7 @@ Optional `Attending` and `Waitlisted` roles are written when someone's state cha
 
 ## Interactions, the gateway and its own application
 
-Buttons and modals arrive as **HTTP interactions** at `POST /interactions`, verified with the application's public key. Discord's own Interested button is different: `GUILD_SCHEDULED_EVENT_USER_ADD` is delivered **only over the gateway**, so `gateway.go` holds one websocket (discordgo, for the socket alone; REST calls stay on this package's client). `DISCORD_GATEWAY_DISABLED` turns it off, and then the Interested button does not feed the roster. ⚠️ The README's "No gateway connection" requirement is out of date. It needs a **Discord application of its own**: two processes identifying on one token both receive every gateway event, and si's bot already holds a connection on its token. ⚠️ Measured 2026-09-18: the running process logged `gateway disconnected; discordgo will resume` on 2026-09-15 14:17 and has held no connection since — check `ss -tnp` for the process before trusting the Interested path.
+Buttons and modals arrive as **HTTP interactions** at `POST /interactions`, verified with the application's public key. Discord's own Interested button is different: `GUILD_SCHEDULED_EVENT_USER_ADD` is delivered **only over the gateway**, so `gateway.go` holds one websocket (discordgo, for the socket alone; REST calls stay on this package's client). `DISCORD_GATEWAY_DISABLED` turns it off, and then the Interested button does not feed the roster. It needs a **Discord application of its own**: two processes identifying on one token both receive every gateway event, and si's bot already holds a connection on its token. ⚠️ Measured 2026-09-18: the running process logged `gateway disconnected; discordgo will resume` on 2026-09-15 14:17 and has held no connection since — check `ss -tnp` for the process before trusting the Interested path.
 
 ## Discord's limits on the forms
 

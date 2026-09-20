@@ -96,9 +96,12 @@ operation.
 
 ## Requirements
 
-- **No gateway connection.** This is a pure HTTP-interactions app, so there is
-  no persistent WebSocket, no privileged intents, and no always-on requirement
-  beyond serving the endpoint.
+- **One gateway connection, for Discord's own Interested button.** Buttons and
+  modals arrive as HTTP interactions, but `GUILD_SCHEDULED_EVENT_USER_ADD` is
+  delivered only over the gateway, so `gateway.go` holds one WebSocket. It asks
+  for no privileged intents (`GuildScheduledEvents`, `GuildMessageReactions`,
+  `Guilds`). Set `DISCORD_GATEWAY_DISABLED` to run without it; the Interested
+  button then does not feed the roster.
 - **`MANAGE_ROLES`**, only if you use the role sync. The bot's own highest role
   must sit **above** `Attending` and `Waitlisted` in Server Settings → Roles.
   Get the hierarchy wrong and every role call returns 403 while the permission

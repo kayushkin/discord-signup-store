@@ -12,8 +12,9 @@ Its history is `signup_updates`; an event's own history of edits is
 `event_updates`. Both append-only, both named for what they are an update to.
 
 One row per person per event, carrying their state (`attending`, `waitlisted`,
-`withdrawn`), their arrival `position`, and how they got there. Everything a
-human ever sees is a projection of those rows.
+`withdrawn`), when they arrived (`signed_up_at`), and how they got there.
+Arrival order is `(signed_up_at, id)`; there is no `position` column.
+Everything a human ever sees is a projection of those rows.
 
 **Counts are never stored.** "2 of 7" is a `COUNT(*)` executed at the moment
 something is rendered. There is no cached count anywhere in this service, so no
