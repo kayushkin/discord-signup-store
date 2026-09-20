@@ -98,17 +98,21 @@ func main() {
 
 	// The gateway is what makes Discord's own Interested button feed the
 	// roster: GUILD_SCHEDULED_EVENT_USER_ADD is delivered over the socket and
-	// nowhere else. Started in the background and retried forever, because
-	// everything else here — buttons, rosters, the web page, the interaction
-	// endpoint — works without it, and refusing to boot over a socket would
-	// take all of that down with it.
+	// nowhere else. Supervised in the background and reopened whenever it
+	// closes, because everything else here — buttons, rosters, the web page,
+	// the interaction endpoint — works without it, and refusing to boot over a
+	// socket would take all of that down with it. /healthz carries its state.
 	if os.Getenv("DISCORD_GATEWAY_DISABLED") == "" {
-		go discordsignup.StartGatewayWithRetry(srvAPI, discordsignup.AuthStoreTokenResolver(
+		gatewaySupervisor := discordsignup.NewGatewaySupervisor(srvAPI, discordsignup.AuthStoreTokenResolver(
 			envOr("AUTH_STORE_URL", "http://127.0.0.1:8303"),
 			os.Getenv("AUTH_STORE_TOKEN"),
 			envOr("DISCORD_CREDENTIAL_PROVIDER", "discord"),
 			envOr("DISCORD_CREDENTIAL_ACCOUNT", "default"),
 		))
+		srvAPI.ReportGatewayStatus(gatewaySupervisor.Status)
+		// Never stopped: the process exits by signal and Discord times the
+		// socket out, as it did before this supervisor existed.
+		go gatewaySupervisor.Run(make(chan struct{}))
 	} else {
 		log.Print("gateway disabled — Discord's Interested button will NOT feed the roster")
 	}

@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"sync"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -23,21 +21,21 @@ import (
 // ordered by whose Discord account is older. For a waitlist that is not a
 // cosmetic difference; it decides who gets the next free place.
 //
-// discordgo is used for the socket alone. Heartbeat timing, RESUME after a drop
+// discordgo is used for the socket alone. Heartbeat timing, the RESUME packet
 // and session invalidation are fiddly and well solved there; the REST calls
 // stay on this package's own client, which resolves its token from auth-store
-// and retries a 401 by re-resolving.
+// and retries a 401 by re-resolving. Deciding WHEN to reopen a closed socket is
+// not left to discordgo: GatewaySupervisor does that, and says why.
 type GatewayListener struct {
 	session *discordgo.Session
 	server  *Server
-
-	mu      sync.Mutex
-	started bool
 }
 
-// NewGatewayListener builds a listener. The token is resolved once here rather
-// than lazily, because discordgo needs it to open the socket.
-func NewGatewayListener(server *Server, resolveToken TokenResolver) (*GatewayListener, error) {
+// NewGatewayListener builds a listener whose socket is not yet open. The token
+// is resolved once here rather than lazily, because discordgo needs it to open
+// the socket. notifyDisconnected is called each time the socket closes; opening
+// and reopening it is the caller's job (GatewaySupervisor).
+func NewGatewayListener(server *Server, resolveToken TokenResolver, notifyDisconnected func()) (*GatewayListener, error) {
 	token, err := resolveToken()
 	if err != nil {
 		return nil, fmt.Errorf("resolve bot token for gateway: %w", err)
@@ -57,6 +55,10 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver) (*GatewayLis
 	session.Identify.Intents = discordgo.IntentGuildScheduledEvents |
 		discordgo.IntentGuildMessageReactions | discordgo.IntentGuilds
 
+	// discordgo's own reconnect is off. It ran once on this host and ended with
+	// no socket and no log line for five days; see gateway_supervisor.go.
+	session.ShouldReconnectOnError = false
+
 	listener := &GatewayListener{session: session, server: server}
 	session.AddHandler(listener.onUserAdd)
 	session.AddHandler(listener.onUserRemove)
@@ -70,38 +72,13 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver) (*GatewayLis
 		log.Printf("[discord-signup] gateway ready as %s#%s, %d guild(s)",
 			r.User.Username, r.User.Discriminator, len(r.Guilds))
 	})
+	session.AddHandler(func(_ *discordgo.Session, _ *discordgo.Resumed) {
+		log.Print("[discord-signup] gateway resumed; events from the gap were replayed")
+	})
 	session.AddHandler(func(_ *discordgo.Session, _ *discordgo.Disconnect) {
-		// Logged rather than acted on: discordgo reconnects and resumes on its
-		// own. What matters is that a gap is visible, because events during one
-		// are replayed on RESUME but lost if the session is invalidated.
-		log.Print("[discord-signup] gateway disconnected; discordgo will resume")
+		notifyDisconnected()
 	})
 	return listener, nil
-}
-
-// Start opens the socket.
-func (g *GatewayListener) Start() error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.started {
-		return nil
-	}
-	if err := g.session.Open(); err != nil {
-		return fmt.Errorf("open gateway: %w", err)
-	}
-	g.started = true
-	return nil
-}
-
-// Close shuts the socket down.
-func (g *GatewayListener) Close() error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if !g.started {
-		return nil
-	}
-	g.started = false
-	return g.session.Close()
 }
 
 // onUserAdd handles someone pressing Interested.
@@ -399,27 +376,4 @@ func (g *GatewayListener) notifyInterestedOutcome(ev *Event, result *InterestRes
 		}
 		log.Printf("[discord-signup] dm interested user=%s: %v", result.Signup.DiscordUserID, err)
 	}()
-}
-
-// gatewayRetryDelay is how long to wait before retrying a failed first connect.
-const gatewayRetryDelay = 30 * time.Second
-
-// StartGatewayWithRetry opens the socket, retrying forever on failure.
-//
-// A failure here must not stop the service: the buttons, the roster, the web
-// page and the interaction endpoint all work without a gateway. Only Interested
-// stops feeding the roster, and that degradation is worth logging loudly and
-// living with rather than refusing to boot over.
-func StartGatewayWithRetry(server *Server, resolveToken TokenResolver) {
-	for {
-		listener, err := NewGatewayListener(server, resolveToken)
-		if err == nil {
-			if err = listener.Start(); err == nil {
-				return
-			}
-		}
-		log.Printf("[discord-signup] gateway connect failed, retrying in %s: %v",
-			gatewayRetryDelay, err)
-		time.Sleep(gatewayRetryDelay)
-	}
 }

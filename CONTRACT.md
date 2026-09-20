@@ -21,7 +21,7 @@ service's, and proxying any other route publishes roster editing to the world.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/healthz` | Liveness plus whether the Discord client and verifier are wired. |
+| GET | `/healthz` | Liveness, whether the Discord client and verifier are wired, and `gateway`: the gateway socket's `state` (`connected`, `connecting`, `down`, `disabled`), `since`, `last_connected_at`, `last_error`, `opens` and `abandoned_sessions`. Always 200 — the rest of the service works without the gateway, so a reader that cares about Discord's Interested button reads `gateway.state`. |
 | GET | `/api/events?guild_id=&status=&limit=` | List rosters, newest first, with live counts. |
 | POST | `/api/events` | Create a roster. `name`, `guild_id`, `channel_id` required. |
 | GET | `/api/events/{id}` | One roster with `attending_count` and `waitlist_count`. |

@@ -44,6 +44,15 @@ type Server struct {
 	// changes seconds apart raced and the older one could land last, leaving
 	// every public surface showing a count that was already wrong.
 	syncs *eventSyncQueue
+	// gatewayStatus reads the gateway supervisor's state for /healthz. Nil
+	// means no supervisor was started, which /healthz reports as "disabled".
+	gatewayStatus func() GatewayStatus
+}
+
+// ReportGatewayStatus makes /healthz report the gateway's state from status.
+// Call it before the server starts serving.
+func (s *Server) ReportGatewayStatus(status func() GatewayStatus) {
+	s.gatewayStatus = status
 }
 
 // EnableWeb turns on the browser surface at YOUR_DOMAIN.
@@ -419,12 +428,22 @@ func pathID(r *http.Request, name string) (int64, error) {
 	return strconv.ParseInt(r.PathValue(name), 10, 64)
 }
 
+// handleHealth answers 200 whatever the gateway's state, on purpose: the
+// buttons, the rosters and the web pages all work without the gateway, and a
+// failing health route is how a watcher decides to restart a unit. A Discord
+// outage must not become a restart loop. A reader that cares about Interested
+// reads gateway.state.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	gateway := GatewayStatus{State: GatewayDisabled}
+	if s.gatewayStatus != nil {
+		gateway = s.gatewayStatus()
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":          "ok",
 		"data_dir":        s.store.DataDir(),
 		"discord_wired":   s.discord != nil,
 		"signature_ready": s.verifier != nil,
+		"gateway":         gateway,
 	})
 }
 
