@@ -43,29 +43,6 @@ func (s *WebSession) IsMemberOf(guildID string) bool {
 	return ok
 }
 
-// CanManageEventsIn reports whether the user may create and edit rosters in a
-// guild. Administrator implies it, as it does everywhere in Discord.
-func (s *WebSession) CanManageEventsIn(guildID string) bool {
-	bits, ok := s.GuildPermissions[guildID]
-	if !ok {
-		return false
-	}
-	return bits&permissionAdministrator != 0 || bits&permissionManageEvents != 0
-}
-
-// CanManageEvent reports whether the user may edit one specific roster.
-//
-// Two ways in: guild-level MANAGE_EVENTS, or having created this one. The
-// second exists so someone without server-wide permissions can still run the
-// event they organised — and it joins on created_by, the Discord user id, never
-// on a display name.
-func (s *WebSession) CanManageEvent(ev *Event) bool {
-	if s.CanManageEventsIn(ev.GuildID) {
-		return true
-	}
-	return ev.CreatedBy != "" && ev.CreatedBy == s.DiscordUserID
-}
-
 func randomToken() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {

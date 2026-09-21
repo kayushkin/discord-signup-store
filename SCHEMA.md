@@ -221,6 +221,17 @@ somebody deleting the first by hand.
 
 ---
 
+### `guild_editing_rules` — who edits and creates in one server
+
+No row means Discord's default: `MANAGE_EVENTS` or `ADMINISTRATOR` edits every event, a creator edits their own, and `CREATE_EVENTS` and up create.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `guild_id` | TEXT PK | The server. |
+| `editor_role_id` | TEXT | When set, this role — with the owner and each event's creator — replaces `MANAGE_EVENTS` and `ADMINISTRATOR` as the right to edit every event. A role id, never a name. |
+| `anyone_may_create` | INTEGER | 1 lets every member create events. |
+| `updated_at` | INTEGER | Unix seconds. |
+
 ## The browser surface
 
 ### `web_sessions` — a logged-in browser

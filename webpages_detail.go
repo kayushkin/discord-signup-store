@@ -34,7 +34,13 @@ func (s *Server) webEvent(w http.ResponseWriter, r *http.Request, session *WebSe
 		http.Error(w, "that event is in a server you are not in", http.StatusForbidden)
 		return nil, false
 	}
-	return ev, session.CanManageEvent(ev)
+	canManage, err := s.mayEditEvent(session.editActor(ev.GuildID), ev)
+	if err != nil {
+		log.Printf("[discord-signup] check edit rights on event %d for %s: %v", ev.ID, session.DiscordUserID, err)
+		http.Error(w, "could not check whether you may edit this event: "+err.Error(), http.StatusBadGateway)
+		return nil, false
+	}
+	return ev, canManage
 }
 
 // handleWebEventDetail shows one roster: the event, who is on it, and its
@@ -358,7 +364,7 @@ func (s *Server) handleWebSync(w http.ResponseWriter, r *http.Request) {
 	if session == nil {
 		return
 	}
-	guilds, err := s.manageableGuilds(session)
+	guilds, err := s.guildsWhereMayEditAll(session)
 	if err != nil {
 		http.Redirect(w, r, "/?"+noticeQuery("Could not sync: "+err.Error()), http.StatusSeeOther)
 		return

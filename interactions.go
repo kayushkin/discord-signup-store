@@ -87,7 +87,10 @@ type Interaction struct {
 		// overwrites. Sent as a decimal string because the bit field exceeds
 		// what a JSON number holds exactly.
 		Permissions string `json:"permissions"`
-		User        struct {
+		// Roles are the role ids the member holds, sent with every press, so
+		// a server's editor role is checked without asking Discord again.
+		Roles []string `json:"roles"`
+		User  struct {
 			ID          string `json:"id"`
 			Username    string `json:"username"`
 			GlobalName  string `json:"global_name"`
@@ -99,21 +102,6 @@ type Interaction struct {
 		Username   string `json:"username"`
 		GlobalName string `json:"global_name"`
 	} `json:"user"`
-}
-
-// canManageEvents reports whether the person who clicked may change an event.
-//
-// Read from the interaction rather than fetched: Discord has already computed
-// the answer for this channel, so trusting it costs no API call and cannot go
-// stale between the click and the check.
-func (i *Interaction) canManageEvents() bool {
-	bits, err := strconv.ParseUint(i.Member.Permissions, 10, 64)
-	if err != nil {
-		// An unreadable permission field means no permissions, never all of
-		// them. Failing open here would hand the capacity control to everyone.
-		return false
-	}
-	return bits&permissionAdministrator != 0 || bits&permissionManageEvents != 0
 }
 
 // actor returns the Discord user id behind an interaction, and the best
@@ -405,6 +393,8 @@ func (s *Server) replyEphemeral(w http.ResponseWriter, content string) {
 		"data": map[string]any{
 			"content": content,
 			"flags":   messageFlagEphemeral,
+			// A refusal names the server's editor role; naming must not ping.
+			"allowed_mentions": map[string]any{"parse": []string{}},
 		},
 	})
 }
@@ -472,24 +462,32 @@ func CreateModalCustomID() string {
 // create a native event may create one here; the two are the same act.
 const permissionCreateEvents = 1 << 44
 
-func (i *Interaction) canCreateEvents() bool {
-	bits, err := strconv.ParseUint(i.Member.Permissions, 10, 64)
+// mayEdit reports whether the person clicking may change this event, and
+// explains why not when they may not. The rule is the server's; see
+// editauthority.go.
+func (s *Server) mayEdit(in *Interaction, ev *Event) (bool, string) {
+	ok, err := s.mayEditEvent(in.editActor(), ev)
 	if err != nil {
-		return false
+		log.Printf("[discord-signup] check edit rights on event %d for %s: %v", ev.ID, in.Member.User.ID, err)
+		return false, "Could not check whether you may edit this: " + err.Error()
 	}
-	return bits&permissionAdministrator != 0 ||
-		bits&permissionManageEvents != 0 ||
-		bits&permissionCreateEvents != 0
+	if !ok {
+		return false, s.whoMayEditIn(ev.GuildID)
+	}
+	return true, ""
 }
 
-// mayEdit reports whether the person clicking may change this event, and
-// explains why not when they may not.
-func (s *Server) mayEdit(in *Interaction, ev *Event) (bool, string) {
-	userID, _ := in.actor()
-	if in.canManageEvents() || (ev.CreatedBy != "" && ev.CreatedBy == userID) {
-		return true, ""
+// mayCreate is mayEdit for making a new event.
+func (s *Server) mayCreate(in *Interaction) (bool, string) {
+	ok, err := s.mayCreateEventsIn(in.editActor())
+	if err != nil {
+		log.Printf("[discord-signup] check create rights in %s: %v", in.GuildID, err)
+		return false, "Could not check whether you may create events: " + err.Error()
 	}
-	return false, "Only someone with Manage Events, or whoever created this event, can edit it."
+	if !ok {
+		return false, "You need Create Events or Manage Events in this server to make an event."
+	}
+	return true, ""
 }
 
 // handleEditButton opens the edit form.
@@ -520,9 +518,8 @@ func (s *Server) handleEditButton(w http.ResponseWriter, in *Interaction, eventI
 
 // handleCreateButton opens the same form, empty.
 func (s *Server) handleCreateButton(w http.ResponseWriter, in *Interaction) {
-	if !in.canCreateEvents() {
-		s.replyEphemeral(w, "You need Create Events or Manage Events in this server "+
-			"to make an event.")
+	if ok, why := s.mayCreate(in); !ok {
+		s.replyEphemeral(w, why)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -600,9 +597,8 @@ func (s *Server) applyEditForm(w http.ResponseWriter, in *Interaction, eventID i
 
 // applyCreateForm makes a new event and puts its card on the board.
 func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form EventForm) {
-	if !in.canCreateEvents() {
-		s.replyEphemeral(w, "You need Create Events or Manage Events in this server "+
-			"to make an event.")
+	if ok, why := s.mayCreate(in); !ok {
+		s.replyEphemeral(w, why)
 		return
 	}
 	zone := s.DefaultTimezone()

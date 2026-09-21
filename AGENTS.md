@@ -32,7 +32,7 @@ Buttons and modals arrive as **HTTP interactions** at `POST /interactions`, veri
 
 ## Discord's limits on the forms
 
-A modal holds at most five inputs, so the Edit modal has Name, Starts, Max attendees, Location and Description; end time, recurrence and roles are on the web page. A free text field exists only inside a modal, never on a message. A component cannot be hidden from some readers, so the Edit button is visible to all and the press is checked against `MANAGE_EVENTS`. A message cannot move between channels, so archiving a finished event is a post to the past-events channel and **then** a delete — a failure leaves a duplicate rather than a hole.
+A modal holds at most five inputs, so the Edit modal has Name, Starts, Max attendees, Location and Description; end time, recurrence and roles are on the web page. A free text field exists only inside a modal, never on a message. A component cannot be hidden from some readers, so the Edit button is visible to all and the press is checked against `MANAGE_EVENTS` — or against a server's own editor role, when it set one (`guild_editing_rules`, `editauthority.go`). A message cannot move between channels, so archiving a finished event is a post to the past-events channel and **then** a delete — a failure leaves a duplicate rather than a hole.
 
 # Access and operations
 

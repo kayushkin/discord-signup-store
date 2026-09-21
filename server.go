@@ -140,6 +140,8 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/guilds/{guildID}/channels", s.handleGetGuildChannels)
 	mux.HandleFunc("POST /api/guilds/{guildID}/table/refresh", s.handleRefreshGuildTable)
 	mux.HandleFunc("PUT /api/guilds/{guildID}/forum", s.handleSetGuildForum)
+	mux.HandleFunc("GET /api/guilds/{guildID}/editing", s.handleGetGuildEditing)
+	mux.HandleFunc("PUT /api/guilds/{guildID}/editing", s.handleSetGuildEditing)
 	mux.HandleFunc("POST /api/events/complete-finished", s.handleCompleteFinished)
 	mux.HandleFunc("POST /api/republish", s.handleRepublish)
 	mux.HandleFunc("POST /api/reminders", s.handleSendReminders)

@@ -62,7 +62,10 @@ func (s *Server) renderMyEventsDashboard(in *Interaction) (map[string]any, error
 	for _, u := range signups {
 		mine[u.Event.ID] = u.Signup
 	}
-	canManageAll := in.canManageEvents()
+	canManageAll, err := s.mayEditAllEventsIn(in.editActor())
+	if err != nil {
+		return nil, err
+	}
 
 	body := []any{}
 	if len(events) == 0 {

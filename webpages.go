@@ -69,7 +69,7 @@ type pageData struct {
 	// EventUnderway offers End on the detail page: started, not yet over.
 	EventUnderway    bool
 	DiscordEventURL  string
-	ManageableGuilds []Guild
+	GuildsWhereMayCreate []Guild
 	Roles            []Role
 
 	StartsLocal       string
@@ -223,13 +223,13 @@ func (s *Server) handleWebNewEventForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := pageData{Title: "New event", Session: session, TimezoneValue: "UTC"}
-	guilds, err := s.manageableGuilds(session)
+	guilds, err := s.guildsWhereMayCreate(session)
 	if err != nil {
 		data.Error = err.Error()
 	}
-	data.ManageableGuilds = guilds
+	data.GuildsWhereMayCreate = guilds
 	if len(guilds) == 0 && data.Error == "" {
-		data.Error = "You do not have Manage Events in any server this bot is in."
+		data.Error = "You may not create events in any server this bot is in."
 	}
 	if len(guilds) > 0 {
 		data.Roles = s.assignableRolesIn(guilds[0].ID)
@@ -237,11 +237,10 @@ func (s *Server) handleWebNewEventForm(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "form.html", data)
 }
 
-// manageableGuilds intersects the servers the bot is in with the ones the
-// caller may manage events in. Both halves matter: the bot cannot post to a
-// server it is not in, and the user must not create rosters where they have no
-// standing.
-func (s *Server) manageableGuilds(session *WebSession) ([]Guild, error) {
+// guildsWhere intersects the servers the bot is in with the ones the caller
+// belongs to and passes allowed in. Both halves matter: the bot cannot post
+// to a server it is not in, and the user must have standing in it.
+func (s *Server) guildsWhere(session *WebSession, allowed func(editActor) (bool, error)) ([]Guild, error) {
 	if s.discord == nil {
 		return nil, errors.New("no discord client configured")
 	}
@@ -251,11 +250,29 @@ func (s *Server) manageableGuilds(session *WebSession) ([]Guild, error) {
 	}
 	var out []Guild
 	for _, g := range botGuilds {
-		if session.CanManageEventsIn(g.ID) {
+		if !session.IsMemberOf(g.ID) {
+			continue
+		}
+		ok, err := allowed(session.editActor(g.ID))
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", g.Name, err)
+		}
+		if ok {
 			out = append(out, g)
 		}
 	}
 	return out, nil
+}
+
+// guildsWhereMayCreate is where the caller may create events.
+func (s *Server) guildsWhereMayCreate(session *WebSession) ([]Guild, error) {
+	return s.guildsWhere(session, s.mayCreateEventsIn)
+}
+
+// guildsWhereMayEditAll is where the caller may edit every event — the
+// standing needed to pull a server's events in from Discord.
+func (s *Server) guildsWhereMayEditAll(session *WebSession) ([]Guild, error) {
+	return s.guildsWhere(session, s.mayEditAllEventsIn)
 }
 
 // assignableRolesIn returns only roles the bot can actually grant. Offering one
@@ -316,8 +333,17 @@ func (s *Server) handleWebCreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	guildID := r.FormValue("guild_id")
-	if !session.CanManageEventsIn(guildID) {
-		http.Error(w, "you do not have Manage Events in that server", http.StatusForbidden)
+	if !session.IsMemberOf(guildID) {
+		http.Error(w, "you are not in that server", http.StatusForbidden)
+		return
+	}
+	mayCreate, err := s.mayCreateEventsIn(session.editActor(guildID))
+	if err != nil {
+		http.Error(w, "could not check whether you may create events there: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	if !mayCreate {
+		http.Error(w, "you may not create events in that server", http.StatusForbidden)
 		return
 	}
 	zone := strings.TrimSpace(r.FormValue("timezone"))
@@ -366,10 +392,10 @@ func (s *Server) handleWebCreateEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderFormError(w http.ResponseWriter, session *WebSession, ev *Event, err error) {
-	guilds, _ := s.manageableGuilds(session)
+	guilds, _ := s.guildsWhereMayCreate(session)
 	s.render(w, "form.html", pageData{
 		Title: "New event", Session: session, Event: ev,
-		Error: err.Error(), ManageableGuilds: guilds,
+		Error: err.Error(), GuildsWhereMayCreate: guilds,
 	})
 }
 

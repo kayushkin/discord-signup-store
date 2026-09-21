@@ -36,6 +36,8 @@ service's, and proxying any other route publishes roster editing to the world.
 | PUT | `/api/guilds/{guildID}/channels` | Record the guild's board, past-events and reminder channels: `{"board_channel_id","past_channel_id","reminder_channel_id"}`. Board is required; the other two may be empty, and an empty reminder channel turns reminders off for that guild. Needs no table first. |
 | POST | `/api/guilds/{guildID}/setup` | Make a server ready in one call: an **Events** category with `#events` (board and table), `#event-management`, `#event-forum` (tags added), `#past-events` and `#event-reminders` — each reused if a channel of that name exists, created otherwise — then the row written, the forum adopted and both tables drawn. Runs by itself when the bot joins a server. Safe to repeat. |
 | GET | `/api/guilds/{guildID}/channels` | The guild's row back: table, management and the three channels. |
+| GET | `/api/guilds/{guildID}/editing` | The server's editing rule: `{"guild_id","editor_role_id","anyone_may_create","updated_at"}`. A server with none answers the default (`""`, `false`). |
+| PUT | `/api/guilds/{guildID}/editing` | Replace it. Both `editor_role_id` (`""` for the default) and `anyone_may_create` are required; an unknown field, or a role that is not one of the server's, is **400**. |
 | POST | `/api/events/complete-finished` | Archive events whose time has passed and strip the buttons off their cards. Also runs on a five-minute ticker. |
 
 ## Browser surface (YOUR_DOMAIN — Discord login required)
@@ -53,7 +55,9 @@ service's, and proxying any other route publishes roster editing to the world.
 | POST | `/events/{id}/end` | End an underway event now: the same finishing as its end time passing, and the native Discord event is ended too. A recurring event ends this date and moves to its next. Offered on the page only while the event is underway. |
 | POST | `/sync` | Pull Discord events for every server you manage. |
 
-**Authorization.** Reading an event needs guild membership. Editing needs `MANAGE_EVENTS` (or `ADMINISTRATOR`) in that guild, or having created the event — matched on `created_by`, the Discord user id, never on a name.
+**Authorization.** Reading an event needs guild membership. Editing needs `MANAGE_EVENTS` (or `ADMINISTRATOR`) in that guild, or having created the event — matched on `created_by`, the Discord user id, never on a name. Creating needs `CREATE_EVENTS`, `MANAGE_EVENTS` or `ADMINISTRATOR` (the web page used to want the last two only).
+
+A server can replace that with its own rule (`PUT /api/guilds/{guildID}/editing`, stored in `guild_editing_rules`). With an **editor role** set, an event is edited by its creator, anyone holding that role, or the server's owner — and `MANAGE_EVENTS` and `ADMINISTRATOR` no longer count there. With **anyone may create** set, every member may create. The same rule governs the Discord buttons and the web pages. In a server with an editor role, the web pages read the person's roles and the server's owner from Discord on each check rather than from the login, so taking the role away takes the right away at once.
 
 ## Status codes
 
@@ -85,8 +89,8 @@ Closed sets, defined in `vocabulary.go` and validated on write.
 |---|---|---|
 | Join | `signup:join:{id}` | anyone |
 | Leave | `signup:leave:{id}` | anyone |
-| Edit | `signup:edit:{id}` | `MANAGE_EVENTS`, `ADMINISTRATOR`, or the event's creator |
-| Create an event | `signup:create:0` | `CREATE_EVENTS`, `MANAGE_EVENTS` or `ADMINISTRATOR` |
+| Edit | `signup:edit:{id}` | `MANAGE_EVENTS`, `ADMINISTRATOR`, or the event's creator — or the server's own rule, see **Authorization** |
+| Create an event | `signup:create:0` | `CREATE_EVENTS`, `MANAGE_EVENTS` or `ADMINISTRATOR` — or anyone, where the server allows it |
 
 **Edit** and **Create an event** open the same five-field modal — Name, Starts,
 Max attendees, Location, Description — prefilled when editing and empty when

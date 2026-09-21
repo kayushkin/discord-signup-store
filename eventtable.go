@@ -384,8 +384,11 @@ func (s *Server) handleTableAction(w http.ResponseWriter, in *Interaction, actio
 		s.replyEphemeral(w, "Unknown table action.")
 		return
 	}
-	if !in.canManageEvents() {
-		s.replyEphemeral(w, "Rebuilding deletes and reposts the table, so it needs Manage Events.")
+	if ok, err := s.mayEditAllEventsIn(in.editActor()); err != nil || !ok {
+		if err != nil {
+			log.Printf("[discord-signup] check rebuild rights in %s: %v", in.GuildID, err)
+		}
+		s.replyEphemeral(w, "Rebuilding deletes and reposts the table, so it needs whoever may edit every event here.")
 		return
 	}
 	guildID := in.GuildID

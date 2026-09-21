@@ -267,3 +267,15 @@ CREATE TABLE IF NOT EXISTS management_pages (
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (guild_id, page)
 );
+
+-- guild_editing_rules: who may edit and create events in one server, when it
+-- is not Discord's default (Manage Events edits everything, creators edit
+-- their own). editor_role_id replaces Manage Events and Administrator with a
+-- role of the server's choosing, alongside the owner; anyone_may_create lets
+-- every member create. No row is the default rule.
+CREATE TABLE IF NOT EXISTS guild_editing_rules (
+    guild_id          TEXT PRIMARY KEY,
+    editor_role_id    TEXT NOT NULL DEFAULT '',
+    anyone_may_create INTEGER NOT NULL DEFAULT 0,
+    updated_at        INTEGER NOT NULL
+);

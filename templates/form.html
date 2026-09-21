@@ -12,7 +12,7 @@
     {{if not .Event}}
     <label>Server</label>
     <select name="guild_id" required>
-      {{range .ManageableGuilds}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+      {{range .GuildsWhereMayCreate}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
     </select>
     {{end}}
 
