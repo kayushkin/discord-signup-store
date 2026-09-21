@@ -102,6 +102,15 @@ operation.
   for no privileged intents (`GuildScheduledEvents`, `GuildMessageReactions`,
   `Guilds`). Set `DISCORD_GATEWAY_DISABLED` to run without it; the Interested
   button then does not feed the roster.
+- **The bot's permissions.** Invite it with scope `bot` and permissions
+  `17618224360528`: View Channel, Send Messages, Read Message History, Add
+  Reactions, Manage Messages, Manage Channels (only for the first setup),
+  Manage Roles (only for role sync), Manage Threads, Manage Events **and
+  Create Events**. Discord splits the last two: Manage Events edits and
+  deletes events that exist, Create Events makes new ones — without it every
+  publish is `403 code 50013 Missing Permissions` (measured 2026-09-21, in a
+  server invited without it). Manage Threads is what lets the forum post take
+  the moderated `finished` and `cancelled` tags.
 - **`MANAGE_ROLES`**, only if you use the role sync. The bot's own highest role
   must sit **above** `Attending` and `Waitlisted` in Server Settings → Roles.
   Get the hierarchy wrong and every role call returns 403 while the permission
