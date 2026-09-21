@@ -216,7 +216,75 @@ func (s *Server) handleWebRosterRemove(w http.ResponseWriter, r *http.Request) {
 	s.redirectWithNotice(w, r, ev.ID, notice)
 }
 
-// handleWebRosterAdd puts someone on by id, through the same rules as a click.
+// memberSearchLimit is how many people the add box offers at once. Enough to
+// find anyone by the first two or three letters of their name, few enough to
+// read.
+const memberSearchLimit = 10
+
+// memberSuggestion is one line in the add box's list.
+type memberSuggestion struct {
+	MemberMatch
+	// OnRoster is their current state on this event — attending or
+	// waitlisted — or empty when adding them would be new.
+	OnRoster string `json:"on_roster,omitempty"`
+}
+
+// handleWebMemberSearch answers the add box as someone types: the server's
+// members whose name starts with what they typed. The picked person travels
+// back to roster/add as their Discord user id, never as the name — two
+// people in one server can share a display name.
+func (s *Server) handleWebMemberSearch(w http.ResponseWriter, r *http.Request) {
+	session := s.requireSession(w, r)
+	if session == nil {
+		return
+	}
+	ev, canManage := s.webEvent(w, r, session)
+	if ev == nil {
+		return
+	}
+	if !canManage {
+		http.Error(w, "you cannot edit this event", http.StatusForbidden)
+		return
+	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"members": []memberSuggestion{}})
+		return
+	}
+	if s.discord == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no Discord client configured"})
+		return
+	}
+	matches, err := s.discord.SearchGuildMembers(ev.GuildID, query, memberSearchLimit)
+	if err != nil {
+		log.Printf("[discord-signup] member search in %s for %q: %v", ev.GuildID, query, err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Discord member search failed: " + err.Error()})
+		return
+	}
+	roster, err := s.store.Roster(ev.ID, false)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	state := map[string]string{}
+	for _, sg := range roster {
+		state[sg.DiscordUserID] = sg.State
+	}
+	out := make([]memberSuggestion, 0, len(matches))
+	for _, m := range matches {
+		out = append(out, memberSuggestion{MemberMatch: m, OnRoster: state[m.UserID]})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"members": out})
+}
+
+// handleWebRosterAdd puts someone on by their Discord user id, through the
+// same rules as a click. The id comes from the name picked in the add box,
+// or is pasted in directly.
+//
+// The id is checked against the server before anyone is added: a typo in a
+// pasted id used to put a stranger's snowflake on the roster, where it sat as
+// a bare number nobody could name. The same lookup gives the name the roster
+// shows.
 func (s *Server) handleWebRosterAdd(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {
@@ -231,16 +299,33 @@ func (s *Server) handleWebRosterAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := strings.TrimSpace(r.FormValue("discord_user_id"))
-	result, err := s.store.Join(ev.ID, userID, "", JoinedViaOperator)
+	if userID == "" {
+		s.redirectWithNotice(w, r, ev.ID, "Nobody was added: pick a person from the list under the box.")
+		return
+	}
+	displayName := ""
+	if s.discord != nil {
+		name, err := s.discord.GuildMemberDisplayName(ev.GuildID, userID)
+		if err != nil {
+			s.redirectWithNotice(w, r, ev.ID, "Nobody was added: "+userID+" is not a member of this server ("+err.Error()+").")
+			return
+		}
+		displayName = name
+	}
+	result, err := s.store.Join(ev.ID, userID, displayName, JoinedViaOperator)
 	if err != nil {
 		s.redirectWithNotice(w, r, ev.ID, "Could not add them: "+err.Error())
 		return
 	}
 	go s.syncAfterChange(ev.ID, []stateChange{{UserID: userID, State: result.Signup.State}})
-	notice := "Added."
+	// Without a Discord client there is no name to say; only tests run so.
+	notice, who := "Added.", "they"
+	if displayName != "" {
+		notice, who = "Added "+displayName+".", displayName
+	}
 	if result.Signup.State == StateWaitlisted {
-		notice = fmt.Sprintf("Event is full, so they went on the waitlist at number %d.",
-			result.Signup.WaitlistPlace)
+		notice = fmt.Sprintf("Event is full, so %s went on the waitlist at number %d.",
+			who, result.Signup.WaitlistPlace)
 	}
 	s.redirectWithNotice(w, r, ev.ID, notice)
 }

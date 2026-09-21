@@ -47,7 +47,8 @@ service's, and proxying any other route publishes roster editing to the world.
 | GET · POST | `/events/new` | Create, with a real date picker and an IANA timezone. |
 | GET | `/events/{id}` | Roster, history, and both counts labelled. |
 | GET | `/events/{id}/edit` · POST `/events/{id}` | Edit. |
-| POST | `/events/{id}/roster/remove` · `/roster/add` | Manage the roster; removal promotes the next in line. |
+| POST | `/events/{id}/roster/remove` · `/roster/add` | Manage the roster; removal promotes the next in line. Add takes a `discord_user_id` and refuses one that is not a member of the event's server; the name shown comes from that lookup. |
+| GET | `/events/{id}/members?q=` | The add box's suggestions: up to 10 server members whose username, display name or nickname **starts with** `q`, bots left out, each with `on_roster` if already attending or waitlisted. Uses Discord's member search, because listing members needs the privileged GUILD_MEMBERS intent, which this application does not have. Manage Events only. |
 | POST | `/events/{id}/publish` | Create a native Discord event linked to this roster. |
 | POST | `/events/{id}/end` | End an underway event now: the same finishing as its end time passing, and the native Discord event is ended too. A recurring event ends this date and moves to its next. Offered on the page only while the event is underway. |
 | POST | `/sync` | Pull Discord events for every server you manage. |

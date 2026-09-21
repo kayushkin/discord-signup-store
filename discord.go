@@ -442,34 +442,83 @@ func (c *DiscordClient) CurrentUserID() (string, error) {
 	return out.ID, nil
 }
 
-// GuildMemberDisplayName returns how someone appears in a server: their
-// nickname if they set one there, otherwise their global display name,
-// otherwise their username.
+// guildMember is Discord's member object, as much of it as naming someone
+// needs. Both the single lookup and the search decode into it, so the two
+// cannot name the same person differently.
+type guildMember struct {
+	Nick string `json:"nick"`
+	User struct {
+		ID         string `json:"id"`
+		Username   string `json:"username"`
+		GlobalName string `json:"global_name"`
+		Bot        bool   `json:"bot"`
+	} `json:"user"`
+}
+
+// displayName is how someone appears in a server: their nickname if they set
+// one there, otherwise their global display name, otherwise their username.
 //
 // That order is what Discord itself shows in a member list, so a roster built
 // from it reads the way the server does.
+func (m guildMember) displayName() string {
+	if m.Nick != "" {
+		return m.Nick
+	}
+	if m.User.GlobalName != "" {
+		return m.User.GlobalName
+	}
+	return m.User.Username
+}
+
+// GuildMemberDisplayName returns how someone appears in a server; see
+// guildMember.displayName.
 func (c *DiscordClient) GuildMemberDisplayName(guildID, userID string) (string, error) {
 	raw, err := c.do(http.MethodGet, "/guilds/"+escapePathSegment(guildID)+"/members/"+escapePathSegment(userID), nil)
 	if err != nil {
 		return "", err
 	}
-	var member struct {
-		Nick string `json:"nick"`
-		User struct {
-			Username   string `json:"username"`
-			GlobalName string `json:"global_name"`
-		} `json:"user"`
-	}
+	var member guildMember
 	if err := json.Unmarshal(raw, &member); err != nil {
 		return "", fmt.Errorf("decode member: %w", err)
 	}
-	if member.Nick != "" {
-		return member.Nick, nil
+	return member.displayName(), nil
+}
+
+// MemberMatch is one person a member search found.
+type MemberMatch struct {
+	UserID      string `json:"user_id"`
+	DisplayName string `json:"display_name"`
+	Username    string `json:"username"`
+}
+
+// SearchGuildMembers finds up to limit members whose username, global display
+// name or server nickname starts with query. Bots are left out: nobody signs
+// a bot up for an event.
+//
+// Search rather than listing the server. Listing needs the privileged
+// GUILD_MEMBERS intent, which this application does not have — measured
+// 2026-09-21, GET /guilds/{id}/members is 403 Missing Access in both guilds
+// while /members/search answers. Search matches the START of a name only:
+// "Sla" finds Slava, "ava" does not.
+func (c *DiscordClient) SearchGuildMembers(guildID, query string, limit int) ([]MemberMatch, error) {
+	path := "/guilds/" + escapePathSegment(guildID) + "/members/search?" +
+		url.Values{"query": {query}, "limit": {strconv.Itoa(limit)}}.Encode()
+	raw, err := c.do(http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
 	}
-	if member.User.GlobalName != "" {
-		return member.User.GlobalName, nil
+	var members []guildMember
+	if err := json.Unmarshal(raw, &members); err != nil {
+		return nil, fmt.Errorf("decode member search: %w", err)
 	}
-	return member.User.Username, nil
+	matches := make([]MemberMatch, 0, len(members))
+	for _, m := range members {
+		if m.User.Bot {
+			continue
+		}
+		matches = append(matches, MemberMatch{UserID: m.User.ID, DisplayName: m.displayName(), Username: m.User.Username})
+	}
+	return matches, nil
 }
 
 // PinMessage pins a message.

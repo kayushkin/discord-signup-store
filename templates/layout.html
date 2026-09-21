@@ -57,6 +57,12 @@ td,th{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);font-s
 th{color:var(--dim);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
 .muted{color:var(--dim)}
 .count{font-variant-numeric:tabular-nums}
+.picker{position:absolute;left:0;right:0;top:100%;z-index:5;margin:2px 0 0;padding:4px 0;
+  list-style:none;background:var(--panel);border:1px solid var(--line);border-radius:6px;
+  max-height:280px;overflow-y:auto}
+.picker li{padding:6px 10px;cursor:pointer}
+.picker li:hover,.picker li[aria-selected="true"]{background:var(--line)}
+.picker li.note{cursor:default;color:var(--dim)}
 </style></head><body>
 <header>
   <h1><a href="/" style="color:inherit">Events</a></h1>

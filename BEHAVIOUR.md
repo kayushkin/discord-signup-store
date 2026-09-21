@@ -40,7 +40,7 @@ the capacity rule and the waitlist order cannot differ between them.
 | 3 | **Join / Leave** on your My events view | press Join | press Leave | `button` |
 | 4 | **✅ on the forum post** | add the reaction | remove it | `reaction` |
 | 5 | **Interested on Discord's own event** | press Interested | un-press it | `interested` |
-| 6 | **The web page**, by an organiser | Add by user id | Remove | `operator` |
+| 6 | **The web page**, by an organiser | Pick them by name (or paste a user id) | Remove | `operator` |
 | 7 | **The machine API** | `POST /api/events/{id}/signups` | `DELETE …/{userID}` | `operator` |
 | 8 | **Creating the event** | automatic | — | `organiser` |
 
