@@ -91,6 +91,8 @@ On a timer, and nothing else: **finished events archived** every 5 minutes;
 **native events imported** every 10 (plus instantly over the gateway);
 **reminders checked** every minute. A finished event leaves **one line** in
 past-events — the table row folded flat — not a card of dead buttons.
+An organiser can finish one early with **End**, on the management table or the
+web page, once it has started; it takes the same path as the timer.
 
 **A recurring event does not finish; it rolls.** It is one row, like Discord's
 one scheduled event. When an occurrence ends the date moves to the next one
@@ -108,7 +110,7 @@ because Discord has none to give.
 |---|---|---|
 | **Forum post** | everyone | The card again, plus discussion, in a channel that lists every event. |
 | **Event table** (`#events`) | everyone | Every upcoming event: its thread, its place, the live count and who is going, with Join / Leave / Details. |
-| **Management table** (`#event-management`) | organisers | The same events with **Edit**, **Repeat**, **Close/Reopen signups** and **Cancel** on each row, and **Create an event** on the end. Where anything about an event is changed. |
+| **Management table** (`#event-management`) | organisers | The same events with **Edit**, **Repeat**, **Close/Reopen signups**, **End** (once it has started) and **Cancel** on each row, and **Create an event** on the end. Where anything about an event is changed. |
 | **Details** | just you | The full roster, by name, read-only, without pinging anyone. |
 | **My events** | just you | The events *you* are on, with Join / Leave in place. |
 | **Discord's own event** | everyone | Discord's native event, linked to a roster here. Its title carries the count. |

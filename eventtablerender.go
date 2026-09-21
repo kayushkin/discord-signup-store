@@ -83,10 +83,18 @@ func namesWithin(signups []Signup, budget int) string {
 	return pluralise(len(names), "person")
 }
 
-// eventTableBlock is one event as it will appear: its text, and what that costs.
+// eventTableBlock is one event as it will appear: its text, its buttons, and
+// what that costs.
+//
+// The buttons are kept rather than asked for again at render time because a
+// row's buttons can change between the two: End appears the moment an event
+// starts. Rendering a row with one more button than was measured could put a
+// full page over Discord's component cap, and Discord refuses the whole
+// message then.
 type eventTableBlock struct {
 	event      *Event
 	text       string
+	buttons    []any
 	components int
 	characters int
 }
@@ -122,11 +130,13 @@ func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*
 
 	// One text block, one action row, its buttons, and the separator that
 	// divides this block from the one above it.
-	components := 2 + len(buttons(ev))
+	rowButtons := buttons(ev)
+	components := 2 + len(rowButtons)
 	if !first {
 		components++
 	}
-	return eventTableBlock{event: ev, text: text, components: components, characters: len([]rune(text))}
+	return eventTableBlock{event: ev, text: text, buttons: rowButtons,
+		components: components, characters: len([]rune(text))}
 }
 
 // packEventTable fills each message as full as it will go and starts another
@@ -168,7 +178,7 @@ func packEventTable(events []Event, rosters map[int64][]Signup, buttons func(*Ev
 }
 
 // RenderEventTablePage draws one packed page.
-func RenderEventTablePage(page []eventTableBlock, index, total int, buttons func(*Event) []any, trailing []any) map[string]any {
+func RenderEventTablePage(page []eventTableBlock, index, total int, trailing []any) map[string]any {
 	body := []any{}
 	if len(page) == 0 {
 		body = append(body, textBlock("-# Nothing coming up."))
@@ -181,7 +191,7 @@ func RenderEventTablePage(page []eventTableBlock, index, total int, buttons func
 		}
 		body = append(body, textBlock(block.text))
 		body = append(body, map[string]any{
-			"type": componentTypeActionRow, "components": buttons(block.event),
+			"type": componentTypeActionRow, "components": block.buttons,
 		})
 	}
 	if total > 1 {
@@ -243,6 +253,13 @@ func managementButtons(ev *Event) []any {
 	case StatusClosed:
 		buttons = append(buttons, map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
 			"label": "Reopen signups", "custom_id": CloseCustomID(ev.ID)})
+	}
+	// End only while it is underway; before then Cancel is the way to stop it.
+	// With it the row is five buttons, which is all an action row holds —
+	// anything new here has to take one of these off first.
+	if eventIsUnderway(ev) {
+		buttons = append(buttons, map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+			"label": "End", "custom_id": EndCustomID(ev.ID)})
 	}
 	return append(buttons, map[string]any{"type": componentTypeButton, "style": buttonStyleDanger,
 		"label": "Cancel", "custom_id": CancelCustomID(ev.ID)})
@@ -352,7 +369,7 @@ func (s *Server) publishPackedTable(guildID string, surface tableSurface) error 
 	}
 
 	for i, page := range pages {
-		payload := RenderEventTablePage(page, i, len(pages), surface.buttons, surface.trailing)
+		payload := RenderEventTablePage(page, i, len(pages), surface.trailing)
 		if messageID, ok := byPage[i]; ok {
 			if err := s.discord.EditMessage(surface.channelID, messageID, payload); err != nil {
 				return fmt.Errorf("edit table page %d: %w", i, err)

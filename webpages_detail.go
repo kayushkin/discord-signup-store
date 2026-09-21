@@ -62,6 +62,7 @@ func (s *Server) handleWebEventDetail(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "detail.html", pageData{
 		Title: ev.Name, Session: session, Event: ev, Roster: roster, History: history,
 		CanManage:       canManage,
+		EventUnderway:   eventIsUnderway(ev),
 		DiscordEventURL: DiscordEventURL(ev.GuildID, ev.DiscordScheduledEventID),
 		Notice:          r.URL.Query().Get("notice"),
 	})

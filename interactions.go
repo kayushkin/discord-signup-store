@@ -271,6 +271,10 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		s.handleCloseToggle(w, in, eventID)
 	case "repeat":
 		s.handleRepeatButton(w, in, eventID)
+	case "end":
+		s.handleEndButton(w, in, eventID)
+	case "end-confirm":
+		s.applyEndConfirm(w, in, eventID)
 	case "my-events":
 		// The routing bug this fixes: "my-events" matched no case and no
 		// "table-" prefix, so the button shipped answering "Unknown signup

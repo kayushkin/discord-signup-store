@@ -240,7 +240,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	11 Details shows the description; Create sits under a divider
 //	12 a recurring event says so on the row, the card and Details
 //	13 daily and yearly rules are described in words, never as an RRULE
-const publishFormatVersion = 13
+//	14 an underway event's management row carries End
+const publishFormatVersion = 14
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //
@@ -264,6 +265,11 @@ func eventPublishSignature(ev *Event, roster []Signup) string {
 		ev.Name, ev.Description, ev.Status, ev.Capacity, ev.StartsAt, ev.EndsAt,
 		ev.Location, ev.Timezone, ev.MessageID, ev.ChannelID,
 		ev.ForumPostID, ev.DiscordScheduledEventID, ev.RecurrenceRule)
+	// Whether it has started is the one input here that changes with nothing
+	// written: the management row gains End at the start time, and without
+	// this the row would wait for the next signup to show it. The sweep sees
+	// the flip within a minute and redraws once.
+	fmt.Fprintf(&b, "\x00%t", eventIsUnderway(ev))
 	for _, sg := range roster {
 		fmt.Fprintf(&b, "\x01%s\x00%s\x00%s", sg.DiscordUserID, sg.DisplayName, sg.State)
 	}

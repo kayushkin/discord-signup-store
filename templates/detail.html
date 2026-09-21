@@ -34,6 +34,13 @@
     <form method="post" action="/events/{{.Event.ID}}/publish" style="margin:0">
       <button class="ghost">Publish to Discord events</button></form>
     {{end}}
+    {{if .EventUnderway}}
+    {{/* Only while it is underway: before the start, cancelling is
+         the way to stop it. */}}
+    <form method="post" action="/events/{{.Event.ID}}/end" style="margin:0"
+          onsubmit="return confirm({{if .Event.RecurrenceRule}}'End this date now? It moves to past events and the event moves on to its next date with an empty roster.'{{else}}'End this event now? Signups stop and it moves to past events. This cannot be undone.'{{end}})">
+      <button class="danger">End event</button></form>
+    {{end}}
   </p>
   {{end}}
 </div>

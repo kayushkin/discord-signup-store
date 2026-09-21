@@ -49,6 +49,7 @@ service's, and proxying any other route publishes roster editing to the world.
 | GET | `/events/{id}/edit` · POST `/events/{id}` | Edit. |
 | POST | `/events/{id}/roster/remove` · `/roster/add` | Manage the roster; removal promotes the next in line. |
 | POST | `/events/{id}/publish` | Create a native Discord event linked to this roster. |
+| POST | `/events/{id}/end` | End an underway event now: the same finishing as its end time passing, and the native Discord event is ended too. A recurring event ends this date and moves to its next. Offered on the page only while the event is underway. |
 | POST | `/sync` | Pull Discord events for every server you manage. |
 
 **Authorization.** Reading an event needs guild membership. Editing needs `MANAGE_EVENTS` (or `ADMINISTRATOR`) in that guild, or having created the event — matched on `created_by`, the Discord user id, never on a name.
@@ -196,8 +197,12 @@ events that already exist.
 `PUT /api/guilds/{guildID}/management {"channel_id"}` points the management
 table at a channel and draws it. It is the event table drawn for organisers:
 the same events, the same packing, with **Edit**, **Repeat**, **Close signups** /
-**Reopen signups** and **Cancel** on each row instead of Join, Leave and Details, and
-**Create an event** on the last page. Cancel opens a confirm that asks for the
+**Reopen signups**, **End** (only once the event has started) and **Cancel** on
+each row instead of Join, Leave and Details, and **Create an event** on the last
+page. That is five buttons, all one action row holds. End asks first, privately,
+then does what the end time passing would do and ends the native Discord event
+(starting it first if Discord never did, since Discord completes only an active
+event); on a recurring event it ends this date and moves on. Cancel opens a confirm that asks for the
 event's name typed back — it deletes the native Discord event and cannot be
 undone, and that is the one gesture Discord offers that cannot happen by
 accident. Close is reversible with the same button and is not cancel: the event

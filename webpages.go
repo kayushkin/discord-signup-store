@@ -65,7 +65,9 @@ type pageData struct {
 	Roster  []Signup
 	History []SignupUpdate
 
-	CanManage        bool
+	CanManage bool
+	// EventUnderway offers End on the detail page: started, not yet over.
+	EventUnderway    bool
 	DiscordEventURL  string
 	ManageableGuilds []Guild
 	Roles            []Role

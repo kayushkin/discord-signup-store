@@ -50,7 +50,7 @@ func TestEveryPageStaysInsideDiscordsBudgets(t *testing.T) {
 	seen := 0
 	for i, page := range pages {
 		seen += len(page)
-		payload := RenderEventTablePage(page, i, len(pages), eventTableButtons, nil)
+		payload := RenderEventTablePage(page, i, len(pages), nil)
 		components := countComponents(payload["components"].([]any))
 		if components > eventTableComponentBudget {
 			t.Errorf("page %d renders %d components, over Discord's %d",
@@ -92,7 +92,7 @@ func TestTheRosterTableNamesPeopleWithoutPingingThem(t *testing.T) {
 	events := rosterTableEvents(1)
 	rosters := map[int64][]Signup{events[0].ID: rosterOf("Domonation", "Twili Midna")}
 
-	payload := RenderEventTablePage(packEventTable(events, rosters, eventTableButtons, 1)[0], 0, 1, eventTableButtons, nil)
+	payload := RenderEventTablePage(packEventTable(events, rosters, eventTableButtons, 1)[0], 0, 1, nil)
 	rendered := fmt.Sprint(payload)
 	if !strings.Contains(rendered, "Domonation") || !strings.Contains(rendered, "Twili Midna") {
 		t.Errorf("the roster table does not name who is going: %q", rendered)
@@ -116,7 +116,7 @@ func TestAnEmptyGuildStillGetsAPage(t *testing.T) {
 	if len(pages) != 1 {
 		t.Fatalf("%d pages for no events, want 1", len(pages))
 	}
-	rendered := fmt.Sprint(RenderEventTablePage(pages[0], 0, 1, eventTableButtons, nil))
+	rendered := fmt.Sprint(RenderEventTablePage(pages[0], 0, 1, nil))
 	if !strings.Contains(rendered, "Nothing coming up") {
 		t.Errorf("an empty roster table says %q", rendered)
 	}
@@ -218,7 +218,7 @@ func TestTheManagementTableHasEditAndCreateAndNothingAMemberDoes(t *testing.T) {
 	events := rosterTableEvents(2)
 	rosters := map[int64][]Signup{events[0].ID: rosterOf("Al"), events[1].ID: nil}
 	pages := packEventTable(events, rosters, managementButtons, len(managementTrailing())+1)
-	payload := RenderEventTablePage(pages[0], 0, 1, managementButtons, managementTrailing())
+	payload := RenderEventTablePage(pages[0], 0, 1, managementTrailing())
 	labels := []string{}
 	var walk func([]any)
 	walk = func(cs []any) {
@@ -258,7 +258,7 @@ func TestTheManagementTableHasEditAndCreateAndNothingAMemberDoes(t *testing.T) {
 func TestThePublicTableCarriesNoTrailingControls(t *testing.T) {
 	events := rosterTableEvents(1)
 	pages := packEventTable(events, nil, eventTableButtons, 1)
-	rendered := fmt.Sprint(RenderEventTablePage(pages[0], 0, 1, eventTableButtons, nil))
+	rendered := fmt.Sprint(RenderEventTablePage(pages[0], 0, 1, nil))
 	if strings.Contains(rendered, "Create an event") || strings.Contains(rendered, myEventsButtonID) {
 		t.Error("the public table carries management controls")
 	}
@@ -268,7 +268,7 @@ func TestThePublicTableCarriesNoTrailingControls(t *testing.T) {
 func TestCreateSitsUnderADividerNotOnTheLastRow(t *testing.T) {
 	events := rosterTableEvents(2)
 	pages := packEventTable(events, nil, managementButtons, len(managementTrailing())+2)
-	body := RenderEventTablePage(pages[0], 0, 1, managementButtons, managementTrailing())["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderEventTablePage(pages[0], 0, 1, managementTrailing())["components"].([]any)[0].(map[string]any)["components"].([]any)
 	last := body[len(body)-1].(map[string]any)
 	beforeLast := body[len(body)-2].(map[string]any)
 	if last["type"] != componentTypeActionRow || fmt.Sprint(last["components"]) == "" {
