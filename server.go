@@ -44,6 +44,12 @@ type Server struct {
 	// changes seconds apart raced and the older one could land last, leaving
 	// every public surface showing a count that was already wrong.
 	syncs *eventSyncQueue
+	// tableLocks serialises redraws of one guild's tables. A redraw reads
+	// which messages it owns, posts any it lacks and records them; two at once
+	// both post the same page and one record overwrites the other, leaving a
+	// message nothing edits or deletes again. That happened on 2026-09-04.
+	tableLocks   map[string]*sync.Mutex
+	tableLocksMu sync.Mutex
 	// gatewayStatus reads the gateway supervisor's state for /healthz. Nil
 	// means no supervisor was started, which /healthz reports as "disabled".
 	gatewayStatus func() GatewayStatus
@@ -92,7 +98,8 @@ func (s *Server) DefaultTimezone() string {
 // still works and nothing is pushed to Discord — useful in tests and for a
 // first run before the bot token is filed in auth-store.
 func NewServer(store *Store, verifier *InteractionVerifier, discord *DiscordClient) *Server {
-	return &Server{store: store, verifier: verifier, discord: discord, syncs: newEventSyncQueue()}
+	return &Server{store: store, verifier: verifier, discord: discord, syncs: newEventSyncQueue(),
+		tableLocks: map[string]*sync.Mutex{}}
 }
 
 // RegisterHandlers mounts every route on mux.

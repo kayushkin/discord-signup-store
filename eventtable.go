@@ -414,6 +414,24 @@ func (s *Server) RebuildEventTable(guildID string) error {
 	if err != nil {
 		return err
 	}
+	// Deleting takes the same lock as a redraw, or a redraw running now could
+	// edit a page this is deleting, or record one this is about to forget.
+	// Released before the redraws below, which take it themselves.
+	if err := s.deleteRecordedTablePages(guildID, table); err != nil {
+		return err
+	}
+	if err := s.RefreshEventTable(guildID); err != nil {
+		return err
+	}
+	return s.RefreshManagementTable(guildID)
+}
+
+// deleteRecordedTablePages deletes every message the store records for the
+// guild's two tables, and the records.
+func (s *Server) deleteRecordedTablePages(guildID string, table *GuildTable) error {
+	lock := s.tableLock(guildID)
+	lock.Lock()
+	defer lock.Unlock()
 	pages, err := s.store.TablePages(guildID)
 	if err != nil {
 		return err
@@ -440,8 +458,5 @@ func (s *Server) RebuildEventTable(guildID string) error {
 			}
 		}
 	}
-	if err := s.RefreshEventTable(guildID); err != nil {
-		return err
-	}
-	return s.RefreshManagementTable(guildID)
+	return nil
 }

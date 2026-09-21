@@ -6,6 +6,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // The event table: every upcoming event, with who is going.
@@ -304,10 +305,26 @@ func (s *Server) RefreshManagementTable(guildID string) error {
 	})
 }
 
+// tableLock is the lock one guild's table redraws take in turn.
+func (s *Server) tableLock(guildID string) *sync.Mutex {
+	s.tableLocksMu.Lock()
+	defer s.tableLocksMu.Unlock()
+	lock, ok := s.tableLocks[guildID]
+	if !ok {
+		lock = &sync.Mutex{}
+		s.tableLocks[guildID] = lock
+	}
+	return lock
+}
+
 func (s *Server) publishPackedTable(guildID string, surface tableSurface) error {
 	if s.discord == nil {
 		return nil
 	}
+	// Held from reading the recorded pages until the last one is recorded.
+	lock := s.tableLock(guildID)
+	lock.Lock()
+	defer lock.Unlock()
 	events, err := s.liveEventsFor(guildID)
 	if err != nil {
 		return err
