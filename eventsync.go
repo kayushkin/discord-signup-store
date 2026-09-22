@@ -249,7 +249,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	18 no emoji in the headline: "**title** - Tue 9/22 7pm (weekly) @ place"
 //	19 the list headings carry theirs: Going ✅, Maybe 🤷, Waitlist ❌
 //	20 the headline's place follows a 📍 again, not an @
-const publishFormatVersion = 20
+//	21 the host is underlined in the table and named on the forum post
+const publishFormatVersion = 21
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //
@@ -273,6 +274,9 @@ func eventPublishSignature(ev *Event, roster []Signup) string {
 		ev.Name, ev.Description, ev.Status, ev.Capacity, ev.StartsAt, ev.EndsAt,
 		ev.Location, ev.Timezone, ev.MessageID, ev.ChannelID,
 		ev.ForumPostID, ev.DiscordScheduledEventID, ev.RecurrenceRule)
+	// The host is underlined in the table and named on the forum post, so
+	// handing an event to someone else has to redraw both.
+	fmt.Fprintf(&b, "\x00%s", ev.CreatedBy)
 	// Whether it has started is the one input here that changes with nothing
 	// written: the management row gains End at the start time, and without
 	// this the row would wait for the next signup to show it. The sweep sees

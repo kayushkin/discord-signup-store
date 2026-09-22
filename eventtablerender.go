@@ -66,10 +66,17 @@ var markdownSpecial = strings.NewReplacer(
 
 func escapeMarkdown(text string) string { return markdownSpecial.Replace(text) }
 
-// namesWithin joins display names inside a rune budget, dropping names off
-// the end rather than cutting one in half.
-func namesWithin(signups []Signup, budget int) string {
+// namesWithin joins names inside a rune budget, dropping names off the end
+// rather than cutting one in half. The host — the event's creator, by user
+// id — is underlined, with their name escaped so its own underscores cannot
+// break the underline.
+func namesWithin(signups []Signup, hostUserID string, budget int) string {
 	names := rosterNamesOnDiscord(signups)
+	for i, sg := range signups {
+		if hostUserID != "" && sg.DiscordUserID == hostUserID {
+			names[i] = "__" + escapeMarkdown(names[i]) + "__"
+		}
+	}
 	full := strings.Join(names, ", ")
 	if len([]rune(full)) <= budget {
 		return full
@@ -125,13 +132,13 @@ func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*
 	if len(attending) == 0 {
 		b.WriteString("nobody yet")
 	} else {
-		b.WriteString(namesWithin(attending, eventTableCharBudget/2))
+		b.WriteString(namesWithin(attending, ev.CreatedBy, eventTableCharBudget/2))
 	}
 	if maybe := maybeOf(roster); len(maybe) > 0 {
-		b.WriteString("\n**Maybe** 🤷 " + namesWithin(maybe, eventTableCharBudget/4))
+		b.WriteString("\n**Maybe** 🤷 " + namesWithin(maybe, ev.CreatedBy, eventTableCharBudget/4))
 	}
 	if len(waiting) > 0 {
-		b.WriteString("\n**Waitlist** ❌ " + namesWithin(waiting, eventTableCharBudget/4))
+		b.WriteString("\n**Waitlist** ❌ " + namesWithin(waiting, ev.CreatedBy, eventTableCharBudget/4))
 	}
 	text := trimTo(b.String(), textDisplayLimit)
 

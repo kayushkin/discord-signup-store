@@ -57,6 +57,12 @@ func renderSignupMessage(ev *Event, roster []Signup) map[string]any {
 		// timezone has to be chosen or stated here.
 		fmt.Fprintf(&b, "\n🗓️ <t:%d:F>\n", ev.StartsAt)
 	}
+	// The host is whoever created the event. A mention rather than a name:
+	// Discord renders it as their current server name whether or not they
+	// are on the roster, and allowed_mentions below keeps it from pinging.
+	if ev.CreatedBy != "" {
+		fmt.Fprintf(&b, "**Host:** <@%s>\n", ev.CreatedBy)
+	}
 	if repeats := repeatsLabel(ev); repeats != "" {
 		// Discord shows the rule on its own event; the card is the one place
 		// the roster is, so it is the one place to say that the roster is for

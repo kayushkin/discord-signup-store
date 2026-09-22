@@ -300,7 +300,7 @@ func pastEventLine(ev *Event, roster []Signup) string {
 	if len(attending) == 0 {
 		line += "nobody"
 	} else {
-		line += namesWithin(attending, 1500)
+		line += namesWithin(attending, ev.CreatedBy, 1500)
 	}
 	return trimTo(line, 2000)
 }
