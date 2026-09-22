@@ -295,3 +295,38 @@ func TestSurfacesLinkToTheForumPostExceptTheForumItself(t *testing.T) {
 		t.Error("a table line links to a post that does not exist")
 	}
 }
+
+// TestAReopenedEventUnarchivesItsForumPost: Discord refuses any change to an
+// archived thread unless the same PATCH unarchives it, so a cancelled event
+// that is reopened — or a live post Discord archived for inactivity — must
+// say archived:false or keep its old tag for good.
+func TestAReopenedEventUnarchivesItsForumPost(t *testing.T) {
+	fake, store, srv := forumFake(t)
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Games",
+		StartsAt: time.Now().Add(48 * time.Hour).Unix()})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := srv.refreshForumPost(ev, true); err != nil {
+		t.Fatalf("first post: %v", err)
+	}
+	cancelled := StatusCancelled
+	ev, _ = store.UpdateEvent(ev.ID, EventPatch{Status: &cancelled})
+	if err := srv.refreshForumPost(ev, false); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	open := StatusOpen
+	ev, _ = store.UpdateEvent(ev.ID, EventPatch{Status: &open})
+	if err := srv.refreshForumPost(ev, false); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	var last map[string]any
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPatch && c.Path == "/channels/"+ev.ForumPostID {
+			last = c.Body
+		}
+	}
+	if archived, present := last["archived"]; !present || archived != false {
+		t.Errorf("the reopening PATCH = %v, want archived:false in it", last)
+	}
+}

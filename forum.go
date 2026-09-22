@@ -285,9 +285,12 @@ func (s *Server) patchForumThread(ev *Event, forum *GuildForum, title, tag strin
 	if rename {
 		patch["name"] = title
 	}
-	if IsArchived(ev.Status) {
-		patch["archived"] = true
-	}
+	// Said both ways, every time. Discord refuses any change to an archived
+	// thread unless the same PATCH unarchives it, and a post gets archived
+	// two ways that are not the event ending: Discord's own inactivity
+	// timer, and an event that was cancelled and then reopened. Sending only
+	// "true" left both stuck on their old tag for good.
+	patch["archived"] = IsArchived(ev.Status)
 	if err := s.discord.ModifyThread(ev.ForumPostID, patch); err != nil {
 		// The finished and cancelled tags are moderated — only someone with
 		// Manage Threads may apply them — and Discord reports a bot without it
