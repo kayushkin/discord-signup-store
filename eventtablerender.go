@@ -114,6 +114,7 @@ type eventTableBlock struct {
 // message or overflow it.
 func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*Event) []any) eventTableBlock {
 	attending, waiting := splitRoster(roster)
+	attending = hostFirst(attending, ev.CreatedBy)
 
 	var b strings.Builder
 	b.WriteString(eventTableHeadline(ev))

@@ -250,7 +250,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	19 the list headings carry theirs: Going ✅, Maybe 🤷, Waitlist ❌
 //	20 the headline's place follows a 📍 again, not an @
 //	21 the host is underlined in the table and named on the forum post
-const publishFormatVersion = 21
+//	22 the host is listed first among the going
+const publishFormatVersion = 22
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //

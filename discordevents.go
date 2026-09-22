@@ -747,6 +747,7 @@ func signupBlock(ev *Event, roster []Signup, boardChannelID string, budget int) 
 	}
 
 	attending, waiting := splitRoster(roster)
+	attending = hostFirst(attending, ev.CreatedBy)
 	// The lists come last so that trimming them for length costs the least:
 	// what goes first is how to sign up, which is the only part somebody has to
 	// have.

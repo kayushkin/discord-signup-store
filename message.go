@@ -88,6 +88,7 @@ func renderSignupMessage(ev *Event, roster []Signup) map[string]any {
 	}
 
 	attending, waiting := splitRoster(roster)
+	attending = hostFirst(attending, ev.CreatedBy)
 	if len(attending) > 0 {
 		b.WriteString("\n**Going**\n")
 		writeMentions(&b, attending)
@@ -161,6 +162,28 @@ func splitRoster(roster []Signup) (attending, waiting []Signup) {
 		}
 	}
 	return attending, waiting
+}
+
+// hostFirst moves the host — the event's creator, by user id — to the front
+// of a going list, leaving everyone else in arrival order. For the lists
+// people read; the numbered Details list keeps arrival order, since its
+// numbers are places in line.
+func hostFirst(attending []Signup, hostUserID string) []Signup {
+	if hostUserID == "" {
+		return attending
+	}
+	out := make([]Signup, 0, len(attending))
+	for _, sg := range attending {
+		if sg.DiscordUserID == hostUserID {
+			out = append(out, sg)
+		}
+	}
+	for _, sg := range attending {
+		if sg.DiscordUserID != hostUserID {
+			out = append(out, sg)
+		}
+	}
+	return out
 }
 
 // maybeOf is the Maybe list, in the order people put themselves on it.

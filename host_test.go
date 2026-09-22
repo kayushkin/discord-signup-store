@@ -15,8 +15,8 @@ func TestTheHostIsUnderlinedInTheTable(t *testing.T) {
 		{DiscordUserID: "u-cy", DisplayName: "cy_the_great", State: StateMaybe},
 	}
 	text := buildEventTableBlock(ev, roster, true, eventTableButtons).text
-	if !strings.Contains(text, "**Going** ✅ Al, __Kat__") {
-		t.Errorf("row = %q, want Kat underlined after Al", text)
+	if !strings.Contains(text, "**Going** ✅ __Kat__, Al") {
+		t.Errorf("row = %q, want Kat underlined, first", text)
 	}
 	ev.CreatedBy = "u-cy"
 	text = buildEventTableBlock(ev, roster, true, eventTableButtons).text
@@ -51,5 +51,30 @@ func TestHandingOverAnEventRedrawsIt(t *testing.T) {
 	ev.CreatedBy = "u-b"
 	if eventPublishSignature(ev, nil) == before {
 		t.Error("a new host signs the same as the old one, so nothing would redraw")
+	}
+}
+
+// TestTheHostIsListedFirstWhenGoing, everywhere a going list is read, and
+// the rest keep arrival order.
+func TestTheHostIsListedFirstWhenGoing(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Games", Status: StatusOpen, CreatedBy: "u-kat", AttendingCount: 3}
+	roster := []Signup{
+		{DiscordUserID: "u-al", DisplayName: "Al", State: StateAttending},
+		{DiscordUserID: "u-bo", DisplayName: "Bo", State: StateAttending},
+		{DiscordUserID: "u-kat", DisplayName: "Kat", State: StateAttending},
+	}
+	if text := buildEventTableBlock(ev, roster, true, eventTableButtons).text; !strings.Contains(text, "✅ __Kat__, Al, Bo") {
+		t.Errorf("table row = %q, want Kat first, then Al and Bo", text)
+	}
+	if content, _ := RenderForumCard(ev, roster)["content"].(string); !strings.Contains(content, "<@u-kat>, <@u-al>, <@u-bo>") {
+		t.Errorf("forum card = %q, want the host first", content)
+	}
+	if line := pastEventLine(ev, roster); !strings.Contains(line, "__Kat__, Al, Bo") {
+		t.Errorf("past line = %q, want the host first", line)
+	}
+	// A host who is not going moves nobody.
+	roster[2].State = StateMaybe
+	if text := buildEventTableBlock(ev, roster, true, eventTableButtons).text; !strings.Contains(text, "✅ Al, Bo") {
+		t.Errorf("table row = %q, want arrival order when the host is not going", text)
 	}
 }
