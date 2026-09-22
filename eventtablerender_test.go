@@ -140,9 +140,9 @@ func TestTheWaitlistIsNamedSeparately(t *testing.T) {
 	}
 }
 
-// TestARowSaysWhatWhenAndWhereThenLinksItsPost. The title is plain text, the
-// time is the event's own zone with the nearest clock face, and the forum post
-// follows the location.
+// TestARowSaysWhatWhenAndWhereThenLinksItsPost. The title is bold, the time
+// is the event's own zone, there is no emoji, and the forum post is on the
+// next line.
 func TestARowSaysWhatWhenAndWhereThenLinksItsPost(t *testing.T) {
 	reno, _ := time.LoadLocation("America/Los_Angeles")
 	ev := &Event{ID: 1, GuildID: "g1", Name: "Board game night", Status: StatusOpen,
@@ -155,25 +155,9 @@ func TestARowSaysWhatWhenAndWhereThenLinksItsPost(t *testing.T) {
 	// title, and Discord rate-limits thread renames to about two per ten
 	// minutes, so under signups the number people read was two renames old. A
 	// message edit has no such limit.
-	want := "**Board game night** 🕖 **Tue 9/22 7pm**  📍 **The shed**\n<#post-9>\n(3/8) **Going:** Al, Bo, Cy"
+	want := "**Board game night** - Tue 9/22 7pm @ The shed\n<#post-9>\n(3/8) **Going:** Al, Bo, Cy"
 	if block.text != want {
 		t.Errorf("row =\n%q\nwant\n%q", block.text, want)
-	}
-}
-
-// TestTheClockFaceIsTheNearestHalfHour.
-func TestTheClockFaceIsTheNearestHalfHour(t *testing.T) {
-	for _, c := range []struct {
-		hour, minute int
-		want         string
-	}{
-		{13, 0, "🕐"}, {19, 0, "🕖"}, {18, 30, "🕡"}, {19, 50, "🕗"}, {19, 14, "🕖"},
-		{19, 15, "🕢"}, {0, 0, "🕛"}, {12, 30, "🕧"}, {23, 50, "🕛"}, {10, 0, "🕙"},
-	} {
-		at := time.Date(2026, 9, 22, c.hour, c.minute, 0, 0, time.UTC)
-		if got := clockFaceNearest(at); got != c.want {
-			t.Errorf("%02d:%02d = %s, want %s", c.hour, c.minute, got, c.want)
-		}
 	}
 }
 
@@ -225,7 +209,7 @@ func TestTheRosterTableHasNoEditButton(t *testing.T) {
 
 // TestTheRowReadsLikeTheExample pins the shape asked for on 2026-09-22:
 //
-//	**Fall Celebration! <Hosted by Heidi>** 🕖 **Tue 9/22 7pm**  📍 **Heidi's House**
+//	**Fall Celebration! <Hosted by Heidi>** - Tue 9/22 7pm @ Heidi's House
 //	<#post>
 //	(13/15) **Going:** Pawadam, Weidi 🫧
 func TestTheRowReadsLikeTheExample(t *testing.T) {
@@ -234,7 +218,7 @@ func TestTheRowReadsLikeTheExample(t *testing.T) {
 		Capacity: 15, AttendingCount: 2, Location: "Heidi's House", ForumPostID: "post-9",
 		Timezone: "America/Los_Angeles", StartsAt: time.Date(2026, 9, 22, 19, 0, 0, 0, reno).Unix()}
 	block := buildEventTableBlock(ev, rosterOf("Pawadam", "Weidi 🫧"), true, eventTableButtons)
-	want := "**Fall Celebration! \\<Hosted by Heidi\\>** 🕖 **Tue 9/22 7pm**  📍 **Heidi's House**\n<#post-9>\n(2/15) **Going:** Pawadam, Weidi 🫧"
+	want := "**Fall Celebration! \\<Hosted by Heidi\\>** - Tue 9/22 7pm @ Heidi's House\n<#post-9>\n(2/15) **Going:** Pawadam, Weidi 🫧"
 	if block.text != want {
 		t.Errorf("row =\n%q\nwant\n%q", block.text, want)
 	}
@@ -311,5 +295,18 @@ func TestCreateSitsUnderADividerNotOnTheLastRow(t *testing.T) {
 	}
 	if n := countComponents([]any{map[string]any{"components": body}}); n > eventTableComponentBudget {
 		t.Errorf("page renders %d components, over %d", n, eventTableComponentBudget)
+	}
+}
+
+// TestTheHeadlineLeavesOutWhatItDoesNotHave, and a repeat reads in words.
+func TestTheHeadlineLeavesOutWhatItDoesNotHave(t *testing.T) {
+	if got := eventTableHeadline(&Event{Name: "Dinner party"}); got != "**Dinner party**" {
+		t.Errorf("no time, no place = %q", got)
+	}
+	reno, _ := time.LoadLocation("America/Los_Angeles")
+	ev := &Event{Name: "Board Game Night", Timezone: "America/Los_Angeles", RecurrenceRule: "FREQ=WEEKLY;BYDAY=TU",
+		StartsAt: time.Date(2026, 9, 22, 17, 0, 0, 0, reno).Unix(), Location: "Baldini's"}
+	if got := eventTableHeadline(ev); got != "**Board Game Night** - Tue 9/22 5pm (weekly) @ Baldini's" {
+		t.Errorf("weekly = %q", got)
 	}
 }

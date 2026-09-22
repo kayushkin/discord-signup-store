@@ -198,7 +198,7 @@ func TestMovingAFutureDateIsAnEditNotARollover(t *testing.T) {
 func TestARecurringEventSaysSoEverywhere(t *testing.T) {
 	ev := &Event{ID: 7, Name: "Games", Capacity: 4, StartsAt: farFutureStart,
 		RecurrenceRule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU", Timezone: "UTC", ForumPostID: "post-7"}
-	if got := eventTableHeadline(ev); !strings.Contains(got, "🔁 every 2 weeks") {
+	if got := eventTableHeadline(ev); !strings.Contains(got, "(every 2 weeks)") {
 		t.Errorf("table headline %q does not say it repeats", got)
 	}
 	ev.ForumPostID = ""

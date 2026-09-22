@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 // The event table: every upcoming event, with who is going.
@@ -34,42 +33,27 @@ const (
 	eventTableCharBudget = 3800
 )
 
-// eventTableHeadline is the event's line: what it is, when and where.
+// eventTableHeadline is the event's line: what it is, when and where, with
+// no emoji — they came out wider than the text and spaced the line oddly.
 //
-//	**Fall Celebration! <Hosted by Heidi>** 🕖 **Tue 9/22 7pm**  📍 **Heidi's House**
+//	**Fall Celebration! <Hosted by Heidi>** - Tue 9/22 7pm @ Heidi's House
+//	**Board Game Night** - Tue 9/22 5pm (weekly) @ Baldini's Casino
 //
-// Title, time and place are bold, so they read first. The title is not a link;
-// the forum post is its own mention, which each caller places — the table on
-// the next line, the one-line past-events summary inline.
-// The time is the event's own zone — the zone it was scheduled in — and the
-// clock face is the one nearest that time, to the half hour.
+// Only the title is bold. The time is the event's own zone — the zone it was
+// scheduled in. The forum post is its own mention, which each caller places:
+// the table on the next line, the one-line past-events summary inline.
 func eventTableHeadline(ev *Event) string {
 	line := "**" + escapeMarkdown(ev.Name) + "**"
 	if ev.StartsAt > 0 {
-		start := eventStartInItsZone(ev)
-		line += " " + clockFaceNearest(start) + " **" + start.Format("Mon") + " " + compactWhen(ev) + "**"
+		line += " - " + eventStartInItsZone(ev).Format("Mon") + " " + compactWhen(ev)
 	}
-	if repeats := repeatsLabel(ev); repeats != "" {
-		line += "  " + repeats
+	if ev.RecurrenceRule != "" {
+		line += " (" + describeRepeat(ev.RecurrenceRule) + ")"
 	}
 	if ev.Location != "" {
-		line += "  📍 **" + escapeMarkdown(ev.Location) + "**"
+		line += " @ " + escapeMarkdown(ev.Location)
 	}
 	return line
-}
-
-// clockFaceNearest is the clock emoji closest to a time, to the half hour:
-// 7:00 is 🕖, 6:30 is 🕡, 7:50 rounds to 🕗.
-func clockFaceNearest(t time.Time) string {
-	halfHours := ((t.Hour()%12)*60 + t.Minute() + 15) / 30 % 24
-	hour := halfHours / 2
-	if hour == 0 {
-		hour = 12
-	}
-	if halfHours%2 == 1 {
-		return string(rune(0x1F55C + hour - 1)) // 🕜 is half past one
-	}
-	return string(rune(0x1F550 + hour - 1)) // 🕐 is one o'clock
 }
 
 // markdownSpecial are the characters Discord reads as formatting. A title is

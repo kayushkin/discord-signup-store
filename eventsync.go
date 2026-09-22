@@ -246,7 +246,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	15 table rows read "title 🕖 Tue 9/22 7pm  📍 place  <#post>" over "(3/8) 👥 names"
 //	16 bold title, time and place; Going, Maybe and Waitlist lines; a Maybe button
 //	17 the forum post on its own line under the headline; the list labels bold
-const publishFormatVersion = 17
+//	18 no emoji in the headline: "**title** - Tue 9/22 7pm (weekly) @ place"
+const publishFormatVersion = 18
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //
