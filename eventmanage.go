@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // The management row's two actions beyond Edit: shutting signups, and
@@ -145,12 +146,12 @@ func (s *Server) handleRepeatButton(w http.ResponseWriter, in *Interaction, even
 			"components": []any{
 				row(modalTextInput(fieldRepeats+"@"+modalID, "Repeats — "+repeatWords,
 					describeRepeat(ev.RecurrenceRule), "weekly", textInputStyleShort, true, 40)),
-				// This occurrence's end, not the series' — Discord has no series
-				// end a client can set, so there is none to offer. The label
-				// says which, because "Ends" on a form titled Repeat reads as
-				// the other one.
-				row(modalTextInput(fieldEndsAt+"@"+modalID, "Each occurrence ends — "+zone,
-					FormatEventTime(ev.EndsAt, zone), "9/29 5pm   (blank for none)", textInputStyleShort, false, 40)),
+				// How long each occurrence lasts, not when the series stops —
+				// Discord has no series end a client can set. A length rather
+				// than an end time, because it is the same for every date and
+				// an end time is a date to retype each time.
+				row(modalTextInput(fieldLength+"@"+modalID, "How long — 2h, 90m, 3:30, 1 day",
+					FormatEventLength(eventLength(ev)), "2h 30m   (blank for no set length)", textInputStyleShort, false, 40)),
 			},
 		},
 	})
@@ -158,7 +159,7 @@ func (s *Server) handleRepeatButton(w http.ResponseWriter, in *Interaction, even
 
 // applyRepeatForm stores the rule and pushes it to Discord through the one
 // edit path, so it is logged and every copy republishes.
-func (s *Server) applyRepeatForm(w http.ResponseWriter, in *Interaction, eventID int64, repeats, ends string) {
+func (s *Server) applyRepeatForm(w http.ResponseWriter, in *Interaction, eventID int64, repeats, length string) {
 	ev, err := s.store.GetEvent(eventID)
 	if err != nil {
 		s.replyEphemeral(w, "That event no longer exists.")
@@ -177,10 +178,15 @@ func (s *Server) applyRepeatForm(w http.ResponseWriter, in *Interaction, eventID
 		s.replyEphemeral(w, plainError(err))
 		return
 	}
-	endsAt, err := ParseEventTime(ends, zone)
+	howLong, err := ParseEventLength(length)
 	if err != nil {
 		s.replyEphemeral(w, plainError(err))
 		return
+	}
+	// The end follows from the start; blank means no set length.
+	var endsAt int64
+	if howLong > 0 {
+		endsAt = ev.StartsAt + int64(howLong/time.Second)
 	}
 	userID, _ := in.actor()
 	// A rule needs a zone to mean anything across a clock change, so one is

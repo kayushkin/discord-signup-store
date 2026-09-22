@@ -608,7 +608,7 @@ func (s *Server) handleModalSubmit(w http.ResponseWriter, in *Interaction) {
 	case "cancel-modal":
 		s.applyCancelConfirm(w, in, eventID, form)
 	case "repeat-modal":
-		s.applyRepeatForm(w, in, eventID, in.fieldValue(fieldRepeats), in.fieldValue(fieldEndsAt))
+		s.applyRepeatForm(w, in, eventID, in.fieldValue(fieldRepeats), in.fieldValue(fieldLength))
 	case "details-modal":
 		// A viewer's details modal holds no inputs, so there is nothing to
 		// save. It still has a submit button — every modal does — and Discord

@@ -426,8 +426,10 @@ the whole job. A moved date that has not happened yet is an organiser's edit
 and resets nothing.
 
 There is **no series end**: Discord accepts neither `COUNT` nor `UNTIL` from
-a client, so none is offered. The Repeat form's second field is *this
-occurrence's* end time, labelled as such. To stop a series, set it to `never`.
+a client, so none is offered. The Repeat form's second field is how long
+each occurrence lasts — `30 mins`, `4 hours`, `3:30`, `60m`, `4h30m`, `1 day`,
+`1.5h`; blank for no set length — and the end follows from the start. A bare
+number is refused, since it could be hours or minutes. To stop a series, set it to `never`.
 Every surface that shows the event says it repeats — `🔁 weekly`, `🔁 every 2
 weeks`, `🔁 monthly` — on the table row, the card, Details and the web pages;
 the forum title does not, because that would be a rename.

@@ -26,9 +26,10 @@ const (
 	fieldCapacity    = "capacity"
 	fieldLocation    = "location"
 	fieldDescription = "description"
-	// fieldRepeats and fieldEndsAt are the Repeat form's two inputs.
+	// fieldRepeats and fieldLength are the Repeat form's two inputs: how
+	// often, and how long each occurrence lasts.
 	fieldRepeats = "repeats"
-	fieldEndsAt  = "ends"
+	fieldLength  = "length"
 	// fieldRoster carries the roster into a modal as read-only-looking text.
 	// Never read back: whatever somebody types into it is thrown away.
 	fieldRoster = "roster"
