@@ -132,7 +132,7 @@ func TestTheWaitlistIsNamedSeparately(t *testing.T) {
 	pages := packEventTable(events, map[int64][]Signup{events[0].ID: roster}, eventTableButtons, 1)
 
 	text := pages[0][0].text
-	if !strings.Contains(text, "2/8 👥 Al, Bo") {
+	if !strings.Contains(text, "(2/8) 👥 Al, Bo") {
 		t.Errorf("block = %q, want the count and the going list", text)
 	}
 	if !strings.Contains(text, "⏳ Cy") {
@@ -140,35 +140,50 @@ func TestTheWaitlistIsNamedSeparately(t *testing.T) {
 	}
 }
 
-// TestARowSaysNothingItsThreadTitleAlreadySays. The forum post title is
-// "[3/8] Board game night — 8/29 4pm" and Discord renders <#post> as exactly
-// those words, so printing them beside the link said all of it twice and spent
-// the room this table needs for names.
-func TestARowSaysNothingItsThreadTitleAlreadySays(t *testing.T) {
+// TestARowSaysWhatWhenAndWhereThenLinksItsPost. The title is plain text, the
+// time is the event's own zone with the nearest clock face, and the forum post
+// follows the location.
+func TestARowSaysWhatWhenAndWhereThenLinksItsPost(t *testing.T) {
+	reno, _ := time.LoadLocation("America/Los_Angeles")
 	ev := &Event{ID: 1, GuildID: "g1", Name: "Board game night", Status: StatusOpen,
 		Capacity: 8, AttendingCount: 3, Location: "The shed", ForumPostID: "post-9",
-		StartsAt: time.Now().Add(30 * time.Hour).Unix()}
+		Timezone: "America/Los_Angeles",
+		StartsAt: time.Date(2026, 9, 22, 19, 0, 0, 0, reno).Unix()}
 
 	block := buildEventTableBlock(ev, rosterOf("Al", "Bo", "Cy"), true, eventTableButtons)
-	if !strings.Contains(block.text, "<#post-9>") {
-		t.Errorf("row = %q, want it to link the thread", block.text)
-	}
-	if strings.Contains(block.text, "Board game night") {
-		t.Errorf("row = %q, repeats the name the thread title already carries", block.text)
-	}
 	// The count is in the row on purpose. It used to be read off the thread
 	// title, and Discord rate-limits thread renames to about two per ten
 	// minutes, so under signups the number people read was two renames old. A
 	// message edit has no such limit.
-	if !strings.Contains(block.text, "3/8") {
-		t.Errorf("row = %q, want the live count in the message", block.text)
+	want := "Board game night 🕖 Tue 9/22 7pm  📍 The shed  <#post-9>\n(3/8) 👥 Al, Bo, Cy"
+	if block.text != want {
+		t.Errorf("row =\n%q\nwant\n%q", block.text, want)
 	}
-	// Location is the one thing the title does not hold.
-	if !strings.Contains(block.text, "The shed") {
-		t.Errorf("row = %q, want the location kept", block.text)
+}
+
+// TestTheClockFaceIsTheNearestHalfHour.
+func TestTheClockFaceIsTheNearestHalfHour(t *testing.T) {
+	for _, c := range []struct {
+		hour, minute int
+		want         string
+	}{
+		{13, 0, "🕐"}, {19, 0, "🕖"}, {18, 30, "🕡"}, {19, 50, "🕗"}, {19, 14, "🕖"},
+		{19, 15, "🕢"}, {0, 0, "🕛"}, {12, 30, "🕧"}, {23, 50, "🕛"}, {10, 0, "🕙"},
+	} {
+		at := time.Date(2026, 9, 22, c.hour, c.minute, 0, 0, time.UTC)
+		if got := clockFaceNearest(at); got != c.want {
+			t.Errorf("%02d:%02d = %s, want %s", c.hour, c.minute, got, c.want)
+		}
 	}
-	if !strings.Contains(block.text, "3/8 👥 Al, Bo, Cy") {
-		t.Errorf("row = %q, want the names", block.text)
+}
+
+// TestATitleIsShownAsTyped: a name must not turn into formatting, a quote or
+// a mention.
+func TestATitleIsShownAsTyped(t *testing.T) {
+	ev := &Event{ID: 1, Name: "> *secret* party <#123>"}
+	got := eventTableHeadline(ev)
+	if got != `\> \*secret\* party \<\#123\>` {
+		t.Errorf("headline = %q", got)
 	}
 }
 
@@ -199,17 +214,24 @@ func TestTheRosterTableHasNoEditButton(t *testing.T) {
 	}
 }
 
-// TestTheRowReadsLikeTheExample pins the shape asked for:
+// TestTheRowReadsLikeTheExample pins the shape asked for on 2026-09-22:
 //
-//	<#thread>  📍  in my butt
-//	2/10 👥 Twili Midna, Slava
+//	Fall Celebration! <Hosted by Heidi> 🕖 Tue 9/22 7pm  📍 Heidi's House  <#post>
+//	(13/15) 👥 Pawadam, Weidi 🫧
 func TestTheRowReadsLikeTheExample(t *testing.T) {
-	ev := &Event{ID: 1, GuildID: "g1", Name: "Party", Status: StatusOpen,
-		Capacity: 10, AttendingCount: 2, Location: "in my butt", ForumPostID: "post-9"}
-	block := buildEventTableBlock(ev, rosterOf("Twili Midna", "Slava"), true, eventTableButtons)
-	want := "<#post-9>  📍  in my butt\n2/10 👥 Twili Midna, Slava"
+	reno, _ := time.LoadLocation("America/Los_Angeles")
+	ev := &Event{ID: 1, GuildID: "g1", Name: "Fall Celebration! <Hosted by Heidi>", Status: StatusOpen,
+		Capacity: 15, AttendingCount: 2, Location: "Heidi's House", ForumPostID: "post-9",
+		Timezone: "America/Los_Angeles", StartsAt: time.Date(2026, 9, 22, 19, 0, 0, 0, reno).Unix()}
+	block := buildEventTableBlock(ev, rosterOf("Pawadam", "Weidi 🫧"), true, eventTableButtons)
+	want := "Fall Celebration! \\<Hosted by Heidi\\> 🕖 Tue 9/22 7pm  📍 Heidi's House  <#post-9>\n(2/15) 👥 Pawadam, Weidi 🫧"
 	if block.text != want {
 		t.Errorf("row =\n%q\nwant\n%q", block.text, want)
+	}
+	// With no limit the count stands alone in its parentheses.
+	ev.Capacity = 0
+	if got := buildEventTableBlock(ev, rosterOf("Pawadam", "Weidi 🫧"), true, eventTableButtons).text; !strings.Contains(got, "\n(2) 👥 Pawadam") {
+		t.Errorf("unlimited row = %q, want (2) before the names", got)
 	}
 }
 

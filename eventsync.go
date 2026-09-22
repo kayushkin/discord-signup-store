@@ -241,7 +241,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	12 a recurring event says so on the row, the card and Details
 //	13 daily and yearly rules are described in words, never as an RRULE
 //	14 an underway event's management row carries End
-const publishFormatVersion = 14
+//	15 table rows read "title 🕖 Tue 9/22 7pm  📍 place  <#post>" over "(3/8) 👥 names"
+const publishFormatVersion = 15
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //

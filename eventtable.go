@@ -329,7 +329,9 @@ func eventLine(ev *Event) string {
 // glancing, so it trades the per-reader timezone for eight characters; the
 // event's zone is whatever it was scheduled in, and Details still carries the
 // localised form for anyone who needs certainty.
-func compactWhen(ev *Event) string {
+// eventStartInItsZone is the start in the zone the event was scheduled in,
+// UTC when it has none.
+func eventStartInItsZone(ev *Event) time.Time {
 	zone := ev.Timezone
 	if zone == "" {
 		zone = "UTC"
@@ -338,7 +340,11 @@ func compactWhen(ev *Event) string {
 	if err != nil {
 		loc = time.UTC
 	}
-	t := time.Unix(ev.StartsAt, 0).In(loc)
+	return time.Unix(ev.StartsAt, 0).In(loc)
+}
+
+func compactWhen(ev *Event) string {
+	t := eventStartInItsZone(ev)
 	clock := strings.ToLower(t.Format("3:04pm"))
 	clock = strings.Replace(clock, ":00", "", 1)
 	return fmt.Sprintf("%d/%d %s", int(t.Month()), t.Day(), clock)

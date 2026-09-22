@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // The event table: every upcoming event, with who is going.
@@ -33,38 +34,55 @@ const (
 	eventTableCharBudget = 3800
 )
 
-// eventTableHeadline is the event's line, minus everything its forum post's
-// title already says.
+// eventTableHeadline is the event's line: what it is, when, where, and its
+// forum post.
 //
-// That title is "[3/8] Board game night — 8/29 4pm", and Discord renders
-// <#post> as exactly those words — so printing the badge, the name and the time
-// beside the link was saying all of it twice and spending the room this table
-// needs for names.
+//	Fall Celebration! <Hosted by Heidi> 🕖 Tue 9/22 7pm  📍 Heidi's House  <#post>
 //
-// Location stays: it is the one thing the title does not carry. An event with
-// no forum post gets the full line, because then there is nothing to click and
-// nothing else saying what it is.
-//
-// ⚠️ The count now reaches the reader through that title, and Discord
-// rate-limits thread renames to about two per ten minutes — so under fast
-// signups the badge can lag. The names below it cannot: they are written into
-// this message, which has no such limit.
+// The title is plain text, not a link. The post comes after the location as
+// its own mention, so the row reads the same whether or not the event has one.
+// The time is the event's own zone — the zone it was scheduled in — and the
+// clock face is the one nearest that time, to the half hour.
 func eventTableHeadline(ev *Event) string {
-	if ev.ForumPostID == "" {
-		return eventLine(ev)
-	}
-	// Discord renders <#post> as the post's title, which already carries the
-	// name, the date and the throttled count. The live count is on the next
-	// line, where a message edit can keep it current.
-	line := fmt.Sprintf("<#%s>", ev.ForumPostID)
-	if ev.Location != "" {
-		line += "  📍  " + ev.Location
+	line := escapeMarkdown(ev.Name)
+	if ev.StartsAt > 0 {
+		start := eventStartInItsZone(ev)
+		line += " " + clockFaceNearest(start) + " " + start.Format("Mon") + " " + compactWhen(ev)
 	}
 	if repeats := repeatsLabel(ev); repeats != "" {
 		line += "  " + repeats
 	}
+	if ev.Location != "" {
+		line += "  📍 " + escapeMarkdown(ev.Location)
+	}
+	if ev.ForumPostID != "" {
+		line += fmt.Sprintf("  <#%s>", ev.ForumPostID)
+	}
 	return line
 }
+
+// clockFaceNearest is the clock emoji closest to a time, to the half hour:
+// 7:00 is 🕖, 6:30 is 🕡, 7:50 rounds to 🕗.
+func clockFaceNearest(t time.Time) string {
+	halfHours := ((t.Hour()%12)*60 + t.Minute() + 15) / 30 % 24
+	hour := halfHours / 2
+	if hour == 0 {
+		hour = 12
+	}
+	if halfHours%2 == 1 {
+		return string(rune(0x1F55C + hour - 1)) // 🕜 is half past one
+	}
+	return string(rune(0x1F550 + hour - 1)) // 🕐 is one o'clock
+}
+
+// markdownSpecial are the characters Discord reads as formatting. A title is
+// shown as typed, so each is escaped: a name like "*secret* party" must not
+// turn bold, and one starting with ">" must not turn into a quote.
+var markdownSpecial = strings.NewReplacer(
+	`\`, `\\`, "*", `\*`, "_", `\_`, "~", `\~`, "`", "\\`", "|", `\|`,
+	"<", `\<`, ">", `\>`, "#", `\#`)
+
+func escapeMarkdown(text string) string { return markdownSpecial.Replace(text) }
 
 // namesWithin joins display names inside a rune budget, dropping names off
 // the end rather than cutting one in half.
@@ -114,9 +132,9 @@ func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*
 	// packer decides how many blocks fit in a message, and a single block only
 	// needs trimming when one event alone would fill one.
 	if ev.Capacity > 0 {
-		fmt.Fprintf(&b, "\n%d/%d 👥 ", ev.AttendingCount, ev.Capacity)
+		fmt.Fprintf(&b, "\n(%d/%d) 👥 ", ev.AttendingCount, ev.Capacity)
 	} else {
-		fmt.Fprintf(&b, "\n%d 👥 ", ev.AttendingCount)
+		fmt.Fprintf(&b, "\n(%d) 👥 ", ev.AttendingCount)
 	}
 	if len(attending) == 0 {
 		b.WriteString("Nobody yet.")
