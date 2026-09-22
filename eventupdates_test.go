@@ -1,6 +1,10 @@
 package discordsignup
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -81,5 +85,31 @@ func TestBookkeepingIsNotAnEdit(t *testing.T) {
 	}
 	if len(updates) != 0 {
 		t.Errorf("%d updates recorded for bookkeeping alone: %+v", len(updates), updates)
+	}
+}
+
+// TestTheCreatorCanBeHandedOverAndItIsLogged.
+func TestTheCreatorCanBeHandedOverAndItIsLogged(t *testing.T) {
+	_, store, _, mux, _ := webTestServer(t)
+	ev := publishedEvent(t, store, 4)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPatch, "/api/events/"+strconv.FormatInt(ev.ID, 10),
+		strings.NewReader(`{"created_by":"u-woah"}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH answered %d: %s", rec.Code, rec.Body.String())
+	}
+	after, _ := store.GetEvent(ev.ID)
+	if after.CreatedBy != "u-woah" {
+		t.Fatalf("created_by = %q", after.CreatedBy)
+	}
+	updates, _ := store.EventUpdates(ev.ID)
+	logged := false
+	for _, u := range updates {
+		if u.Field == "created_by" && u.ToValue == "u-woah" && u.Actor == "api" {
+			logged = true
+		}
+	}
+	if !logged {
+		t.Errorf("handing over the event left no history line: %+v", updates)
 	}
 }

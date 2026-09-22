@@ -25,7 +25,7 @@ service's, and proxying any other route publishes roster editing to the world.
 | GET | `/api/events?guild_id=&status=&limit=` | List rosters, newest first, with live counts. |
 | POST | `/api/events` | Create a roster. `name`, `guild_id`, `channel_id` required. |
 | GET | `/api/events/{id}` | One roster with `attending_count` and `waitlist_count`. |
-| PATCH | `/api/events/{id}` | Partial update. Every field is optional; omitting one leaves it alone. |
+| PATCH | `/api/events/{id}` | Partial update. Every field is optional; omitting one leaves it alone. `created_by` hands the event to another organiser (a Discord user id) and is logged in its history; only this route can change it. |
 | DELETE | `/api/events/{id}` | Soft delete. Prefer `status: "cancelled"` if the record should stay visible. |
 | GET | `/api/events/{id}/signups?include_withdrawn=` | The roster: attending first, then the waitlist in promotion order. |
 | POST | `/api/events/{id}/signups` | Add someone by id. Goes through the same cap and waitlist as a click. |

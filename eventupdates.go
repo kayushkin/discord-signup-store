@@ -39,6 +39,9 @@ var loggedEventFields = []struct {
 	{"recurrence_rule", func(e *Event) string { return e.RecurrenceRule }},
 	{"attending_role_id", func(e *Event) string { return e.AttendingRoleID }},
 	{"waitlist_role_id", func(e *Event) string { return e.WaitlistRoleID }},
+	// Who counts as the creator decides who may edit, so handing it over is
+	// worth a line.
+	{"created_by", func(e *Event) string { return e.CreatedBy }},
 }
 
 // LogEventUpdates records what changed between two readings of an event.

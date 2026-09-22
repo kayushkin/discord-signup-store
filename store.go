@@ -818,6 +818,9 @@ func (s *Store) UpdateEvent(id int64, patch EventPatch) (*Event, error) {
 	if patch.ForumPostID != nil {
 		add("forum_post_id", *patch.ForumPostID)
 	}
+	if patch.CreatedBy != nil {
+		add("created_by", strings.TrimSpace(*patch.CreatedBy))
+	}
 	if patch.DiscordInterestedCount != nil {
 		add("discord_interested_count", *patch.DiscordInterestedCount)
 		add("discord_synced_at", now())
@@ -858,6 +861,10 @@ type EventPatch struct {
 	DiscordInterestedCount  *int    `json:"discord_interested_count"`
 	ThreadID                *string `json:"thread_id"`
 	ForumPostID             *string `json:"forum_post_id"`
+	// CreatedBy hands an event to another organiser: who may edit it as its
+	// creator. A Discord user id, never a name. Only the machine API sets it;
+	// neither the web form nor the Discord modal builds it.
+	CreatedBy *string `json:"created_by"`
 }
 
 // validateRecurrence enforces the one rule that cannot be defaulted: a

@@ -67,10 +67,10 @@ type pageData struct {
 
 	CanManage bool
 	// EventUnderway offers End on the detail page: started, not yet over.
-	EventUnderway    bool
-	DiscordEventURL  string
+	EventUnderway        bool
+	DiscordEventURL      string
 	GuildsWhereMayCreate []Guild
-	Roles            []Role
+	Roles                []Role
 
 	StartsLocal       string
 	EndsLocal         string
