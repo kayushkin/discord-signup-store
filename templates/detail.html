@@ -63,7 +63,12 @@
       <td class="meta">{{localTime $s.SignedUpAt}}</td>
       {{if $canManage}}
       <td style="text-align:right">
-        <form method="post" action="/events/{{$.Event.ID}}/roster/remove" style="margin:0">
+        {{if or (eq $s.State "waitlisted") (eq $s.State "maybe")}}
+        <form method="post" action="/events/{{$.Event.ID}}/roster/promote" style="margin:0;display:inline">
+          <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
+          <button class="ghost">Promote</button></form>
+        {{end}}
+        <form method="post" action="/events/{{$.Event.ID}}/roster/remove" style="margin:0;display:inline">
           <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
           <button class="danger">Remove</button></form>
       </td>{{end}}
@@ -71,7 +76,8 @@
     {{end}}
   </table>
   <p class="hint">Removing someone who holds a place promotes whoever has waited
-    longest, and messages them.</p>
+    longest, and messages them. Promote gives someone on the waitlist or the Maybe
+    list a place straight away — even past the limit — and messages them.</p>
   {{end}}
 
   {{if $canManage}}

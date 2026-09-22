@@ -635,3 +635,36 @@ func (s *Store) SignupState(eventID int64, discordUserID string) (string, error)
 	}
 	return state, nil
 }
+
+// GiveAPlace moves someone from the waitlist or the Maybe list to attending,
+// on an organiser's say-so. It does not check the limit: an organiser can
+// take an event over it, as lowering the limit already can, and the table
+// then reads 16/15. Anyone going, withdrawn or not on the roster is
+// ErrNotFound. actor names the organiser, for the history.
+func (s *Store) GiveAPlace(eventID int64, discordUserID, actor string) (*Signup, string, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, "", fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback()
+	existing, found, err := loadSignupTx(tx, eventID, discordUserID)
+	if err != nil {
+		return nil, "", err
+	}
+	if !found || (existing.State != StateWaitlisted && existing.State != StateMaybe) {
+		return nil, "", ErrNotFound
+	}
+	from, ts := existing.State, now()
+	if _, err := tx.Exec(`UPDATE signups SET state = ?, state_changed_at = ? WHERE id = ?`,
+		StateAttending, ts, existing.ID); err != nil {
+		return nil, "", fmt.Errorf("give a place: %w", err)
+	}
+	if err := logSignupUpdate(tx, eventID, discordUserID, ActionPromoted, from, StateAttending, actor, ts); err != nil {
+		return nil, "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, "", fmt.Errorf("commit: %w", err)
+	}
+	existing.State, existing.StateChangedAt = StateAttending, ts
+	return existing, from, nil
+}

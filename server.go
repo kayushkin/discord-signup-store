@@ -186,6 +186,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}", s.handleWebUpdateEvent)
 	mux.HandleFunc("GET /events/{id}/edit", s.handleWebEditForm)
 	mux.HandleFunc("POST /events/{id}/roster/remove", s.handleWebRosterRemove)
+	mux.HandleFunc("POST /events/{id}/roster/promote", s.handleWebRosterPromote)
 	mux.HandleFunc("POST /events/{id}/roster/add", s.handleWebRosterAdd)
 	mux.HandleFunc("GET /events/{id}/members", s.handleWebMemberSearch)
 	mux.HandleFunc("POST /events/{id}/publish", s.handleWebPublish)

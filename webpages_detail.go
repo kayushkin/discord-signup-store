@@ -184,6 +184,43 @@ func (s *Server) webFormError(w http.ResponseWriter, session *WebSession, ev *Ev
 	})
 }
 
+// handleWebRosterPromote gives someone on the waitlist or the Maybe list a
+// place, even past the limit — the organiser's call — and tells them.
+func (s *Server) handleWebRosterPromote(w http.ResponseWriter, r *http.Request) {
+	session := s.requireSession(w, r)
+	if session == nil {
+		return
+	}
+	ev, canManage := s.webEvent(w, r, session)
+	if ev == nil {
+		return
+	}
+	if !canManage {
+		http.Error(w, "you cannot edit this event", http.StatusForbidden)
+		return
+	}
+	userID := r.FormValue("discord_user_id")
+	promoted, from, err := s.store.GiveAPlace(ev.ID, userID, "web:"+session.DiscordUserID)
+	if errors.Is(err, ErrNotFound) {
+		s.redirectWithNotice(w, r, ev.ID, "They are not on the waitlist or the Maybe list.")
+		return
+	}
+	if err != nil {
+		log.Printf("[discord-signup] web promote %s on %d: %v", userID, ev.ID, err)
+		http.Error(w, "could not promote them", http.StatusInternalServerError)
+		return
+	}
+	s.inBackground(func() { s.notifyGivenAPlace(ev, promoted) })
+	s.inBackground(func() {
+		s.syncAfterChange(ev.ID, []stateChange{{UserID: userID, State: StateAttending}})
+	})
+	notice := fmt.Sprintf("%s is going now (was %s), and was messaged.", promoted.NameOnDiscord(), from)
+	if after, err := s.store.GetEvent(ev.ID); err == nil && after.Capacity > 0 && after.AttendingCount > after.Capacity {
+		notice += fmt.Sprintf(" That takes it to %d/%d, over the limit.", after.AttendingCount, after.Capacity)
+	}
+	s.redirectWithNotice(w, r, ev.ID, notice)
+}
+
 // handleWebRosterRemove takes someone off, promoting whoever is next.
 func (s *Server) handleWebRosterRemove(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)

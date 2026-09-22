@@ -250,12 +250,23 @@ func (s *Server) applyRoles(ev *Event, change stateChange) error {
 // off. That is common enough that falling back to a public mention is required,
 // not optional: a promotion nobody hears about is a place nobody takes.
 func (s *Server) notifyPromoted(ev *Event, promoted *Signup) {
+	s.tellTheyHaveAPlace(ev, promoted, fmt.Sprintf(
+		"A place opened up for **%s** and you were next on the waitlist — you're in.", ev.Name))
+}
+
+// notifyGivenAPlace tells someone an organiser gave them a place — from the
+// waitlist or the Maybe list — rather than one opening up in turn.
+func (s *Server) notifyGivenAPlace(ev *Event, promoted *Signup) {
+	s.tellTheyHaveAPlace(ev, promoted, fmt.Sprintf(
+		"An organiser gave you a place at **%s** — you're in.", ev.Name))
+}
+
+// tellTheyHaveAPlace sends the news by DM, and by a channel mention when
+// their DMs are closed.
+func (s *Server) tellTheyHaveAPlace(ev *Event, promoted *Signup, content string) {
 	if s.discord == nil {
 		return
 	}
-	content := fmt.Sprintf(
-		"A place opened up for **%s** and you were next on the waitlist — you're in.",
-		ev.Name)
 	if ev.StartsAt > 0 {
 		content += fmt.Sprintf("\n🗓️ <t:%d:F>", ev.StartsAt)
 	}
