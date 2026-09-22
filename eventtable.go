@@ -248,9 +248,82 @@ func (s *Server) handleDetailsButton(w http.ResponseWriter, eventID int64) {
 		zone = s.DefaultTimezone()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"type": callbackTypeModal,
-		"data": buildRosterOnlyModal(ev, roster, zone),
+		"type": callbackTypeChannelMessageWithSrc,
+		"data": detailsMessage(ev, roster),
 	})
+}
+
+// detailsMessage is Details: a private reply with everything about the event
+// and who is on it, and Join, Maybe and Leave under it while signups are open.
+//
+// A message, not a modal. A modal's only read-only text, Text Display, was
+// refused by Discord every time this service sent one (8601fbe on 23 August,
+// 977f6eb on 2 September), and the refusal is silent — the button just dies.
+// What a modal can carry instead is a text box, which on a phone opens the
+// keyboard over a small window. A private reply has neither problem, holds
+// 4000 characters of formatted text, and can carry the buttons that act on
+// what it shows.
+func detailsMessage(ev *Event, roster []Signup) map[string]any {
+	attending, waiting := splitRoster(roster)
+	var b strings.Builder
+	fmt.Fprintf(&b, "## %s\n", escapeMarkdown(ev.Name))
+	if ev.Description != "" {
+		b.WriteString(ev.Description + "\n\n")
+	}
+	if ev.StartsAt > 0 {
+		// Discord renders a timestamp in each reader's own zone.
+		fmt.Fprintf(&b, "🗓️ <t:%d:F>", ev.StartsAt)
+		if ev.EndsAt > ev.StartsAt {
+			fmt.Fprintf(&b, " – <t:%d:t>", ev.EndsAt)
+		}
+		b.WriteString("\n")
+	}
+	if repeats := repeatsLabel(ev); repeats != "" {
+		b.WriteString(repeats + "\n")
+	}
+	if ev.Location != "" {
+		b.WriteString("📍 " + escapeMarkdown(ev.Location) + "\n")
+	}
+	if ev.CreatedBy != "" {
+		fmt.Fprintf(&b, "**Host:** <@%s>\n", ev.CreatedBy)
+	}
+	if ev.Capacity > 0 {
+		fmt.Fprintf(&b, "\n### Going — %d of %d\n", ev.AttendingCount, ev.Capacity)
+	} else {
+		fmt.Fprintf(&b, "\n### Going — %d\n", ev.AttendingCount)
+	}
+	if len(attending) == 0 {
+		b.WriteString("Nobody yet.")
+	} else {
+		b.WriteString(rosterNames(attending))
+	}
+	if len(waiting) > 0 {
+		fmt.Fprintf(&b, "\n### Waitlist — %d\n%s", len(waiting), rosterNames(waiting))
+	}
+	if maybe := maybeOf(roster); len(maybe) > 0 {
+		fmt.Fprintf(&b, "\n### Maybe — %d\n%s", len(maybe), rosterNames(maybe))
+	}
+
+	body := []any{textBlock(b.String())}
+	if ev.Status == StatusOpen {
+		body = append(body, map[string]any{"type": componentTypeActionRow, "components": []any{
+			map[string]any{"type": componentTypeButton, "style": buttonStylePrimary,
+				"label": "Join", "custom_id": JoinCustomID(ev.ID)},
+			map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+				"label": "Maybe", "custom_id": MaybeCustomID(ev.ID)},
+			map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+				"label": "Leave", "custom_id": LeaveCustomID(ev.ID)},
+		}})
+	}
+	return map[string]any{
+		"flags": messageFlagEphemeral | messageFlagComponentsV2,
+		"components": []any{map[string]any{
+			"type": componentTypeContainer, "accent_color": panelAccentColour,
+			"components": body,
+		}},
+		// The host is a mention so Discord names them; nothing here pings.
+		"allowed_mentions": map[string]any{"parse": []string{}},
+	}
 }
 
 // Components V2 constants for the table.

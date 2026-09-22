@@ -30,9 +30,6 @@ const (
 	// often, and how long each occurrence lasts.
 	fieldRepeats = "repeats"
 	fieldLength  = "length"
-	// fieldRoster carries the roster into a modal as read-only-looking text.
-	// Never read back: whatever somebody types into it is thrown away.
-	fieldRoster = "roster"
 )
 
 // EventForm is the five typed values, before validation.
@@ -161,66 +158,6 @@ func buildEventModal(customID, title string, ev *Event, zone string) map[string]
 			row(modalTextInput(scoped(fieldDescription), "Description", description,
 				"What it is, what to bring, anything else",
 				textInputStyleParagraph, false, 1000)),
-		},
-	}
-}
-
-// detailsField is the whole of Details in one read-only-looking box: what the
-// event is, when and where, who is going, who is waiting.
-//
-// A Text Input, and one, not several. Discord refused every modal this service
-// sent carrying a Text Display — the only read-only text a modal offers — so
-// the box is the one vehicle a modal has for words, and one box is less of a
-// form than four. It is not required, is labelled read only, and whatever is
-// typed into it is thrown away: EventForm has no field for it.
-func detailsField(ev *Event, roster []Signup, zone string) map[string]any {
-	attending, waiting := splitRoster(roster)
-	var b strings.Builder
-	if ev.Description != "" {
-		b.WriteString(ev.Description + "\n\n")
-	}
-	if ev.StartsAt > 0 {
-		b.WriteString(FormatEventTime(ev.StartsAt, zone))
-		if ev.EndsAt > 0 {
-			b.WriteString(" – " + FormatEventTime(ev.EndsAt, zone))
-		}
-		b.WriteString(" (" + zone + ")\n")
-	}
-	if repeats := repeatsLabel(ev); repeats != "" {
-		b.WriteString(repeats + "\n")
-	}
-	if ev.Location != "" {
-		b.WriteString("📍 " + ev.Location + "\n")
-	}
-	if ev.Capacity > 0 {
-		fmt.Fprintf(&b, "\nGoing — %d of %d\n", ev.AttendingCount, ev.Capacity)
-	} else {
-		fmt.Fprintf(&b, "\nGoing — %d\n", ev.AttendingCount)
-	}
-	if len(attending) == 0 {
-		b.WriteString("Nobody yet.")
-	} else {
-		b.WriteString(rosterNames(attending))
-	}
-	if len(waiting) > 0 {
-		fmt.Fprintf(&b, "\n\nWaitlist — %d\n%s", len(waiting), rosterNames(waiting))
-	}
-	if maybe := maybeOf(roster); len(maybe) > 0 {
-		fmt.Fprintf(&b, "\n\nMaybe — %d\n%s", len(maybe), rosterNames(maybe))
-	}
-	return modalTextInput(fieldRoster, truncate(ev.Name, 40)+" (read only)", trimTo(b.String(), 4000), "",
-		textInputStyleParagraph, false, 4000)
-}
-
-// buildRosterOnlyModal is Details: the roster, and nothing to change. Editing
-// lives on the management table.
-func buildRosterOnlyModal(ev *Event, roster []Signup, zone string) map[string]any {
-	return map[string]any{
-		"custom_id": DetailsModalCustomID(ev.ID),
-		"title":     truncate(ev.Name, 45),
-		"components": []any{
-			map[string]any{"type": componentTypeActionRow,
-				"components": []any{detailsField(ev, roster, zone)}},
 		},
 	}
 }

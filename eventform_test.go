@@ -37,12 +37,7 @@ func modalFields(t *testing.T, modal map[string]any) map[string]map[string]any {
 func TestNoModalCarriesATextDisplay(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 2,
 		StartsAt: 1788067881, Timezone: "America/Los_Angeles", Location: "The shed"}
-	roster := []Signup{
-		{DiscordUserID: "u1", DisplayName: "Al", State: StateAttending},
-		{DiscordUserID: "u2", DisplayName: "Bo", State: StateWaitlisted, WaitlistPlace: 1},
-	}
 	for name, modal := range map[string]map[string]any{
-		"details": buildRosterOnlyModal(ev, roster, "America/Los_Angeles"),
 		"edit":    buildEventModal(EditModalCustomID(1), "Edit", ev, "America/Los_Angeles"),
 		"create":  buildEventModal(CreateModalCustomID(), "New event", nil, "America/Los_Angeles"),
 	} {
@@ -59,7 +54,6 @@ func TestNoModalCarriesATextDisplay(t *testing.T) {
 func TestAModalNeverExceedsFiveRows(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Capacity: 4, StartsAt: 1788067881}
 	for name, modal := range map[string]map[string]any{
-		"details": buildRosterOnlyModal(ev, nil, "America/Los_Angeles"),
 		"edit":    buildEventModal(EditModalCustomID(1), "Edit", ev, "America/Los_Angeles"),
 		"create":  buildEventModal(CreateModalCustomID(), "New", nil, "America/Los_Angeles"),
 	} {
@@ -69,34 +63,28 @@ func TestAModalNeverExceedsFiveRows(t *testing.T) {
 	}
 }
 
-// TestDetailsIsTheRosterAndNothingToChange. Editing lives on the management
-// table; Details shows who is going, to everybody, and nothing else.
-func TestDetailsIsTheRosterAndNothingToChange(t *testing.T) {
-	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 2, StartsAt: 1788067881}
+// TestDetailsIsAPrivateMessageOfWhoIsOn: everything about the event, read
+// only, with no box to type in. Editing lives on the management table.
+func TestDetailsIsAPrivateMessageOfWhoIsOn(t *testing.T) {
+	ev := &Event{ID: 1, Name: "Games", Capacity: 4, AttendingCount: 2, StartsAt: 1788067881, Status: StatusOpen}
 	roster := []Signup{
 		{DiscordUserID: "u1", DisplayName: "Al", State: StateAttending},
 		{DiscordUserID: "u2", DisplayName: "Bo", State: StateAttending},
 		{DiscordUserID: "u3", DisplayName: "Cy", State: StateWaitlisted, WaitlistPlace: 1},
+		{DiscordUserID: "u4", DisplayName: "Di", State: StateMaybe},
 	}
-	modal := buildRosterOnlyModal(ev, roster, "America/Los_Angeles")
-	fields := modalFields(t, modal)
-	if len(fields) != 1 || fields[fieldRoster] == nil {
-		t.Fatalf("Details holds %v, want only the roster", fields)
+	msg := detailsMessage(ev, roster)
+	if msg["flags"] != messageFlagEphemeral|messageFlagComponentsV2 {
+		t.Errorf("flags = %v, want a private Components V2 message", msg["flags"])
 	}
-	shown := fields[fieldRoster]
-	for _, want := range []string{"Al", "Bo", "Waitlist", "Cy"} {
-		if !strings.Contains(shown["value"].(string), want) {
-			t.Errorf("roster field = %q, want %q in it", shown["value"], want)
+	text := detailsText(t, msg)
+	for _, want := range []string{"## Games", "### Going — 2 of 4", "1. Al", "2. Bo", "### Waitlist — 1", "1. Cy", "### Maybe — 1", "Di"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("Details = %q, want %q in it", text, want)
 		}
 	}
-	if shown["required"] != false {
-		t.Error("the roster field is required, so a viewer cannot dismiss without editing it")
-	}
-	if !strings.Contains(shown["label"].(string), "read only") {
-		t.Errorf("roster label = %q; it looks editable, so it has to say it is not", shown["label"])
-	}
-	if id := modal["custom_id"].(string); !strings.Contains(id, "details-modal") {
-		t.Errorf("custom_id = %q, want the view-only form's", id)
+	if strings.Contains(fmt.Sprint(msg), `"type":4`) || strings.Contains(fmt.Sprint(msg), "type:4 ") {
+		t.Error("Details carries a text box")
 	}
 }
 
@@ -164,22 +152,54 @@ func TestEveryInputIdIsUniqueToItsModal(t *testing.T) {
 	}
 }
 
-// TestDetailsShowsTheDescriptionFirst — it did not show it at all.
+// TestDetailsShowsTheDescriptionFirst, after the title — it once did not
+// show it at all.
 func TestDetailsShowsTheDescriptionFirst(t *testing.T) {
 	ev := &Event{ID: 1, Name: "Games", Description: "Bring dice.", Capacity: 4, AttendingCount: 1,
-		StartsAt: 1788067881, Location: "The shed"}
-	fields := modalFields(t, buildRosterOnlyModal(ev, []Signup{
-		{DiscordUserID: "u1", DisplayName: "Al", State: StateAttending}}, "America/Los_Angeles"))
-	if len(fields) != 1 {
-		t.Fatalf("Details holds %d boxes, want one", len(fields))
+		StartsAt: 1788067881, EndsAt: 1788067881 + 7200, Location: "The shed", CreatedBy: "u1"}
+	text := detailsText(t, detailsMessage(ev, []Signup{
+		{DiscordUserID: "u1", DisplayName: "Al", State: StateAttending}}))
+	if !strings.HasPrefix(text, "## Games\nBring dice.") {
+		t.Errorf("Details = %q, want the description right after the title", text)
 	}
-	text := fields[fieldRoster]["value"].(string)
-	if !strings.HasPrefix(text, "Bring dice.") {
-		t.Errorf("Details = %q, want the description first", text)
-	}
-	for _, want := range []string{"The shed", "Going — 1 of 4", "Al", "2026-08-29"} {
+	for _, want := range []string{"📍 The shed", "### Going — 1 of 4", "Al", "<t:1788067881:F> – <t:1788075081:t>", "**Host:** <@u1>"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Details = %q, want %q in it", text, want)
 		}
 	}
+}
+
+// TestDetailsCarriesJoinMaybeAndLeaveOnlyWhileOpen.
+func TestDetailsCarriesJoinMaybeAndLeaveOnlyWhileOpen(t *testing.T) {
+	labels := func(msg map[string]any) string {
+		out := []string{}
+		for _, c := range msg["components"].([]any)[0].(map[string]any)["components"].([]any) {
+			if m := c.(map[string]any); m["type"] == componentTypeActionRow {
+				for _, b := range m["components"].([]any) {
+					out = append(out, b.(map[string]any)["label"].(string))
+				}
+			}
+		}
+		return strings.Join(out, ",")
+	}
+	ev := &Event{ID: 1, Name: "Games", Status: StatusOpen, StartsAt: 1788067881}
+	if got := labels(detailsMessage(ev, nil)); got != "Join,Maybe,Leave" {
+		t.Errorf("open = %q", got)
+	}
+	ev.Status = StatusClosed
+	if got := labels(detailsMessage(ev, nil)); got != "" {
+		t.Errorf("closed = %q, want no buttons", got)
+	}
+}
+
+// detailsText is the text of a Details message.
+func detailsText(t *testing.T, msg map[string]any) string {
+	t.Helper()
+	for _, c := range msg["components"].([]any)[0].(map[string]any)["components"].([]any) {
+		if m := c.(map[string]any); m["type"] == componentTypeTextDisplay {
+			return m["content"].(string)
+		}
+	}
+	t.Fatal("Details has no text")
+	return ""
 }

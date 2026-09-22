@@ -209,7 +209,7 @@ func TestARecurringEventSaysSoEverywhere(t *testing.T) {
 	if !strings.Contains(card, "🔁 every 2 weeks — signups are for this date") {
 		t.Errorf("card does not say the roster is per date:\n%s", card)
 	}
-	details := detailsField(ev, nil, "UTC")["value"].(string)
+	details := detailsText(t, detailsMessage(ev, nil))
 	if !strings.Contains(details, "🔁 every 2 weeks") {
 		t.Errorf("Details does not say it repeats:\n%s", details)
 	}
