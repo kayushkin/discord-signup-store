@@ -208,9 +208,9 @@ func (s *Server) applyEventEdit(before *Event, patch EventPatch, actor string) (
 	// rename or a new limit changes what all five of them say. After the reply,
 	// like the DMs below: the person editing must not wait on Discord, and a
 	// copy failing to update must not make a saved edit look failed.
-	go s.syncAfterChange(after.ID, changes)
+	s.inBackground(func() { s.syncAfterChange(after.ID, changes) })
 	for i := range promoted {
-		go s.notifyPromoted(after, &promoted[i])
+		s.inBackground(func() { s.notifyPromoted(after, &promoted[i]) })
 	}
 	return after, promoted, nil
 }

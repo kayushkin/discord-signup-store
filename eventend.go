@@ -215,11 +215,11 @@ func (s *Server) applyEndConfirm(w http.ResponseWriter, in *Interaction, eventID
 	}
 	// After the answer, not before: the store already says it is over, and
 	// the Discord writes that follow take longer than the press may wait.
-	go func() {
+	s.inBackground(func() {
 		if err := s.settleEndedEvent(ev, result); err != nil {
 			log.Printf("[discord-signup] event %d ended here, but its Discord event did not end: %v", ev.ID, err)
 		}
-	}()
+	})
 }
 
 // handleWebEndEvent is the web page's End button. It has no three-second

@@ -398,11 +398,11 @@ func (s *Server) handleTableAction(w http.ResponseWriter, in *Interaction, actio
 	// Answered first: deleting and reposting will not finish inside Discord's
 	// three-second interaction window.
 	s.replyEphemeral(w, "Rebuilding the table — it will settle in a moment.")
-	go func() {
+	s.inBackground(func() {
 		if err := s.RebuildEventTable(guildID); err != nil {
 			log.Printf("[discord-signup] rebuild table for %s: %v", guildID, err)
 		}
-	}()
+	})
 }
 
 // RebuildEventTable deletes every page and draws the table again.

@@ -308,7 +308,7 @@ func (s *Server) handleJoin(w http.ResponseWriter, in *Interaction, eventID int6
 	// written. They happen after the reply because the person clicking must not
 	// wait on Discord's API for their answer, and because a failure to sync a
 	// role must not make a successful signup look failed.
-	go s.syncAfterChange(ev.ID, []stateChange{{UserID: userID, State: result.Signup.State}})
+	s.inBackground(func() { s.syncAfterChange(ev.ID, []stateChange{{UserID: userID, State: result.Signup.State}}) })
 }
 
 func (s *Server) handleLeave(w http.ResponseWriter, in *Interaction, eventID int64, userID string) {
@@ -342,9 +342,9 @@ func (s *Server) handleLeave(w http.ResponseWriter, in *Interaction, eventID int
 	}
 	// Synced by id, so a failed reload above no longer costs the whole sync —
 	// the roster changed whether or not this process could read it back.
-	go s.syncAfterChange(eventID, changes)
+	s.inBackground(func() { s.syncAfterChange(eventID, changes) })
 	if ev != nil && result.Promoted != nil {
-		go s.notifyPromoted(ev, result.Promoted)
+		s.inBackground(func() { s.notifyPromoted(ev, result.Promoted) })
 	}
 }
 
@@ -381,10 +381,10 @@ func (s *Server) handleMaybe(w http.ResponseWriter, in *Interaction, eventID int
 	if result.Promoted != nil {
 		changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
 		if ev, err := s.store.GetEvent(eventID); err == nil {
-			go s.notifyPromoted(ev, result.Promoted)
+			s.inBackground(func() { s.notifyPromoted(ev, result.Promoted) })
 		}
 	}
-	go s.syncAfterChange(eventID, changes)
+	s.inBackground(func() { s.syncAfterChange(eventID, changes) })
 }
 
 // describeJoin renders the private answer a person gets for pressing Join.
@@ -687,7 +687,7 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 	// own event list and fires Discord's start notification. Best effort: the
 	// roster and its card already exist and are the real thing, so a failure
 	// here is reported rather than allowed to undo them.
-	go s.refreshTablesQuietly(ev.GuildID)
+	s.inBackground(func() { s.refreshTablesQuietly(ev.GuildID) })
 
 	published := true
 	if _, err := s.PublishToDiscord(ev.ID); err != nil {

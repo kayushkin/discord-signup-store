@@ -34,6 +34,9 @@ func webTestServer(t *testing.T) (*Server, *Store, *fakeDiscord, http.Handler, s
 	}
 	mux := http.NewServeMux()
 	srv.RegisterHandlers(mux)
+	// Registered after the store's temporary directory, so it runs first:
+	// every publish a request started finishes before the database goes.
+	t.Cleanup(srv.WaitForBackgroundWork)
 	return srv, store, fake, mux, session.Token
 }
 

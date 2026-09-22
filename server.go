@@ -21,6 +21,11 @@ type Server struct {
 	verifier *InteractionVerifier
 	discord  *DiscordClient
 
+	// background counts the work a request starts and does not wait for —
+	// publishing to Discord, telling someone they were promoted — so a test
+	// can wait for it before removing the database under it.
+	background sync.WaitGroup
+
 	// oauth is nil until EnableWeb is called. Nil means the browser routes
 	// answer 501 rather than half-working: a login page that cannot complete a
 	// login is worse than one that says it is not set up.
@@ -101,6 +106,21 @@ func NewServer(store *Store, verifier *InteractionVerifier, discord *DiscordClie
 	return &Server{store: store, verifier: verifier, discord: discord, syncs: newEventSyncQueue(),
 		tableLocks: map[string]*sync.Mutex{}}
 }
+
+// inBackground runs work a request does not wait for, counted so
+// WaitForBackgroundWork can wait for it.
+func (s *Server) inBackground(work func()) {
+	s.background.Add(1)
+	go func() {
+		defer s.background.Done()
+		work()
+	}()
+}
+
+// WaitForBackgroundWork blocks until everything inBackground started has
+// finished. Tests call it before their temporary database is removed; the
+// running service never needs to.
+func (s *Server) WaitForBackgroundWork() { s.background.Wait() }
 
 // RegisterHandlers mounts every route on mux.
 //
@@ -605,10 +625,10 @@ func (s *Server) handleAdminMaybe(w http.ResponseWriter, r *http.Request) {
 	if result.Promoted != nil {
 		changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
 		if ev, err := s.store.GetEvent(id); err == nil {
-			go s.notifyPromoted(ev, result.Promoted)
+			s.inBackground(func() { s.notifyPromoted(ev, result.Promoted) })
 		}
 	}
-	go s.syncAfterChange(id, changes)
+	s.inBackground(func() { s.syncAfterChange(id, changes) })
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -632,7 +652,7 @@ func (s *Server) handleAdminJoin(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	go s.syncAfterChange(id, []stateChange{{UserID: in.DiscordUserID, State: result.Signup.State}})
+	s.inBackground(func() { s.syncAfterChange(id, []stateChange{{UserID: in.DiscordUserID, State: result.Signup.State}}) })
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -657,9 +677,9 @@ func (s *Server) handleAdminLeave(w http.ResponseWriter, r *http.Request) {
 		if result.Promoted != nil {
 			changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
 		}
-		go s.syncAfterChange(id, changes)
+		s.inBackground(func() { s.syncAfterChange(id, changes) })
 		if result.Promoted != nil {
-			go s.notifyPromoted(ev, result.Promoted)
+			s.inBackground(func() { s.notifyPromoted(ev, result.Promoted) })
 		}
 	}
 	writeJSON(w, http.StatusOK, result)

@@ -166,7 +166,7 @@ func (s *Server) handleDashboardAction(w http.ResponseWriter, in *Interaction, a
 			return
 		}
 		if err == nil {
-			go s.syncAfterChange(eventID, []stateChange{{UserID: userID, State: result.Signup.State}})
+			s.inBackground(func() { s.syncAfterChange(eventID, []stateChange{{UserID: userID, State: result.Signup.State}}) })
 		}
 	case "dash-leave":
 		result, err := s.store.Leave(eventID, userID, ActorUser)
@@ -181,9 +181,9 @@ func (s *Server) handleDashboardAction(w http.ResponseWriter, in *Interaction, a
 				if result.Promoted != nil {
 					changes = append(changes,
 						stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
-					go s.notifyPromoted(ev, result.Promoted)
+					s.inBackground(func() { s.notifyPromoted(ev, result.Promoted) })
 				}
-				go s.syncAfterChange(eventID, changes)
+				s.inBackground(func() { s.syncAfterChange(eventID, changes) })
 			}
 		}
 	default:

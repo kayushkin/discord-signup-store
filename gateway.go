@@ -138,7 +138,7 @@ func (g *GatewayListener) onUserRemove(_ *discordgo.Session, e *discordgo.GuildS
 	changes := []stateChange{{UserID: e.UserID, State: StateWithdrawn}}
 	if result.Promoted != nil {
 		changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
-		go g.server.notifyPromoted(fresh, result.Promoted)
+		g.server.inBackground(func() { g.server.notifyPromoted(fresh, result.Promoted) })
 	}
 	g.server.syncAfterChange(fresh.ID, changes)
 }
@@ -223,7 +223,7 @@ func (g *GatewayListener) onReactionRemove(_ *discordgo.Session, e *discordgo.Me
 	changes := []stateChange{{UserID: e.UserID, State: StateWithdrawn}}
 	if result.Promoted != nil {
 		changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
-		go g.server.notifyPromoted(fresh, result.Promoted)
+		g.server.inBackground(func() { g.server.notifyPromoted(fresh, result.Promoted) })
 	}
 	g.server.syncAfterChange(fresh.ID, changes)
 }

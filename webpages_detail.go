@@ -216,9 +216,9 @@ func (s *Server) handleWebRosterRemove(w http.ResponseWriter, r *http.Request) {
 	if result.Promoted != nil {
 		changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
 		notice = "Removed. The next person on the waitlist moved up and was messaged."
-		go s.notifyPromoted(ev, result.Promoted)
+		s.inBackground(func() { s.notifyPromoted(ev, result.Promoted) })
 	}
-	go s.syncAfterChange(ev.ID, changes)
+	s.inBackground(func() { s.syncAfterChange(ev.ID, changes) })
 	s.redirectWithNotice(w, r, ev.ID, notice)
 }
 
@@ -323,7 +323,7 @@ func (s *Server) handleWebRosterAdd(w http.ResponseWriter, r *http.Request) {
 		s.redirectWithNotice(w, r, ev.ID, "Could not add them: "+err.Error())
 		return
 	}
-	go s.syncAfterChange(ev.ID, []stateChange{{UserID: userID, State: result.Signup.State}})
+	s.inBackground(func() { s.syncAfterChange(ev.ID, []stateChange{{UserID: userID, State: result.Signup.State}}) })
 	// Without a Discord client there is no name to say; only tests run so.
 	notice, who := "Added.", "they"
 	if displayName != "" {
