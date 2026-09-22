@@ -251,7 +251,7 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		// are still sitting in channels, and their button must keep working
 		// rather than answering "not one of mine" forever.
 		s.handleEditButton(w, in, eventID)
-	case "create":
+	case "create", "create-top":
 		s.handleCreateButton(w, in)
 	case "details":
 		s.handleDetailsButton(w, eventID)
@@ -504,6 +504,11 @@ func CloseCustomID(eventID int64) string {
 // every custom_id this service issues.
 func CreateCustomID() string {
 	return fmt.Sprintf("%s:create:0", customIDPrefix)
+}
+
+// CreateAtTopCustomID is the same button at the top of the management table.
+func CreateAtTopCustomID() string {
+	return fmt.Sprintf("%s:create-top:0", customIDPrefix)
 }
 
 // CreateModalCustomID is the form that button opens.

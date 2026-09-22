@@ -78,7 +78,7 @@ func TestTheManagementTableCountsTheEndButton(t *testing.T) {
 			len(underwayPages[0]), len(aheadPages[0]))
 	}
 	for i, page := range underwayPages {
-		payload := RenderEventTablePage(page, i, len(underwayPages), managementTrailing())
+		payload := RenderEventTablePage(page, i, len(underwayPages), managementLeading(), managementTrailing())
 		rendered := countComponents(payload["components"].([]any))
 		if rendered > eventTableComponentBudget {
 			t.Errorf("page %d renders %d components, over %d", i, rendered, eventTableComponentBudget)
@@ -104,7 +104,7 @@ func TestARowRendersTheButtonsItWasMeasuredWith(t *testing.T) {
 	}
 	events := rosterTableEvents(1)
 	page := packEventTable(events, nil, growing, 0)[0]
-	body := RenderEventTablePage(page, 0, 1, nil)["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderEventTablePage(page, 0, 1, nil, nil)["components"].([]any)[0].(map[string]any)["components"].([]any)
 	row := body[1].(map[string]any)["components"].([]any)
 	if len(row) != len(page[0].buttons) || page[0].components != 2+len(row) {
 		t.Errorf("measured %d components with %d buttons, rendered a row of %d",

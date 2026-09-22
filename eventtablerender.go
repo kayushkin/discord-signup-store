@@ -193,10 +193,18 @@ func packEventTable(events []Event, rosters map[int64][]Signup, buttons func(*Ev
 }
 
 // RenderEventTablePage draws one packed page.
-func RenderEventTablePage(page []eventTableBlock, index, total int, trailing []any) map[string]any {
+func RenderEventTablePage(page []eventTableBlock, index, total int, leading, trailing []any) map[string]any {
 	body := []any{}
 	if len(page) == 0 {
 		body = append(body, textBlock("-# Nothing coming up."))
+	}
+	// Controls that also go at the very top of the table, on its first page,
+	// above a rule — so a long table does not have to be scrolled to its end
+	// to reach them. Left off an empty table, where the bottom row is right
+	// there anyway.
+	if index == 0 && len(leading) > 0 && len(page) > 0 {
+		body = append(body, map[string]any{"type": componentTypeActionRow, "components": leading})
+		body = append(body, map[string]any{"type": componentTypeSeparator, "divider": true, "spacing": 2})
 	}
 	for i, block := range page {
 		if i > 0 {
@@ -285,6 +293,16 @@ func managementButtons(ev *Event) []any {
 // managementTrailing is the last page's row on the management table: making a
 // new event. A thing a person does rather than a thing about one event, which
 // is why it is not on a row.
+// managementLeading is the same Create button at the top of the table's first
+// page. Its own custom_id: Discord refuses a message whose components share
+// one, and a one-page table holds both rows.
+func managementLeading() []any {
+	return []any{
+		map[string]any{"type": componentTypeButton, "style": buttonStylePrimary,
+			"label": "Create an event", "custom_id": CreateAtTopCustomID()},
+	}
+}
+
 func managementTrailing() []any {
 	return []any{
 		map[string]any{"type": componentTypeButton, "style": buttonStylePrimary,
@@ -298,6 +316,7 @@ func managementTrailing() []any {
 type tableSurface struct {
 	channelID string
 	buttons   func(*Event) []any
+	leading   []any
 	trailing  []any
 	pages     func() ([]TablePage, error)
 	setPage   func(page int, messageID string) error
@@ -332,7 +351,8 @@ func (s *Server) RefreshManagementTable(guildID string) error {
 		return err
 	}
 	return s.publishPackedTable(guildID, tableSurface{
-		channelID: table.ManagementChannelID, buttons: managementButtons, trailing: managementTrailing(),
+		channelID: table.ManagementChannelID, buttons: managementButtons,
+		leading: managementLeading(), trailing: managementTrailing(),
 		pages:    func() ([]TablePage, error) { return s.store.ManagementPages(guildID) },
 		setPage:  func(p int, m string) error { return s.store.SetManagementPage(guildID, p, m) },
 		dropPage: func(p int) error { return s.store.DeleteManagementPage(guildID, p) },
@@ -373,8 +393,14 @@ func (s *Server) publishPackedTable(guildID string, surface tableSurface) error 
 		}
 		rosters[events[i].ID] = roster
 	}
-	// Reserve: the trailing row, its buttons, and the divider above it.
-	pages := packEventTable(events, rosters, surface.buttons, len(surface.trailing)+2)
+	// Reserve: the trailing row, its buttons and the divider above it, and
+	// the same again for the leading row. Every page keeps both, since the
+	// packer does not know yet which pages are first and last.
+	reserve := len(surface.trailing) + 2
+	if len(surface.leading) > 0 {
+		reserve += len(surface.leading) + 2
+	}
+	pages := packEventTable(events, rosters, surface.buttons, reserve)
 
 	existing, err := surface.pages()
 	if err != nil {
@@ -386,7 +412,7 @@ func (s *Server) publishPackedTable(guildID string, surface tableSurface) error 
 	}
 
 	for i, page := range pages {
-		payload := RenderEventTablePage(page, i, len(pages), surface.trailing)
+		payload := RenderEventTablePage(page, i, len(pages), surface.leading, surface.trailing)
 		if messageID, ok := byPage[i]; ok {
 			if err := s.discord.EditMessage(surface.channelID, messageID, payload); err != nil {
 				return fmt.Errorf("edit table page %d: %w", i, err)

@@ -50,7 +50,7 @@ func TestEveryPageStaysInsideDiscordsBudgets(t *testing.T) {
 	seen := 0
 	for i, page := range pages {
 		seen += len(page)
-		payload := RenderEventTablePage(page, i, len(pages), nil)
+		payload := RenderEventTablePage(page, i, len(pages), nil, nil)
 		components := countComponents(payload["components"].([]any))
 		if components > eventTableComponentBudget {
 			t.Errorf("page %d renders %d components, over Discord's %d",
@@ -92,7 +92,7 @@ func TestTheRosterTableNamesPeopleWithoutPingingThem(t *testing.T) {
 	events := rosterTableEvents(1)
 	rosters := map[int64][]Signup{events[0].ID: rosterOf("Domonation", "Twili Midna")}
 
-	payload := RenderEventTablePage(packEventTable(events, rosters, eventTableButtons, 1)[0], 0, 1, nil)
+	payload := RenderEventTablePage(packEventTable(events, rosters, eventTableButtons, 1)[0], 0, 1, nil, nil)
 	rendered := fmt.Sprint(payload)
 	if !strings.Contains(rendered, "Domonation") || !strings.Contains(rendered, "Twili Midna") {
 		t.Errorf("the roster table does not name who is going: %q", rendered)
@@ -116,7 +116,7 @@ func TestAnEmptyGuildStillGetsAPage(t *testing.T) {
 	if len(pages) != 1 {
 		t.Fatalf("%d pages for no events, want 1", len(pages))
 	}
-	rendered := fmt.Sprint(RenderEventTablePage(pages[0], 0, 1, nil))
+	rendered := fmt.Sprint(RenderEventTablePage(pages[0], 0, 1, nil, nil))
 	if !strings.Contains(rendered, "Nothing coming up") {
 		t.Errorf("an empty roster table says %q", rendered)
 	}
@@ -234,7 +234,7 @@ func TestTheManagementTableHasEditAndCreateAndNothingAMemberDoes(t *testing.T) {
 	events := rosterTableEvents(2)
 	rosters := map[int64][]Signup{events[0].ID: rosterOf("Al"), events[1].ID: nil}
 	pages := packEventTable(events, rosters, managementButtons, len(managementTrailing())+1)
-	payload := RenderEventTablePage(pages[0], 0, 1, managementTrailing())
+	payload := RenderEventTablePage(pages[0], 0, 1, managementLeading(), managementTrailing())
 	labels := []string{}
 	var walk func([]any)
 	walk = func(cs []any) {
@@ -274,7 +274,7 @@ func TestTheManagementTableHasEditAndCreateAndNothingAMemberDoes(t *testing.T) {
 func TestThePublicTableCarriesNoTrailingControls(t *testing.T) {
 	events := rosterTableEvents(1)
 	pages := packEventTable(events, nil, eventTableButtons, 1)
-	rendered := fmt.Sprint(RenderEventTablePage(pages[0], 0, 1, nil))
+	rendered := fmt.Sprint(RenderEventTablePage(pages[0], 0, 1, nil, nil))
 	if strings.Contains(rendered, "Create an event") || strings.Contains(rendered, myEventsButtonID) {
 		t.Error("the public table carries management controls")
 	}
@@ -284,7 +284,7 @@ func TestThePublicTableCarriesNoTrailingControls(t *testing.T) {
 func TestCreateSitsUnderADividerNotOnTheLastRow(t *testing.T) {
 	events := rosterTableEvents(2)
 	pages := packEventTable(events, nil, managementButtons, len(managementTrailing())+2)
-	body := RenderEventTablePage(pages[0], 0, 1, managementTrailing())["components"].([]any)[0].(map[string]any)["components"].([]any)
+	body := RenderEventTablePage(pages[0], 0, 1, managementLeading(), managementTrailing())["components"].([]any)[0].(map[string]any)["components"].([]any)
 	last := body[len(body)-1].(map[string]any)
 	beforeLast := body[len(body)-2].(map[string]any)
 	if last["type"] != componentTypeActionRow || fmt.Sprint(last["components"]) == "" {
@@ -308,5 +308,61 @@ func TestTheHeadlineLeavesOutWhatItDoesNotHave(t *testing.T) {
 		StartsAt: time.Date(2026, 9, 22, 17, 0, 0, 0, reno).Unix(), Location: "Baldini's"}
 	if got := eventTableHeadline(ev); got != "**Board Game Night** - Tue 9/22 5pm (weekly) 📍 Baldini's" {
 		t.Errorf("weekly = %q", got)
+	}
+}
+
+// TestCreateIsAtTheTopAndTheBottomOfTheManagementTable, with ids Discord will
+// accept on one message, and the page still inside the component cap.
+func TestCreateIsAtTheTopAndTheBottomOfTheManagementTable(t *testing.T) {
+	events := rosterTableEvents(3)
+	reserve := len(managementTrailing()) + 2 + len(managementLeading()) + 2
+	pages := packEventTable(events, nil, managementButtons, reserve)
+	payload := RenderEventTablePage(pages[0], 0, len(pages), managementLeading(), managementTrailing())
+	body := payload["components"].([]any)[0].(map[string]any)["components"].([]any)
+	first := body[0].(map[string]any)
+	if first["type"] != componentTypeActionRow ||
+		first["components"].([]any)[0].(map[string]any)["custom_id"] != CreateAtTopCustomID() {
+		t.Fatalf("first component = %v, want the top Create row", first)
+	}
+	ids := map[string]int{}
+	var walk func([]any)
+	walk = func(cs []any) {
+		for _, c := range cs {
+			m := c.(map[string]any)
+			if id, ok := m["custom_id"].(string); ok {
+				ids[id]++
+			}
+			if nested, ok := m["components"].([]any); ok {
+				walk(nested)
+			}
+		}
+	}
+	walk(body)
+	for id, n := range ids {
+		if n > 1 {
+			t.Errorf("custom_id %s appears %d times; Discord refuses the message", id, n)
+		}
+	}
+	if ids[CreateCustomID()] != 1 || ids[CreateAtTopCustomID()] != 1 {
+		t.Errorf("want one Create at the top and one at the bottom, got %v", ids)
+	}
+	if n := countComponents(payload["components"].([]any)); n > eventTableComponentBudget {
+		t.Errorf("page renders %d components, over %d", n, eventTableComponentBudget)
+	}
+	if action, _, ok := parseCustomID(CreateAtTopCustomID()); !ok || action != "create-top" {
+		t.Errorf("top Create parses as %q %v", action, ok)
+	}
+}
+
+// TestAFullManagementPageStaysInsideTheCapWithBothCreateRows.
+func TestAFullManagementPageStaysInsideTheCapWithBothCreateRows(t *testing.T) {
+	events := rosterTableEvents(40)
+	reserve := len(managementTrailing()) + 2 + len(managementLeading()) + 2
+	pages := packEventTable(events, nil, managementButtons, reserve)
+	for i, page := range pages {
+		payload := RenderEventTablePage(page, i, len(pages), managementLeading(), managementTrailing())
+		if n := countComponents(payload["components"].([]any)); n > eventTableComponentBudget {
+			t.Errorf("page %d of %d renders %d components, over %d", i+1, len(pages), n, eventTableComponentBudget)
+		}
 	}
 }
