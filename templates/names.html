@@ -4,6 +4,24 @@
   <p class="meta">The short name each person is shown by on Discord — in the event
     tables, Details, forum posts and Discord's own events. Leave a box empty to show
     their Discord name. Everyone going, maybe or waitlisted on any event is listed.</p>
+  {{if .NameableGuilds}}
+  <form method="post" action="/names" class="row" style="margin:12px 0 18px;align-items:flex-end"
+        data-member-search="/names/members">
+    {{if gt (len .NameableGuilds) 1}}
+    <div><label>Server</label>
+      <select name="guild_id">{{range .NameableGuilds}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div>
+    {{else}}{{range .NameableGuilds}}<input type="hidden" name="guild_id" value="{{.ID}}">{{end}}{{end}}
+    <div style="flex:1;position:relative"><label>Name someone</label>
+      <input class="member-name" autocomplete="off" role="combobox" aria-autocomplete="list"
+             aria-expanded="false" placeholder="Start typing their Discord name">
+      <input type="hidden" name="discord_user_id">
+      <ul class="picker" role="listbox" hidden></ul></div>
+    <div><label>Shown as</label>
+      <input name="readable_name" required maxlength="64" style="max-width:180px"></div>
+    <button class="ghost">Save</button>
+  </form>
+  <p class="hint">Anyone in the server, whether or not they are on a list yet.</p>
+  {{end}}
   {{if .NamePeople}}
   <table>
     <tr><th>Discord name</th><th>Shown as</th><th class="count">Events</th></tr>

@@ -297,3 +297,12 @@ CREATE TABLE IF NOT EXISTS site_admins (
     discord_user_id TEXT PRIMARY KEY,
     added_at        INTEGER NOT NULL
 );
+
+-- user_preferences: choices a person makes on the web pages, by Discord user
+-- id so they hold across logins. home_guild_id narrows the home page to one
+-- server; '' shows every server.
+CREATE TABLE IF NOT EXISTS user_preferences (
+    discord_user_id TEXT PRIMARY KEY,
+    home_guild_id   TEXT NOT NULL DEFAULT '',
+    updated_at      INTEGER NOT NULL
+);

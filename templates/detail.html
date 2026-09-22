@@ -84,103 +84,17 @@
   {{/* The box searches the server's members by name as you type; picking one
        puts their user id in the hidden field, and the id is what is sent. A
        name is never sent on its own: two members can share one. */}}
-  <form method="post" action="/events/{{.Event.ID}}/roster/add" id="add-member" class="row"
-        style="margin-top:16px;align-items:flex-end" data-search="/events/{{.Event.ID}}/members">
-    <div style="flex:1;position:relative"><label for="member-name">Add someone</label>
-      <input id="member-name" autocomplete="off" role="combobox" aria-autocomplete="list"
-             aria-controls="member-list" aria-expanded="false"
-             placeholder="Start typing their name, or paste a Discord user id">
-      <input type="hidden" name="discord_user_id" id="member-id">
-      <ul id="member-list" class="picker" role="listbox" hidden></ul></div>
+  <form method="post" action="/events/{{.Event.ID}}/roster/add" class="row"
+        style="margin-top:16px;align-items:flex-end" data-member-search="/events/{{.Event.ID}}/members">
+    <div style="flex:1;position:relative"><label>Add someone</label>
+      <input class="member-name" autocomplete="off" role="combobox" aria-autocomplete="list"
+             aria-expanded="false" placeholder="Start typing their name, or paste a Discord user id">
+      <input type="hidden" name="discord_user_id">
+      <ul class="picker" role="listbox" hidden></ul></div>
     <button class="ghost">Add</button>
   </form>
   <div class="hint">Names match from the start: a username, a display name or a
     server nickname. Goes through the same capacity and waitlist rules as pressing Join.</div>
-  <script>
-  (function () {
-    var form = document.getElementById("add-member");
-    var box = document.getElementById("member-name");
-    var hidden = document.getElementById("member-id");
-    var list = document.getElementById("member-list");
-    var searchURL = form.getAttribute("data-search");
-    var shown = [], active = -1, timer = null, asked = 0;
-
-    function close() { list.hidden = true; box.setAttribute("aria-expanded", "false"); active = -1; }
-    function pick(m) {
-      box.value = m.display_name;
-      hidden.value = m.user_id;
-      close();
-    }
-    function mark() {
-      Array.prototype.forEach.call(list.children, function (li, i) {
-        li.setAttribute("aria-selected", i === active ? "true" : "false");
-      });
-    }
-    function note(text) {
-      list.innerHTML = "";
-      var li = document.createElement("li");
-      li.className = "note";
-      li.textContent = text;
-      list.appendChild(li);
-      list.hidden = false;
-    }
-    function render(members) {
-      shown = members; active = -1; list.innerHTML = "";
-      if (!members.length) { note("Nobody in this server has a name starting with that."); return; }
-      members.forEach(function (m) {
-        var li = document.createElement("li");
-        li.setAttribute("role", "option");
-        var name = document.createElement("strong");
-        name.textContent = m.display_name;
-        li.appendChild(name);
-        var extra = document.createElement("span");
-        extra.className = "meta";
-        extra.textContent = " @" + m.username + (m.on_roster ? " · already " + m.on_roster : "");
-        li.appendChild(extra);
-        // mousedown, not click: click fires after the box loses focus and the
-        // list has already closed.
-        li.addEventListener("mousedown", function (e) { e.preventDefault(); pick(m); });
-        list.appendChild(li);
-      });
-      list.hidden = false;
-      box.setAttribute("aria-expanded", "true");
-    }
-    function search(q) {
-      var mine = ++asked;
-      fetch(searchURL + "?q=" + encodeURIComponent(q), { credentials: "same-origin" })
-        .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
-        .then(function (res) {
-          if (mine !== asked) return;      // a later keystroke already asked again
-          if (!res.ok) { note(res.body.error || "Search failed."); return; }
-          render(res.body.members);
-        })
-        .catch(function (err) { if (mine === asked) note("Search failed: " + err.message); });
-    }
-
-    box.addEventListener("input", function () {
-      var q = box.value.trim();
-      // A pasted snowflake is an id already; there is nothing to look up.
-      hidden.value = /^\d{15,21}$/.test(q) ? q : "";
-      clearTimeout(timer);
-      if (!q || hidden.value) { close(); return; }
-      timer = setTimeout(function () { search(q); }, 200);
-    });
-    box.addEventListener("keydown", function (e) {
-      if (list.hidden || !shown.length) return;
-      if (e.key === "ArrowDown") { active = Math.min(active + 1, shown.length - 1); mark(); e.preventDefault(); }
-      else if (e.key === "ArrowUp") { active = Math.max(active - 1, 0); mark(); e.preventDefault(); }
-      else if (e.key === "Enter" && active >= 0) { pick(shown[active]); e.preventDefault(); }
-      else if (e.key === "Escape") { close(); }
-    });
-    box.addEventListener("blur", close);
-    form.addEventListener("submit", function (e) {
-      if (!hidden.value) {
-        e.preventDefault();
-        note("Pick someone from the list first — a name alone could be more than one person.");
-      }
-    });
-  })();
-  </script>
   {{end}}
 </div>
 
@@ -194,7 +108,7 @@
     <tr><td class="meta">{{localTime .At}}</td>
         <td>{{who .DisplayName .DiscordUserID}}</td>
         <td>{{signupUpdateText .Action .ToState}}</td>
-        <td class="meta">{{.Actor}}</td></tr>
+        <td class="meta">{{with index $.HistoryActorNames .Actor}}{{.}}{{else}}{{.Actor}}{{end}}</td></tr>
     {{end}}
   </table>
 </div>

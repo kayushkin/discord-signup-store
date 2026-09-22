@@ -71,6 +71,15 @@ type pageData struct {
 	DiscordEventURL      string
 	GuildsWhereMayCreate []Guild
 	Roles                []Role
+	// HistoryActorNames names the people in an event's history: actor as
+	// recorded → their name in the server.
+	HistoryActorNames map[string]string
+	// HomeGuildChoices are the servers the home page can be narrowed to, and
+	// HomeGuildID the one chosen ("" for all).
+	HomeGuildChoices []Guild
+	HomeGuildID      string
+	// NameableGuilds are the servers whose members the viewer may name.
+	NameableGuilds []Guild
 	// NamePeople is the names page's rows.
 	NamePeople []namedPerson
 
@@ -220,6 +229,20 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 		for _, g := range botGuilds {
 			guildIDs[g.ID] = true
 		}
+	}
+	// The saved filter narrows to one server, if it is still one they may see.
+	home, err := s.store.HomeGuildOf(session.DiscordUserID)
+	if err != nil {
+		data.Error = err.Error()
+	}
+	if home != "" && guildIDs[home] {
+		guildIDs = map[string]bool{home: true}
+		data.HomeGuildID = home
+	}
+	if choices, err := s.viewableGuilds(session); err != nil {
+		log.Printf("[discord-signup] home page server choices for %s: %v", session.DiscordUserID, err)
+	} else {
+		data.HomeGuildChoices = choices
 	}
 	var visible []Event
 	for guildID := range guildIDs {

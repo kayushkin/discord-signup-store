@@ -93,4 +93,94 @@ th{color:var(--dim);font-weight:500;font-size:12px;text-transform:uppercase;lett
   });
 })();
 </script>
+<script>
+// Member pickers: a box that searches a server's members by name as you type.
+// Any form with data-member-search gets one. Picking a person puts their user
+// id in the form's hidden discord_user_id; the id is what is sent, never the
+// name, because two members can share one. A pasted id is taken as it is. A
+// form with a guild_id field searches the server it names.
+document.querySelectorAll("form[data-member-search]").forEach(function (form) {
+  var box = form.querySelector(".member-name");
+  var hidden = form.querySelector("input[name=discord_user_id]");
+  var list = form.querySelector(".picker");
+  var guild = form.querySelector("[name=guild_id]");
+  var base = form.getAttribute("data-member-search");
+  var shown = [], active = -1, timer = null, asked = 0;
+
+  function close() { list.hidden = true; box.setAttribute("aria-expanded", "false"); active = -1; }
+  function pick(m) { box.value = m.display_name; hidden.value = m.user_id; close(); }
+  function mark() {
+    Array.prototype.forEach.call(list.children, function (li, i) {
+      li.setAttribute("aria-selected", i === active ? "true" : "false");
+    });
+  }
+  function note(text) {
+    list.innerHTML = "";
+    var li = document.createElement("li");
+    li.className = "note";
+    li.textContent = text;
+    list.appendChild(li);
+    list.hidden = false;
+  }
+  function render(members) {
+    shown = members; active = -1; list.innerHTML = "";
+    if (!members.length) { note("Nobody in this server has a name starting with that."); return; }
+    members.forEach(function (m) {
+      var li = document.createElement("li");
+      li.setAttribute("role", "option");
+      var name = document.createElement("strong");
+      name.textContent = m.display_name;
+      li.appendChild(name);
+      var extra = document.createElement("span");
+      extra.className = "meta";
+      extra.textContent = " @" + m.username + (m.on_roster ? " · already " + m.on_roster : "") +
+        (m.readable_name ? " · shown as " + m.readable_name : "");
+      li.appendChild(extra);
+      // mousedown, not click: click fires after the box loses focus and the
+      // list has already closed.
+      li.addEventListener("mousedown", function (e) { e.preventDefault(); pick(m); });
+      list.appendChild(li);
+    });
+    list.hidden = false;
+    box.setAttribute("aria-expanded", "true");
+  }
+  function search(q) {
+    var mine = ++asked;
+    var url = base + (base.indexOf("?") < 0 ? "?" : "&") +
+      (guild ? "guild_id=" + encodeURIComponent(guild.value) + "&" : "") + "q=" + encodeURIComponent(q);
+    fetch(url, { credentials: "same-origin" })
+      .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
+      .then(function (res) {
+        if (mine !== asked) return;      // a later keystroke already asked again
+        if (!res.ok) { note(res.body.error || "Search failed."); return; }
+        render(res.body.members);
+      })
+      .catch(function (err) { if (mine === asked) note("Search failed: " + err.message); });
+  }
+
+  box.addEventListener("input", function () {
+    var q = box.value.trim();
+    // A pasted snowflake is an id already; there is nothing to look up.
+    hidden.value = /^\d{15,21}$/.test(q) ? q : "";
+    clearTimeout(timer);
+    if (!q || hidden.value) { close(); return; }
+    timer = setTimeout(function () { search(q); }, 200);
+  });
+  box.addEventListener("keydown", function (e) {
+    if (list.hidden || !shown.length) return;
+    if (e.key === "ArrowDown") { active = Math.min(active + 1, shown.length - 1); mark(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { active = Math.max(active - 1, 0); mark(); e.preventDefault(); }
+    else if (e.key === "Enter" && active >= 0) { pick(shown[active]); e.preventDefault(); }
+    else if (e.key === "Escape") { close(); }
+  });
+  box.addEventListener("blur", close);
+  if (guild) guild.addEventListener("change", function () { box.value = ""; hidden.value = ""; close(); });
+  form.addEventListener("submit", function (e) {
+    if (!hidden.value) {
+      e.preventDefault();
+      note("Pick someone from the list first — a name alone could be more than one person.");
+    }
+  });
+});
+</script>
 </body></html>{{end}}

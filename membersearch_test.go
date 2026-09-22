@@ -162,8 +162,8 @@ func TestTheEventPageHasTheNameBox(t *testing.T) {
 	srv.render(rec, "detail.html", pageData{Session: &WebSession{}, CanManage: true,
 		Event: &Event{ID: 7, GuildID: "g1", Name: "Games", Status: StatusOpen}})
 	page := rec.Body.String()
-	for _, want := range []string{`data-search="/events/7/members"`, `name="discord_user_id" id="member-id"`,
-		`id="member-list"`, `/^\d{15,21}$/`} {
+	for _, want := range []string{`data-member-search="/events/7/members"`, `<input type="hidden" name="discord_user_id">`,
+		`class="picker"`, `/^\d{15,21}$/`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %s", want)
 		}

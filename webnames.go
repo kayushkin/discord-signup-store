@@ -85,6 +85,7 @@ func (s *Server) handleWebNames(w http.ResponseWriter, r *http.Request) {
 		data.Error = "Names can be set by whoever may edit every event in a server, and you may not in any this bot is in."
 	}
 	data.NamePeople = people
+	data.NameableGuilds = guilds
 	s.render(w, "names.html", data)
 }
 
@@ -101,7 +102,7 @@ func (s *Server) handleWebSetName(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := strings.TrimSpace(r.FormValue("discord_user_id"))
 	name := strings.TrimSpace(r.FormValue("readable_name"))
-	_, people, err := s.nameableBy(session)
+	guilds, people, err := s.nameableBy(session)
 	if err != nil {
 		http.Error(w, "could not check whether you may name them: "+err.Error(), http.StatusBadGateway)
 		return
@@ -112,8 +113,21 @@ func (s *Server) handleWebSetName(w http.ResponseWriter, r *http.Request) {
 			person = &people[i]
 		}
 	}
+	// Someone on no list yet can be named too, from the search box: then the
+	// form names the server, which must be one the viewer may edit every
+	// event in, and Discord must list them as its member.
+	if guildID := strings.TrimSpace(r.FormValue("guild_id")); person == nil && guildID != "" && s.discord != nil {
+		for _, g := range guilds {
+			if g.ID != guildID {
+				continue
+			}
+			if name, err := s.discord.GuildMemberDisplayName(guildID, userID); err == nil {
+				person = &namedPerson{DiscordUserID: userID, DisplayName: name}
+			}
+		}
+	}
 	if person == nil {
-		http.Error(w, "that person is not on a list in a server where you may edit every event", http.StatusForbidden)
+		http.Error(w, "that person is not in a server where you may edit every event", http.StatusForbidden)
 		return
 	}
 	var notice string
@@ -134,4 +148,55 @@ func (s *Server) handleWebSetName(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("[discord-signup] readable name for %s set to %q by web:%s", userID, name, session.DiscordUserID)
 	http.Redirect(w, r, "/names?"+noticeQuery(notice+" Tables update within a minute."), http.StatusSeeOther)
+}
+
+// handleWebNameSearch answers the names page's search box: members of one
+// server the viewer may name people in, with the short name set for each.
+func (s *Server) handleWebNameSearch(w http.ResponseWriter, r *http.Request) {
+	session := s.requireSession(w, r)
+	if session == nil {
+		return
+	}
+	guildID := strings.TrimSpace(r.URL.Query().Get("guild_id"))
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	guilds, _, err := s.nameableBy(session)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "could not check your servers: " + err.Error()})
+		return
+	}
+	allowed := false
+	for _, g := range guilds {
+		allowed = allowed || g.ID == guildID
+	}
+	if !allowed {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "you may not name people in that server"})
+		return
+	}
+	if query == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"members": []any{}})
+		return
+	}
+	matches, err := s.discord.SearchGuildMembers(guildID, query, memberSearchLimit)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Discord member search failed: " + err.Error()})
+		return
+	}
+	named, err := s.store.ReadableNames()
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	readable := map[string]string{}
+	for _, n := range named {
+		readable[n.DiscordUserID] = n.ReadableName
+	}
+	type suggestion struct {
+		MemberMatch
+		ReadableName string `json:"readable_name,omitempty"`
+	}
+	out := make([]suggestion, 0, len(matches))
+	for _, m := range matches {
+		out = append(out, suggestion{MemberMatch: m, ReadableName: readable[m.UserID]})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"members": out})
 }

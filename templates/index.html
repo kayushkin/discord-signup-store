@@ -30,15 +30,23 @@
   <div class="row" style="margin-bottom:18px">
     <a class="btn" href="/events/new">New event</a>
     <a class="btn ghost" href="/names">Names</a>
-    <form method="post" action="/sync" style="margin:0">
-      <button class="ghost">Pull in Discord events</button></form>
+    {{if gt (len .HomeGuildChoices) 1}}
+    <form method="post" action="/preferences/home-server" style="margin:0 0 0 auto" class="row">
+      <label for="home-server" class="meta" style="margin:0">Show</label>
+      <select id="home-server" name="guild_id" onchange="this.form.submit()">
+        <option value="">every server</option>
+        {{range .HomeGuildChoices}}<option value="{{.ID}}"{{if eq .ID $.HomeGuildID}} selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+      <noscript><button class="ghost">Show</button></noscript>
+    </form>
+    {{end}}
   </div>
 
   {{if not .Events}}
     <div class="card"><p class="meta">
       {{if .Archived}}Nothing coming up. Finished events are in the archive below.
-      {{else}}No events yet. Create one, or pull in the scheduled events that
-      already exist in your Discord servers.{{end}}
+      {{else}}No events yet. Create one — events made in Discord's own Events
+      tab appear here by themselves within ten minutes.{{end}}
     </p></div>
   {{end}}
   {{range .Events}}{{template "eventcard" .}}{{end}}

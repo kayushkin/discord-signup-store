@@ -191,8 +191,9 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /events/{id}/members", s.handleWebMemberSearch)
 	mux.HandleFunc("POST /events/{id}/publish", s.handleWebPublish)
 	mux.HandleFunc("POST /events/{id}/end", s.handleWebEndEvent)
-	mux.HandleFunc("POST /sync", s.handleWebSync)
+	mux.HandleFunc("POST /preferences/home-server", s.handleWebSetHomeServer)
 	mux.HandleFunc("GET /names", s.handleWebNames)
+	mux.HandleFunc("GET /names/members", s.handleWebNameSearch)
 	mux.HandleFunc("POST /names", s.handleWebSetName)
 }
 

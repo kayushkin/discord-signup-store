@@ -62,7 +62,8 @@ service's, and proxying any other route publishes roster editing to the world.
 | POST | `/events/{id}/publish` | Create a native Discord event linked to this roster. |
 | POST | `/events/{id}/end` | End an underway event now: the same finishing as its end time passing, and the native Discord event is ended too. A recurring event ends this date and moves to its next. Offered on the page only while the event is underway. |
 | GET · POST | `/names` | The names page: everyone going, maybe or waitlisted on any event in the servers where you may edit every event, each with a box for the short name they are shown by on Discord. POST `discord_user_id` and `readable_name` saves one; an empty name removes it. Anyone else's id is 403. |
-| POST | `/sync` | Pull Discord events for every server you manage. |
+| POST | `/preferences/home-server` | Save which server the home page shows (`guild_id`, `""` for every server). Kept per Discord user in `user_preferences`, so it holds across logins. |
+| GET | `/names/members?guild_id=&q=` | The names page's search: members of one server where you may edit every event, each with the short name set for them. |
 
 **Authorization.** Reading an event needs guild membership. Editing needs `MANAGE_EVENTS` (or `ADMINISTRATOR`) in that guild, or having created the event — matched on `created_by`, the Discord user id, never on a name. Creating needs `CREATE_EVENTS`, `MANAGE_EVENTS` or `ADMINISTRATOR` (the web page used to want the last two only).
 

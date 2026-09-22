@@ -249,6 +249,14 @@ No row means their Discord display name is shown. Read by `Roster` with a LEFT J
 | `discord_user_id` | TEXT PK | May see and edit everything in every server the bot is in, whatever their Discord roles. |
 | `added_at` | INTEGER | Unix seconds. |
 
+### `user_preferences` — choices a person makes on the web pages
+
+| Column | Type | Meaning |
+|---|---|---|
+| `discord_user_id` | TEXT PK | The person, so a choice holds across logins and devices. |
+| `home_guild_id` | TEXT | The one server the home page shows; `''` for every server. Ignored if they can no longer see it. |
+| `updated_at` | INTEGER | Unix seconds. |
+
 ## The browser surface
 
 ### `web_sessions` — a logged-in browser

@@ -65,8 +65,13 @@ func (s *Server) handleWebEventDetail(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("[discord-signup] history %d: %v", ev.ID, err)
 	}
+	actors := make([]string, 0, len(history))
+	for _, h := range history {
+		actors = append(actors, h.Actor)
+	}
 	s.render(w, "detail.html", pageData{
 		Title: ev.Name, Session: session, Event: ev, Roster: roster, History: history,
+		HistoryActorNames: s.historyActorNames(ev.GuildID, actors),
 		CanManage:       canManage,
 		EventUnderway:   eventIsUnderway(ev),
 		DiscordEventURL: DiscordEventURL(ev.GuildID, ev.DiscordScheduledEventID),
@@ -366,7 +371,12 @@ func (s *Server) handleWebRosterAdd(w http.ResponseWriter, r *http.Request) {
 	if displayName != "" {
 		notice, who = "Added "+displayName+".", displayName
 	}
-	if result.Signup.State == StateWaitlisted {
+	switch {
+	case result.AlreadySignedUp && result.Signup.State == StateWaitlisted:
+		notice = fmt.Sprintf("%s is already on the waitlist, at number %d — no change.", who, result.Signup.WaitlistPlace)
+	case result.AlreadySignedUp:
+		notice = fmt.Sprintf("%s is already going — no change.", who)
+	case result.Signup.State == StateWaitlisted:
 		notice = fmt.Sprintf("Event is full, so %s went on the waitlist at number %d.",
 			who, result.Signup.WaitlistPlace)
 	}
@@ -395,49 +405,18 @@ func (s *Server) handleWebPublish(w http.ResponseWriter, r *http.Request) {
 		"Published. The Discord event points back here and says that pressing Interested does not hold a place.")
 }
 
-// handleWebSync pulls native Discord events into the store.
-func (s *Server) handleWebSync(w http.ResponseWriter, r *http.Request) {
-	session := s.requireSession(w, r)
-	if session == nil {
-		return
-	}
-	guilds, err := s.guildsWhereMayEditAll(session)
-	if err != nil {
-		http.Redirect(w, r, "/?"+noticeQuery("Could not sync: "+err.Error()), http.StatusSeeOther)
-		return
-	}
-	total := SyncResult{}
-	for _, g := range guilds {
-		result, err := s.SyncScheduledEvents(g.ID)
-		if err != nil {
-			total.Problems = append(total.Problems, g.Name+": "+err.Error())
-			continue
-		}
-		total.Imported += result.Imported
-		total.Updated += result.Updated
-		total.Unchanged += result.Unchanged
-		total.Problems = append(total.Problems, result.Problems...)
-	}
-	notice := fmt.Sprintf("Pulled from Discord: %d new, %d updated, %d unchanged.",
-		total.Imported, total.Updated, total.Unchanged)
-	if len(total.Problems) > 0 {
-		notice += " Problems: " + strings.Join(total.Problems, "; ")
-	}
-	http.Redirect(w, r, "/?"+noticeQuery(notice), http.StatusSeeOther)
-}
-
 func (s *Server) redirectWithNotice(w http.ResponseWriter, r *http.Request, eventID int64, notice string) {
 	http.Redirect(w, r, fmt.Sprintf("/events/%d?%s", eventID, noticeQuery(notice)),
 		http.StatusSeeOther)
 }
 
 // noticeQuery renders a notice as a complete, correctly encoded query string.
-// The notice is not always ours: handleWebSync builds it from Discord guild
-// names and upstream error text, so it can hold any byte at all. Encoding it
-// with url.Values is what keeps the message the reader gets identical to the
+// The notice is not always ours: it carries event names, people's names and
+// upstream error text, so it can hold any byte at all. Encoding it with
+// url.Values is what keeps the message the reader gets identical to the
 // message we sent — a hand-rolled replacement of the characters someone thought
 // of loses the notice to a percent sign, truncates it at a hash, and drops it
-// entirely at the "; " that joins two sync problems.
+// entirely at a "; ".
 func noticeQuery(notice string) string {
 	return url.Values{"notice": {notice}}.Encode()
 }
