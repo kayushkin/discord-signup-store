@@ -155,7 +155,7 @@ func TestARowSaysWhatWhenAndWhereThenLinksItsPost(t *testing.T) {
 	// title, and Discord rate-limits thread renames to about two per ten
 	// minutes, so under signups the number people read was two renames old. A
 	// message edit has no such limit.
-	want := "**Board game night** - Tue 9/22 7pm @ The shed\n<#post-9>\n(3/8) **Going** ✅ Al, Bo, Cy"
+	want := "**Board game night** - Tue 9/22 7pm 📍 The shed\n<#post-9>\n(3/8) **Going** ✅ Al, Bo, Cy"
 	if block.text != want {
 		t.Errorf("row =\n%q\nwant\n%q", block.text, want)
 	}
@@ -209,7 +209,7 @@ func TestTheRosterTableHasNoEditButton(t *testing.T) {
 
 // TestTheRowReadsLikeTheExample pins the shape asked for on 2026-09-22:
 //
-//	**Fall Celebration! <Hosted by Heidi>** - Tue 9/22 7pm @ Heidi's House
+//	**Fall Celebration! <Hosted by Heidi>** - Tue 9/22 7pm 📍 Heidi's House
 //	<#post>
 //	(13/15) **Going** ✅ Pawadam, Weidi 🫧
 func TestTheRowReadsLikeTheExample(t *testing.T) {
@@ -218,7 +218,7 @@ func TestTheRowReadsLikeTheExample(t *testing.T) {
 		Capacity: 15, AttendingCount: 2, Location: "Heidi's House", ForumPostID: "post-9",
 		Timezone: "America/Los_Angeles", StartsAt: time.Date(2026, 9, 22, 19, 0, 0, 0, reno).Unix()}
 	block := buildEventTableBlock(ev, rosterOf("Pawadam", "Weidi 🫧"), true, eventTableButtons)
-	want := "**Fall Celebration! \\<Hosted by Heidi\\>** - Tue 9/22 7pm @ Heidi's House\n<#post-9>\n(2/15) **Going** ✅ Pawadam, Weidi 🫧"
+	want := "**Fall Celebration! \\<Hosted by Heidi\\>** - Tue 9/22 7pm 📍 Heidi's House\n<#post-9>\n(2/15) **Going** ✅ Pawadam, Weidi 🫧"
 	if block.text != want {
 		t.Errorf("row =\n%q\nwant\n%q", block.text, want)
 	}
@@ -306,7 +306,7 @@ func TestTheHeadlineLeavesOutWhatItDoesNotHave(t *testing.T) {
 	reno, _ := time.LoadLocation("America/Los_Angeles")
 	ev := &Event{Name: "Board Game Night", Timezone: "America/Los_Angeles", RecurrenceRule: "FREQ=WEEKLY;BYDAY=TU",
 		StartsAt: time.Date(2026, 9, 22, 17, 0, 0, 0, reno).Unix(), Location: "Baldini's"}
-	if got := eventTableHeadline(ev); got != "**Board Game Night** - Tue 9/22 5pm (weekly) @ Baldini's" {
+	if got := eventTableHeadline(ev); got != "**Board Game Night** - Tue 9/22 5pm (weekly) 📍 Baldini's" {
 		t.Errorf("weekly = %q", got)
 	}
 }

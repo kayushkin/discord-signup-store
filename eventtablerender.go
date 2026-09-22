@@ -33,11 +33,12 @@ const (
 	eventTableCharBudget = 3800
 )
 
-// eventTableHeadline is the event's line: what it is, when and where, with
-// no emoji — they came out wider than the text and spaced the line oddly.
+// eventTableHeadline is the event's line: what it is, when and where. The pin
+// is its only emoji — a clock face beside the time came out wider than the
+// text and spaced the line oddly.
 //
-//	**Fall Celebration! <Hosted by Heidi>** - Tue 9/22 7pm @ Heidi's House
-//	**Board Game Night** - Tue 9/22 5pm (weekly) @ Baldini's Casino
+//	**Fall Celebration! <Hosted by Heidi>** - Tue 9/22 7pm 📍 Heidi's House
+//	**Board Game Night** - Tue 9/22 5pm (weekly) 📍 Baldini's Casino
 //
 // Only the title is bold. The time is the event's own zone — the zone it was
 // scheduled in. The forum post is its own mention, which each caller places:
@@ -51,7 +52,7 @@ func eventTableHeadline(ev *Event) string {
 		line += " (" + describeRepeat(ev.RecurrenceRule) + ")"
 	}
 	if ev.Location != "" {
-		line += " @ " + escapeMarkdown(ev.Location)
+		line += " 📍 " + escapeMarkdown(ev.Location)
 	}
 	return line
 }
