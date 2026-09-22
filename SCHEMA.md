@@ -242,6 +242,13 @@ No row means Discord's default: `MANAGE_EVENTS` or `ADMINISTRATOR` edits every e
 
 No row means their Discord display name is shown. Read by `Roster` with a LEFT JOIN, into `Signup.ReadableName`.
 
+### `site_admins` — whoever runs the bot
+
+| Column | Type | Meaning |
+|---|---|---|
+| `discord_user_id` | TEXT PK | May see and edit everything in every server the bot is in, whatever their Discord roles. |
+| `added_at` | INTEGER | Unix seconds. |
+
 ## The browser surface
 
 ### `web_sessions` — a logged-in browser

@@ -289,3 +289,11 @@ CREATE TABLE IF NOT EXISTS readable_names (
     readable_name   TEXT NOT NULL,
     updated_at      INTEGER NOT NULL
 );
+
+-- site_admins: people who may do everything in every server the bot is in,
+-- whatever their Discord roles say — whoever runs the bot. Set through the
+-- machine API only.
+CREATE TABLE IF NOT EXISTS site_admins (
+    discord_user_id TEXT PRIMARY KEY,
+    added_at        INTEGER NOT NULL
+);

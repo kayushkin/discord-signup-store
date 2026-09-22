@@ -95,8 +95,12 @@ func (s *WebSession) editActor(guildID string) editActor {
 
 // mayEditAllEventsIn reports whether someone may edit every event in their
 // server, not only their own: the rule's editor role or the owner when the
-// server set one, Manage Events or Administrator when it did not.
+// server set one, Manage Events or Administrator when it did not. A site
+// admin may, everywhere.
 func (s *Server) mayEditAllEventsIn(actor editActor) (bool, error) {
+	if admin, err := s.store.IsSiteAdmin(actor.UserID); err != nil || admin {
+		return admin, err
+	}
 	rule, err := s.store.GuildEditingRule(actor.GuildID)
 	if err != nil {
 		return false, err
@@ -140,6 +144,9 @@ func (s *Server) mayEditEvent(actor editActor, ev *Event) (bool, error) {
 // lets create its own events. The caller has already established that they
 // are a member.
 func (s *Server) mayCreateEventsIn(actor editActor) (bool, error) {
+	if admin, err := s.store.IsSiteAdmin(actor.UserID); err != nil || admin {
+		return admin, err
+	}
 	rule, err := s.store.GuildEditingRule(actor.GuildID)
 	if err != nil {
 		return false, err

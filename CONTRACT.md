@@ -31,6 +31,9 @@ service's, and proxying any other route publishes roster editing to the world.
 | POST | `/api/events/{id}/signups` | Add someone by id. Goes through the same cap and waitlist as a click. |
 | DELETE | `/api/events/{id}/signups/{userID}?actor=` | Remove someone. Promotes the next in line, same as a click. |
 | POST | `/api/events/{id}/maybe` | Put someone on the Maybe list by id (`discord_user_id`, `display_name`), same as pressing Maybe. Moves someone going or waitlisted to Maybe. |
+| GET | `/api/site-admins` | Site admins: `{"site_admins":[{"discord_user_id","added_at"}]}`. |
+| PUT | `/api/site-admins/{userID}` | Make someone a site admin: they may see every event in every server the bot is in, member or not, and edit, end, cancel, create and name anywhere, whatever their Discord roles. Only this route grants it. |
+| DELETE | `/api/site-admins/{userID}` | Take it away. 404 if they were not one. |
 | GET | `/api/readable-names` | Every short name set: `{"readable_names":[{"discord_user_id","readable_name","updated_at"}]}`. |
 | PUT | `/api/readable-names/{userID}` | Set the short name a person is shown by on Discord (`{"readable_name":"Matt"}`). Every Discord surface that lists names uses it — the tables, Details, the forum post, the Discord event description; the web page keeps display names. |
 | DELETE | `/api/readable-names/{userID}` | Remove it, so their display name shows again. 404 if none was set. |
@@ -62,7 +65,7 @@ service's, and proxying any other route publishes roster editing to the world.
 
 **Authorization.** Reading an event needs guild membership. Editing needs `MANAGE_EVENTS` (or `ADMINISTRATOR`) in that guild, or having created the event — matched on `created_by`, the Discord user id, never on a name. Creating needs `CREATE_EVENTS`, `MANAGE_EVENTS` or `ADMINISTRATOR` (the web page used to want the last two only).
 
-A server can replace that with its own rule (`PUT /api/guilds/{guildID}/editing`, stored in `guild_editing_rules`). With an **editor role** set, an event is edited by its creator, anyone holding that role, or the server's owner — and `MANAGE_EVENTS` and `ADMINISTRATOR` no longer count there. With **anyone may create** set, every member may create. The same rule governs the Discord buttons and the web pages. In a server with an editor role, the web pages read the person's roles and the server's owner from Discord on each check rather than from the login, so taking the role away takes the right away at once.
+A site admin (`site_admins`, below) may do all of it in every server. A server can replace that with its own rule (`PUT /api/guilds/{guildID}/editing`, stored in `guild_editing_rules`). With an **editor role** set, an event is edited by its creator, anyone holding that role, or the server's owner — and `MANAGE_EVENTS` and `ADMINISTRATOR` no longer count there. With **anyone may create** set, every member may create. The same rule governs the Discord buttons and the web pages. In a server with an editor role, the web pages read the person's roles and the server's owner from Discord on each check rather than from the login, so taking the role away takes the right away at once.
 
 ## Status codes
 

@@ -205,8 +205,24 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 		s.render(w, "index.html", data)
 		return
 	}
-	var visible []Event
+	guildIDs := map[string]bool{}
 	for guildID := range session.GuildPermissions {
+		guildIDs[guildID] = true
+	}
+	// A site admin sees every server the bot is in, member or not.
+	if admin, err := s.store.IsSiteAdmin(session.DiscordUserID); err != nil {
+		data.Error = err.Error()
+	} else if admin && s.discord != nil {
+		botGuilds, err := s.discord.ListBotGuilds()
+		if err != nil {
+			data.Error = "list the bot's servers: " + err.Error()
+		}
+		for _, g := range botGuilds {
+			guildIDs[g.ID] = true
+		}
+	}
+	var visible []Event
+	for guildID := range guildIDs {
 		events, err := s.store.ListEvents(guildID, "", 200)
 		if err != nil {
 			data.Error = err.Error()
@@ -252,7 +268,11 @@ func (s *Server) guildsWhere(session *WebSession, allowed func(editActor) (bool,
 	}
 	var out []Guild
 	for _, g := range botGuilds {
-		if !session.IsMemberOf(g.ID) {
+		viewable, err := s.mayViewGuild(session, g.ID)
+		if err != nil {
+			return nil, err
+		}
+		if !viewable {
 			continue
 		}
 		ok, err := allowed(session.editActor(g.ID))
@@ -335,7 +355,7 @@ func (s *Server) handleWebCreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	guildID := r.FormValue("guild_id")
-	if !session.IsMemberOf(guildID) {
+	if viewable, err := s.mayViewGuild(session, guildID); err != nil || !viewable {
 		http.Error(w, "you are not in that server", http.StatusForbidden)
 		return
 	}

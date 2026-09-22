@@ -30,7 +30,7 @@ func (s *Server) webEvent(w http.ResponseWriter, r *http.Request, session *WebSe
 	}
 	// Membership is the read gate. Someone who is not in the server has no
 	// business seeing who signed up for its events.
-	if !session.IsMemberOf(ev.GuildID) {
+	if viewable, err := s.mayViewGuild(session, ev.GuildID); err != nil || !viewable {
 		http.Error(w, "that event is in a server you are not in", http.StatusForbidden)
 		return nil, false
 	}
