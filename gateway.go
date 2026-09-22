@@ -205,6 +205,12 @@ func (g *GatewayListener) onReactionRemove(_ *discordgo.Session, e *discordgo.Me
 	if err != nil {
 		return
 	}
+	// The ✅ means going. Someone on the Maybe list is already not going —
+	// and the bot takes their ✅ away when they say Maybe, which must not then
+	// take them off the Maybe list as well.
+	if state, err := g.server.store.SignupState(ev.ID, e.UserID); err == nil && state == StateMaybe {
+		return
+	}
 	result, err := g.server.store.Leave(ev.ID, e.UserID, ActorReaction)
 	if err != nil {
 		return // not on the roster; nothing to undo

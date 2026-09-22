@@ -140,7 +140,9 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 		// reaction that no longer means membership would teach everyone to
 		// distrust it. Removing it fires a gateway remove event, which lands on
 		// an already-withdrawn row and no-ops.
-		if change.State == StateWithdrawn && ev.ForumPostID != "" {
+		// Maybe is not going either, so it loses the ✅ too; the removal
+		// lands on a Maybe row, which the reaction handler leaves alone.
+		if (change.State == StateWithdrawn || change.State == StateMaybe) && ev.ForumPostID != "" {
 			if err := s.discord.RemoveUserReaction(ev.ForumPostID, ev.ForumPostID,
 				joinReactionEmoji, change.UserID); err != nil {
 				log.Printf("[discord-signup] clear ✅ for %s on event %d: %v", change.UserID, ev.ID, err)
@@ -242,7 +244,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	13 daily and yearly rules are described in words, never as an RRULE
 //	14 an underway event's management row carries End
 //	15 table rows read "title 🕖 Tue 9/22 7pm  📍 place  <#post>" over "(3/8) 👥 names"
-const publishFormatVersion = 15
+//	16 bold title, time and place; Going, Maybe and Waitlist lines; a Maybe button
+const publishFormatVersion = 16
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //

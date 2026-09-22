@@ -156,6 +156,8 @@ type JoinResult struct {
 // LeaveResult is what happened when someone left, including the knock-on.
 type LeaveResult struct {
 	Signup Signup `json:"signup"`
+	// FromState is where they were before leaving: going, waitlisted or maybe.
+	FromState string `json:"from_state"`
 	// Promoted is the person moved off the waitlist into the freed place, or
 	// nil if there was no waitlist. The caller is responsible for telling them
 	// — this store records the promotion, it does not deliver the news.

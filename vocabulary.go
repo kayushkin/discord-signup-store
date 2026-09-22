@@ -15,12 +15,17 @@ const (
 	// StateWithdrawn means they left. The row stays so the signup update history
 	// stays joinable and so a re-join can be told from a first join.
 	StateWithdrawn = "withdrawn"
+	// StateMaybe means they might come. It holds no place and no spot in
+	// line: the limit and the waitlist count only the people going. Pressing
+	// Join from here is an ordinary join, which can land on the waitlist.
+	StateMaybe = "maybe"
 )
 
 var validStates = map[string]bool{
 	StateAttending:  true,
 	StateWaitlisted: true,
 	StateWithdrawn:  true,
+	StateMaybe:      true,
 }
 
 // SignupUpdate actions, written to the append-only log.
@@ -30,6 +35,7 @@ const (
 	ActionWithdrew   = "withdrew"   // left, by button or by override
 	ActionPromoted   = "promoted"   // moved off the waitlist into a freed place
 	ActionRejoined   = "rejoined"   // signed up again after withdrawing
+	ActionMaybe      = "maybe"      // put themselves down as Maybe
 )
 
 var validActions = map[string]bool{
@@ -38,6 +44,7 @@ var validActions = map[string]bool{
 	ActionWithdrew:   true,
 	ActionPromoted:   true,
 	ActionRejoined:   true,
+	ActionMaybe:      true,
 }
 
 // Event lifecycle.

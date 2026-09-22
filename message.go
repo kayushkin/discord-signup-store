@@ -157,6 +157,17 @@ func splitRoster(roster []Signup) (attending, waiting []Signup) {
 	return attending, waiting
 }
 
+// maybeOf is the Maybe list, in the order people put themselves on it.
+func maybeOf(roster []Signup) []Signup {
+	var maybe []Signup
+	for _, sg := range roster {
+		if sg.State == StateMaybe {
+			maybe = append(maybe, sg)
+		}
+	}
+	return maybe
+}
+
 func writeMentions(b *strings.Builder, signups []Signup) {
 	for i, sg := range signups {
 		if i > 0 {

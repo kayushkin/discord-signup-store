@@ -69,7 +69,9 @@ func (s *Store) Join(eventID int64, discordUserID, displayName, via string) (*Jo
 		return nil, fmt.Errorf("load existing signup: %w", err)
 	}
 
-	if hasExisting && existing.State != StateWithdrawn {
+	// A Maybe is not a signup: from there, Join is an ordinary join and goes
+	// through the limit like anyone else's.
+	if hasExisting && existing.State != StateWithdrawn && existing.State != StateMaybe {
 		// Already holds this place. Nothing to do, and deliberately no history
 		// row — a double click is not an event.
 		if err := tx.Commit(); err != nil {
@@ -111,7 +113,7 @@ func (s *Store) Join(eventID int64, discordUserID, displayName, via string) (*Jo
 		// same second. A new arrival gets a new id, so the tiebreak points the
 		// right way. discord_interested is carried across because it is a fact
 		// about Discord's list, not about this row.
-		if action == ActionJoined {
+		if action == ActionJoined && existing.State == StateWithdrawn {
 			action = ActionRejoined
 		}
 		if _, err = tx.Exec(`DELETE FROM signups WHERE id = ?`, existing.ID); err != nil {
@@ -214,6 +216,7 @@ func (s *Store) Leave(eventID int64, discordUserID, actor string) (*LeaveResult,
 
 	ts := now()
 	wasAttending := leaver.State == StateAttending
+	fromState := leaver.State
 
 	if _, err := tx.Exec(`UPDATE signups SET state = ?, state_changed_at = ? WHERE id = ?`,
 		StateWithdrawn, ts, leaver.ID); err != nil {
@@ -226,36 +229,16 @@ func (s *Store) Leave(eventID int64, discordUserID, actor string) (*LeaveResult,
 	leaver.State = StateWithdrawn
 	leaver.StateChangedAt = ts
 
-	result := &LeaveResult{Signup: leaver}
+	result := &LeaveResult{Signup: leaver, FromState: fromState}
 
 	// Only an attending person leaving frees a place. Someone abandoning the
-	// waitlist promotes nobody.
+	// waitlist, or the Maybe list, promotes nobody.
 	if wasAttending && capacity > 0 {
-		var next Signup
-		err := tx.QueryRow(`
-			SELECT id, event_id, discord_user_id, display_name, state, signed_up_at,
-			       state_changed_at, joined_via, discord_interested
-			FROM signups WHERE event_id = ? AND state = ?
-			ORDER BY signed_up_at ASC, id ASC LIMIT 1`, eventID, StateWaitlisted).
-			Scan(&next.ID, &next.EventID, &next.DiscordUserID, &next.DisplayName,
-				&next.State, &next.SignedUpAt, &next.StateChangedAt,
-				&next.JoinedVia, &next.DiscordInterested)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("find next in line: %w", err)
+		promoted, err := promoteNextInLineTx(tx, eventID, ts)
+		if err != nil {
+			return nil, err
 		}
-		if err == nil {
-			if _, err := tx.Exec(`UPDATE signups SET state = ?, state_changed_at = ? WHERE id = ?`,
-				StateAttending, ts, next.ID); err != nil {
-				return nil, fmt.Errorf("promote signup: %w", err)
-			}
-			if err := logSignupUpdate(tx, eventID, next.DiscordUserID, ActionPromoted, StateWaitlisted,
-				StateAttending, ActorPromotion, ts); err != nil {
-				return nil, err
-			}
-			next.State = StateAttending
-			next.StateChangedAt = ts
-			result.Promoted = &next
-		}
+		result.Promoted = promoted
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -277,11 +260,11 @@ func (s *Store) Roster(eventID int64, includeWithdrawn bool) ([]Signup, error) {
 		query += ` AND state != ?`
 		args = append(args, StateWithdrawn)
 	}
-	// Attending before waitlisted before withdrawn, then arrival order within
+	// Attending before waitlisted before maybe before withdrawn, then arrival order within
 	// each. CASE rather than alphabetical: 'attending' < 'waitlisted' happens
 	// to sort correctly today and would break the moment a state is renamed.
 	query += `
-		ORDER BY CASE state WHEN 'attending' THEN 0 WHEN 'waitlisted' THEN 1 ELSE 2 END,
+		ORDER BY CASE state WHEN 'attending' THEN 0 WHEN 'waitlisted' THEN 1 WHEN 'maybe' THEN 2 ELSE 3 END,
 		         signed_up_at ASC, id ASC`
 
 	rows, err := s.db.Query(query, args...)
@@ -482,4 +465,171 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// promoteNextInLineTx moves the person who has waited longest into a place
+// that has just been freed, inside the caller's transaction. Nil when nobody
+// is waiting. Shared by Leave and by going to Maybe, which both free a place.
+func promoteNextInLineTx(tx *sql.Tx, eventID, ts int64) (*Signup, error) {
+	var next Signup
+	err := tx.QueryRow(`
+		SELECT id, event_id, discord_user_id, display_name, state, signed_up_at,
+		       state_changed_at, joined_via, discord_interested
+		FROM signups WHERE event_id = ? AND state = ?
+		ORDER BY signed_up_at ASC, id ASC LIMIT 1`, eventID, StateWaitlisted).
+		Scan(&next.ID, &next.EventID, &next.DiscordUserID, &next.DisplayName,
+			&next.State, &next.SignedUpAt, &next.StateChangedAt,
+			&next.JoinedVia, &next.DiscordInterested)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find next in line: %w", err)
+	}
+	if _, err := tx.Exec(`UPDATE signups SET state = ?, state_changed_at = ? WHERE id = ?`,
+		StateAttending, ts, next.ID); err != nil {
+		return nil, fmt.Errorf("promote signup: %w", err)
+	}
+	if err := logSignupUpdate(tx, eventID, next.DiscordUserID, ActionPromoted, StateWaitlisted,
+		StateAttending, ActorPromotion, ts); err != nil {
+		return nil, err
+	}
+	next.State = StateAttending
+	next.StateChangedAt = ts
+	return &next, nil
+}
+
+// MaybeResult is what putting yourself down as Maybe did.
+type MaybeResult struct {
+	Signup Signup `json:"signup"`
+	// FromState is where they were: "" when new, or attending, waitlisted,
+	// withdrawn or maybe.
+	FromState    string `json:"from_state"`
+	AlreadyMaybe bool   `json:"already_maybe"`
+	// Promoted is whoever took the place a going person gave up, as with
+	// Leave. The caller tells them.
+	Promoted *Signup `json:"promoted,omitempty"`
+}
+
+// MarkMaybe puts someone on an event's Maybe list.
+//
+// Maybe holds no place and no spot in line. Someone going who says Maybe
+// gives up their place, and the person who has waited longest gets it, as if
+// they had left; someone waitlisted leaves the line. One transaction for the
+// same reason as Join and Leave. Closed events refuse it, as they refuse
+// Join: closed means nobody new signs up for anything.
+func (s *Store) MarkMaybe(eventID int64, discordUserID, displayName, via string) (*MaybeResult, error) {
+	discordUserID = strings.TrimSpace(discordUserID)
+	if via == "" {
+		via = JoinedViaButton
+	}
+	if !validJoinedVia[via] {
+		return nil, fmt.Errorf("%w: joined_via %q is not one of %v", ErrInvalidEvent, via, ValidJoinedVia())
+	}
+	if discordUserID == "" {
+		return nil, fmt.Errorf("%w: discord_user_id is required", ErrInvalidEvent)
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback()
+
+	var capacity int
+	var status string
+	err = tx.QueryRow(`SELECT capacity, status FROM events WHERE id = ? AND deleted_at = 0`, eventID).
+		Scan(&capacity, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load event: %w", err)
+	}
+	if status != StatusOpen {
+		return nil, fmt.Errorf("%w (status is %q)", ErrEventNotOpen, status)
+	}
+
+	existing, found, err := loadSignupTx(tx, eventID, discordUserID)
+	if err != nil {
+		return nil, err
+	}
+	ts := now()
+	result := &MaybeResult{}
+	if found {
+		result.FromState = existing.State
+	}
+
+	switch {
+	case found && existing.State == StateMaybe:
+		if err := tx.Commit(); err != nil {
+			return nil, fmt.Errorf("commit: %w", err)
+		}
+		result.Signup, result.AlreadyMaybe = *existing, true
+		return result, nil
+
+	case found && (existing.State == StateAttending || existing.State == StateWaitlisted):
+		// Kept in place rather than re-inserted: nothing orders the Maybe list
+		// against anybody's claim, and Join from here re-inserts anyway.
+		if _, err := tx.Exec(`UPDATE signups SET state = ?, state_changed_at = ? WHERE id = ?`,
+			StateMaybe, ts, existing.ID); err != nil {
+			return nil, fmt.Errorf("move signup to maybe: %w", err)
+		}
+		if existing.State == StateAttending && capacity > 0 {
+			if result.Promoted, err = promoteNextInLineTx(tx, eventID, ts); err != nil {
+				return nil, err
+			}
+		}
+		existing.State, existing.StateChangedAt = StateMaybe, ts
+		result.Signup = *existing
+
+	default:
+		// New, or back after withdrawing. Deleted and re-inserted as Join does,
+		// so the row's id follows its arrival.
+		interested := false
+		if found {
+			interested = existing.DiscordInterested
+			if _, err := tx.Exec(`DELETE FROM signups WHERE id = ?`, existing.ID); err != nil {
+				return nil, fmt.Errorf("clear withdrawn signup: %w", err)
+			}
+		}
+		res, err := tx.Exec(`
+			INSERT INTO signups (event_id, discord_user_id, display_name, state,
+			                     signed_up_at, state_changed_at, joined_via, discord_interested)
+			VALUES (?,?,?,?,?,?,?,?)`,
+			eventID, discordUserID, displayName, StateMaybe, ts, ts, via, boolToInt(interested))
+		if err != nil {
+			return nil, fmt.Errorf("insert maybe: %w", err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			return nil, fmt.Errorf("read inserted id: %w", err)
+		}
+		result.Signup = Signup{ID: id, EventID: eventID, DiscordUserID: discordUserID,
+			DisplayName: displayName, State: StateMaybe, SignedUpAt: ts, StateChangedAt: ts,
+			JoinedVia: via, DiscordInterested: interested}
+	}
+
+	if err := logSignupUpdate(tx, eventID, discordUserID, ActionMaybe, result.FromState, StateMaybe,
+		ActorUser, ts); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return result, nil
+}
+
+// SignupState is someone's state on an event, or ErrNotFound when they have
+// no row.
+func (s *Store) SignupState(eventID int64, discordUserID string) (string, error) {
+	var state string
+	err := s.db.QueryRow(`SELECT state FROM signups WHERE event_id = ? AND discord_user_id = ?`,
+		eventID, discordUserID).Scan(&state)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("read signup state: %w", err)
+	}
+	return state, nil
 }

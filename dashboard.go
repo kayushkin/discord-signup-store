@@ -88,6 +88,8 @@ func (s *Server) renderMyEventsDashboard(in *Interaction) (map[string]any, error
 		switch {
 		case in && sg.State == StateWaitlisted:
 			line += fmt.Sprintf("\n-# you are **waitlist #%d**", sg.WaitlistPlace)
+		case in && sg.State == StateMaybe:
+			line += "\n-# you are **maybe**"
 		case in:
 			line += "\n-# you are **going**"
 		}

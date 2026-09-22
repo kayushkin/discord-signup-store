@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS signups (
     event_id         INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     discord_user_id  TEXT NOT NULL,
     display_name     TEXT NOT NULL DEFAULT '',
-    state            TEXT NOT NULL,               -- 'attending' | 'waitlisted' | 'withdrawn'
+    state            TEXT NOT NULL,               -- 'attending' | 'waitlisted' | 'maybe' | 'withdrawn'
     signed_up_at     INTEGER NOT NULL,
     state_changed_at INTEGER NOT NULL,
     UNIQUE(event_id, discord_user_id)

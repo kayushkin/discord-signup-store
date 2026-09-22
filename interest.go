@@ -101,7 +101,8 @@ func (s *Store) MarkInterested(eventID int64, discordUserID, displayName string)
 	}
 
 	switch {
-	case found && existing.State != StateWithdrawn:
+	// Interested means going, so a Maybe who presses it joins like anyone else.
+	case found && existing.State != StateWithdrawn && existing.State != StateMaybe:
 		if err := tx.Commit(); err != nil {
 			return nil, fmt.Errorf("commit: %w", err)
 		}

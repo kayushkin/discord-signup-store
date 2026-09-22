@@ -37,23 +37,23 @@ const (
 // eventTableHeadline is the event's line: what it is, when, where, and its
 // forum post.
 //
-//	Fall Celebration! <Hosted by Heidi> 🕖 Tue 9/22 7pm  📍 Heidi's House  <#post>
+//	**Fall Celebration! <Hosted by Heidi>** 🕖 **Tue 9/22 7pm**  📍 **Heidi's House**  <#post>
 //
-// The title is plain text, not a link. The post comes after the location as
+// Title, time and place are bold, so they read first. The title is not a link. The post comes after the location as
 // its own mention, so the row reads the same whether or not the event has one.
 // The time is the event's own zone — the zone it was scheduled in — and the
 // clock face is the one nearest that time, to the half hour.
 func eventTableHeadline(ev *Event) string {
-	line := escapeMarkdown(ev.Name)
+	line := "**" + escapeMarkdown(ev.Name) + "**"
 	if ev.StartsAt > 0 {
 		start := eventStartInItsZone(ev)
-		line += " " + clockFaceNearest(start) + " " + start.Format("Mon") + " " + compactWhen(ev)
+		line += " " + clockFaceNearest(start) + " **" + start.Format("Mon") + " " + compactWhen(ev) + "**"
 	}
 	if repeats := repeatsLabel(ev); repeats != "" {
 		line += "  " + repeats
 	}
 	if ev.Location != "" {
-		line += "  📍 " + escapeMarkdown(ev.Location)
+		line += "  📍 **" + escapeMarkdown(ev.Location) + "**"
 	}
 	if ev.ForumPostID != "" {
 		line += fmt.Sprintf("  <#%s>", ev.ForumPostID)
@@ -128,21 +128,25 @@ func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*
 
 	var b strings.Builder
 	b.WriteString(eventTableHeadline(ev))
-	// Second line: the live count, then who. Generous per-line budgets: the
-	// packer decides how many blocks fit in a message, and a single block only
-	// needs trimming when one event alone would fill one.
+	// Then the live count and who is going, who might, and who is waiting —
+	// the last two only when someone is on them. Generous per-line budgets:
+	// the packer decides how many blocks fit in a message, and a single block
+	// only needs trimming when one event alone would fill one.
 	if ev.Capacity > 0 {
-		fmt.Fprintf(&b, "\n(%d/%d) 👥 ", ev.AttendingCount, ev.Capacity)
+		fmt.Fprintf(&b, "\n(%d/%d) Going: ", ev.AttendingCount, ev.Capacity)
 	} else {
-		fmt.Fprintf(&b, "\n(%d) 👥 ", ev.AttendingCount)
+		fmt.Fprintf(&b, "\n(%d) Going: ", ev.AttendingCount)
 	}
 	if len(attending) == 0 {
-		b.WriteString("Nobody yet.")
+		b.WriteString("nobody yet")
 	} else {
 		b.WriteString(namesWithin(attending, eventTableCharBudget/2))
 	}
+	if maybe := maybeOf(roster); len(maybe) > 0 {
+		b.WriteString("\nMaybe: " + namesWithin(maybe, eventTableCharBudget/4))
+	}
 	if len(waiting) > 0 {
-		b.WriteString("\n⏳ " + namesWithin(waiting, eventTableCharBudget/4))
+		b.WriteString("\nWaitlist: " + namesWithin(waiting, eventTableCharBudget/4))
 	}
 	text := trimTo(b.String(), textDisplayLimit)
 
@@ -244,6 +248,8 @@ func eventTableButtons(ev *Event) []any {
 		buttons = append(buttons,
 			map[string]any{"type": componentTypeButton, "style": buttonStylePrimary,
 				"label": "Join", "custom_id": JoinCustomID(ev.ID)},
+			map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+				"label": "Maybe", "custom_id": MaybeCustomID(ev.ID)},
 			map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
 				"label": "Leave", "custom_id": LeaveCustomID(ev.ID)})
 	}

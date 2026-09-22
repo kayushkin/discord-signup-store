@@ -30,6 +30,7 @@ service's, and proxying any other route publishes roster editing to the world.
 | GET | `/api/events/{id}/signups?include_withdrawn=` | The roster: attending first, then the waitlist in promotion order. |
 | POST | `/api/events/{id}/signups` | Add someone by id. Goes through the same cap and waitlist as a click. |
 | DELETE | `/api/events/{id}/signups/{userID}?actor=` | Remove someone. Promotes the next in line, same as a click. |
+| POST | `/api/events/{id}/maybe` | Put someone on the Maybe list by id (`discord_user_id`, `display_name`), same as pressing Maybe. Moves someone going or waitlisted to Maybe. |
 | GET | `/api/events/{id}/history?limit=` | The append-only transition log. |
 | POST | `/api/sync` | Pull native events from **every** server the bot is in and post a card for any new one. What the scheduler job calls; names no guild, so adding a server needs no change. |
 | POST | `/api/guilds/{guildID}/sync` | The same, for one guild. |
@@ -88,6 +89,7 @@ Closed sets, defined in `vocabulary.go` and validated on write.
 | Button | custom_id | Who |
 |---|---|---|
 | Join | `signup:join:{id}` | anyone |
+| Maybe | `signup:maybe:{id}` | anyone — on the #events table while signups are open. Holds no place; from going it gives the place up and promotes the next in line, from the waitlist it leaves the line. Join from Maybe is an ordinary join. |
 | Leave | `signup:leave:{id}` | anyone |
 | Edit | `signup:edit:{id}` | `MANAGE_EVENTS`, `ADMINISTRATOR`, or the event's creator — or the server's own rule, see **Authorization** |
 | Create an event | `signup:create:0` | `CREATE_EVENTS`, `MANAGE_EVENTS` or `ADMINISTRATOR` — or anyone, where the server allows it |

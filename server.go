@@ -129,6 +129,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/events/{id}/signups", s.handleRoster)
 	mux.HandleFunc("POST /api/events/{id}/signups", s.handleAdminJoin)
 	mux.HandleFunc("DELETE /api/events/{id}/signups/{userID}", s.handleAdminLeave)
+	mux.HandleFunc("POST /api/events/{id}/maybe", s.handleAdminMaybe)
 	mux.HandleFunc("GET /api/events/{id}/history", s.handleHistory)
 	mux.HandleFunc("GET /api/events/{id}/updates", s.handleEventUpdates)
 	mux.HandleFunc("POST /api/guilds/{guildID}/sync", s.handleSyncGuild)
@@ -571,6 +572,38 @@ func (s *Server) handleRoster(w http.ResponseWriter, r *http.Request) {
 
 // handleAdminJoin adds someone by id, for the case where a person cannot press
 // the button themselves. It goes through exactly the same Join path as a click,
+// handleAdminMaybe puts someone on the Maybe list by id, through the same
+// store call as the Maybe button.
+func (s *Server) handleAdminMaybe(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id must be an integer"})
+		return
+	}
+	var in struct {
+		DiscordUserID string `json:"discord_user_id"`
+		DisplayName   string `json:"display_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "malformed JSON: " + err.Error()})
+		return
+	}
+	result, err := s.store.MarkMaybe(id, in.DiscordUserID, in.DisplayName, JoinedViaOperator)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	changes := []stateChange{{UserID: in.DiscordUserID, State: StateMaybe}}
+	if result.Promoted != nil {
+		changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
+		if ev, err := s.store.GetEvent(id); err == nil {
+			go s.notifyPromoted(ev, result.Promoted)
+		}
+	}
+	go s.syncAfterChange(id, changes)
+	writeJSON(w, http.StatusOK, result)
+}
+
 // so the cap and the waitlist ordering apply to an operator too.
 func (s *Server) handleAdminJoin(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")

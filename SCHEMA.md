@@ -78,7 +78,7 @@ computed at read time and never stored.
 | `event_id` | INTEGER | → `events(id)`, **ON DELETE CASCADE**. |
 | `discord_user_id` | TEXT | The person. The only thing joined on. |
 | `display_name` | TEXT | Carried for display only, never read back to find a row. Names collide; ids do not. |
-| `state` | TEXT | `attending`, `waitlisted` or `withdrawn`. A withdrawn row is kept, not deleted, so rejoining is distinguishable from never having left. |
+| `state` | TEXT | `attending`, `waitlisted`, `maybe` or `withdrawn`. `maybe` holds no place and no spot in line. A withdrawn row is kept, not deleted, so rejoining is distinguishable from never having left. |
 | `signed_up_at` | INTEGER | Arrival, and **half the ordering key**: the roster is `ORDER BY signed_up_at, id`. Reset on a rejoin, which is what sends a rejoiner to the back. |
 | `state_changed_at` | INTEGER | Last move between states. |
 | `joined_via` | TEXT | How they got on: `button`, `interested`, `reaction`, `operator` or `organiser`. Not cosmetic — it is what makes an un-marked Interested readable as leaving rather than as noise. |

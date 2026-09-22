@@ -12,7 +12,7 @@ Its history is `signup_updates`; an event's own history of edits is
 `event_updates`. Both append-only, both named for what they are an update to.
 
 One row per person per event, carrying their state (`attending`, `waitlisted`,
-`withdrawn`), when they arrived (`signed_up_at`), and how they got there.
+`maybe`, `withdrawn`), when they arrived (`signed_up_at`), and how they got there.
 Arrival order is `(signed_up_at, id)`; there is no `position` column.
 Everything a human ever sees is a projection of those rows.
 
@@ -43,6 +43,12 @@ the capacity rule and the waitlist order cannot differ between them.
 | 6 | **The web page**, by an organiser | Pick them by name (or paste a user id) | Remove | `operator` |
 | 7 | **The machine API** | `POST /api/events/{id}/signups` | `DELETE …/{userID}` | `operator` |
 | 8 | **Creating the event** | automatic | — | `organiser` |
+
+**Maybe** sits beside the roster, not on it: a Maybe button on the #events
+table puts you on a Maybe list that holds no place and no spot in line.
+From Maybe, Join is an ordinary join (a place, or the waitlist); from going,
+Maybe gives your place up to whoever has waited longest, as Leave does.
+Discord's Interested and the forum ✅ mean going, never Maybe.
 
 Rules that hold for all eight:
 

@@ -57,7 +57,7 @@
            stored: the roster comes back ordered by when people signed up, so a
            stored number would be a second copy of that order able to disagree
            with it. */}}
-      <td class="count">{{if eq $s.State "waitlisted"}}<span class="muted">wait {{$s.WaitlistPlace}}</span>{{else}}{{add $i 1}}{{end}}</td>
+      <td class="count">{{if eq $s.State "waitlisted"}}<span class="muted">wait {{$s.WaitlistPlace}}</span>{{else if eq $s.State "maybe"}}<span class="muted">maybe</span>{{else}}{{add $i 1}}{{end}}</td>
       <td>{{who $s.DisplayName $s.DiscordUserID}}</td>
       <td><span class="pill {{if eq $s.State "attending"}}open{{else}}closed{{end}}">{{$s.State}}</span></td>
       <td class="meta">{{localTime $s.SignedUpAt}}</td>

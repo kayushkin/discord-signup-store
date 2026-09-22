@@ -244,6 +244,8 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		s.handleJoin(w, in, eventID, userID, displayName)
 	case "leave":
 		s.handleLeave(w, in, eventID, userID)
+	case "maybe":
+		s.handleMaybe(w, in, eventID, userID, displayName)
 	case "edit", "capacity":
 		// "capacity" is the old id. Cards posted before the button was widened
 		// are still sitting in channels, and their button must keep working
@@ -325,7 +327,14 @@ func (s *Server) handleLeave(w http.ResponseWriter, in *Interaction, eventID int
 	if err != nil {
 		log.Printf("[discord-signup] reload event=%d: %v", eventID, err)
 	}
-	s.replyEphemeral(w, "You are off the list. Your place has gone to the next person waiting.")
+	switch {
+	case result.FromState == StateMaybe:
+		s.replyEphemeral(w, "You are off the Maybe list.")
+	case result.Promoted != nil:
+		s.replyEphemeral(w, "You are off the list. Your place has gone to the next person waiting.")
+	default:
+		s.replyEphemeral(w, "You are off the list.")
+	}
 
 	changes := []stateChange{{UserID: userID, State: StateWithdrawn}}
 	if result.Promoted != nil {
@@ -337,6 +346,45 @@ func (s *Server) handleLeave(w http.ResponseWriter, in *Interaction, eventID int
 	if ev != nil && result.Promoted != nil {
 		go s.notifyPromoted(ev, result.Promoted)
 	}
+}
+
+// handleMaybe puts the person who pressed Maybe on the Maybe list. Going
+// gives up their place, which goes to whoever has waited longest, as Leave
+// does; the waitlist gives up their spot in line.
+func (s *Server) handleMaybe(w http.ResponseWriter, in *Interaction, eventID int64, userID, displayName string) {
+	result, err := s.store.MarkMaybe(eventID, userID, displayName, JoinedViaButton)
+	if errors.Is(err, ErrNotFound) {
+		s.replyEphemeral(w, "That signup list no longer exists.")
+		return
+	}
+	if errors.Is(err, ErrEventNotOpen) {
+		s.replyEphemeral(w, "Signups for this event are closed.")
+		return
+	}
+	if err != nil {
+		log.Printf("[discord-signup] maybe event=%d user=%s: %v", eventID, userID, err)
+		s.replyEphemeral(w, "Something went wrong. Nothing was changed — try again.")
+		return
+	}
+	switch {
+	case result.AlreadyMaybe:
+		s.replyEphemeral(w, "You are already down as Maybe — no change. Press Join if you decide to go.")
+		return
+	case result.FromState == StateAttending:
+		s.replyEphemeral(w, "You are down as Maybe, and your place has been given up. Press Join to try for it again.")
+	case result.FromState == StateWaitlisted:
+		s.replyEphemeral(w, "You are down as Maybe and off the waitlist. Press Join to get back in line.")
+	default:
+		s.replyEphemeral(w, "You are down as Maybe. It does not hold a place — press Join if you decide to go.")
+	}
+	changes := []stateChange{{UserID: userID, State: StateMaybe}}
+	if result.Promoted != nil {
+		changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
+		if ev, err := s.store.GetEvent(eventID); err == nil {
+			go s.notifyPromoted(ev, result.Promoted)
+		}
+	}
+	go s.syncAfterChange(eventID, changes)
 }
 
 // describeJoin renders the private answer a person gets for pressing Join.
@@ -380,6 +428,11 @@ func parseCustomID(customID string) (action string, eventID int64, ok bool) {
 // JoinCustomID builds the custom_id for an event's Join button.
 func JoinCustomID(eventID int64) string {
 	return fmt.Sprintf("%s:join:%d", customIDPrefix, eventID)
+}
+
+// MaybeCustomID builds the custom_id for an event's Maybe button.
+func MaybeCustomID(eventID int64) string {
+	return fmt.Sprintf("%s:maybe:%d", customIDPrefix, eventID)
 }
 
 // LeaveCustomID builds the custom_id for an event's Leave button.

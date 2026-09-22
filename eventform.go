@@ -204,6 +204,9 @@ func detailsField(ev *Event, roster []Signup, zone string) map[string]any {
 	if len(waiting) > 0 {
 		fmt.Fprintf(&b, "\n\nWaitlist — %d\n%s", len(waiting), rosterNames(waiting))
 	}
+	if maybe := maybeOf(roster); len(maybe) > 0 {
+		fmt.Fprintf(&b, "\n\nMaybe — %d\n%s", len(maybe), rosterNames(maybe))
+	}
 	return modalTextInput(fieldRoster, truncate(ev.Name, 40)+" (read only)", trimTo(b.String(), 4000), "",
 		textInputStyleParagraph, false, 4000)
 }
