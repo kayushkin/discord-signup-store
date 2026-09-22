@@ -160,9 +160,9 @@ func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*
 	// the packer decides how many blocks fit in a message, and a single block
 	// only needs trimming when one event alone would fill one.
 	if ev.Capacity > 0 {
-		fmt.Fprintf(&b, "\n(%d/%d) **Going** ✅ ", ev.AttendingCount, ev.Capacity)
+		fmt.Fprintf(&b, "\n✅ **Going** (%d/%d): ", ev.AttendingCount, ev.Capacity)
 	} else {
-		fmt.Fprintf(&b, "\n(%d) **Going** ✅ ", ev.AttendingCount)
+		fmt.Fprintf(&b, "\n✅ **Going** (%d): ", ev.AttendingCount)
 	}
 	if len(attending) == 0 {
 		b.WriteString("nobody yet")
@@ -170,10 +170,10 @@ func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*
 		b.WriteString(namesWithin(attending, ev.CreatedBy, eventTableCharBudget/2))
 	}
 	if maybe := maybeOf(roster); len(maybe) > 0 {
-		b.WriteString("\n**Maybe** 🤷 " + namesWithin(maybe, ev.CreatedBy, eventTableCharBudget/4))
+		b.WriteString("\n🤷 **Maybe**: " + namesWithin(maybe, ev.CreatedBy, eventTableCharBudget/4))
 	}
 	if len(waiting) > 0 {
-		b.WriteString("\n**Waitlist** ❌ " + namesWithin(waiting, ev.CreatedBy, eventTableCharBudget/4))
+		b.WriteString("\n❌ **Waitlist**: " + namesWithin(waiting, ev.CreatedBy, eventTableCharBudget/4))
 	}
 	text := trimTo(b.String(), textDisplayLimit)
 

@@ -15,12 +15,12 @@ func TestTheHostIsUnderlinedInTheTable(t *testing.T) {
 		{DiscordUserID: "u-cy", DisplayName: "cy_the_great", State: StateMaybe},
 	}
 	text := buildEventTableBlock(ev, roster, true, eventTableButtons).text
-	if !strings.Contains(text, "**Going** ✅ __Kat__, Al") {
+	if !strings.Contains(text, "✅ **Going** (2): __Kat__, Al") {
 		t.Errorf("row = %q, want Kat underlined, first", text)
 	}
 	ev.CreatedBy = "u-cy"
 	text = buildEventTableBlock(ev, roster, true, eventTableButtons).text
-	if !strings.Contains(text, `**Maybe** 🤷 __cy\_the\_great__`) {
+	if !strings.Contains(text, `🤷 **Maybe**: __cy\_the\_great__`) {
 		t.Errorf("row = %q, want the host underlined on Maybe with their underscores escaped", text)
 	}
 	if strings.Contains(text, "__Kat__") {
@@ -63,7 +63,7 @@ func TestTheHostIsListedFirstWhenGoing(t *testing.T) {
 		{DiscordUserID: "u-bo", DisplayName: "Bo", State: StateAttending},
 		{DiscordUserID: "u-kat", DisplayName: "Kat", State: StateAttending},
 	}
-	if text := buildEventTableBlock(ev, roster, true, eventTableButtons).text; !strings.Contains(text, "✅ __Kat__, Al, Bo") {
+	if text := buildEventTableBlock(ev, roster, true, eventTableButtons).text; !strings.Contains(text, "(3): __Kat__, Al, Bo") {
 		t.Errorf("table row = %q, want Kat first, then Al and Bo", text)
 	}
 	if content, _ := RenderForumCard(ev, roster)["content"].(string); !strings.Contains(content, "<@u-kat>, <@u-al>, <@u-bo>") {
@@ -74,7 +74,7 @@ func TestTheHostIsListedFirstWhenGoing(t *testing.T) {
 	}
 	// A host who is not going moves nobody.
 	roster[2].State = StateMaybe
-	if text := buildEventTableBlock(ev, roster, true, eventTableButtons).text; !strings.Contains(text, "✅ Al, Bo") {
+	if text := buildEventTableBlock(ev, roster, true, eventTableButtons).text; !strings.Contains(text, "(3): Al, Bo") {
 		t.Errorf("table row = %q, want arrival order when the host is not going", text)
 	}
 }

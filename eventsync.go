@@ -254,7 +254,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	23 Create an event at the top of the management table as well as the end
 //	24 the table head puts title, time and place on lines of their own
 //	25 a 🗓️ before the time in the table head
-const publishFormatVersion = 25
+//	26 list lines lead with their emoji: "✅ **Going** (3/8): names"
+const publishFormatVersion = 26
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //

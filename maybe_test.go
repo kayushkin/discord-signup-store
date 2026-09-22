@@ -130,7 +130,7 @@ func TestTheTableNamesEachList(t *testing.T) {
 		{DiscordUserID: "4", DisplayName: "Di", State: StateMaybe},
 	}
 	text := buildEventTableBlock(ev, roster, true, eventTableButtons).text
-	for _, want := range []string{"\n(2/2) **Going** ✅ Al, Bo", "\n**Maybe** 🤷 Di", "\n**Waitlist** ❌ Cy"} {
+	for _, want := range []string{"\n✅ **Going** (2/2): Al, Bo", "\n🤷 **Maybe**: Di", "\n❌ **Waitlist**: Cy"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("row = %q, want %q", text, want)
 		}

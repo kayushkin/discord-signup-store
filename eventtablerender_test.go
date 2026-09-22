@@ -132,10 +132,10 @@ func TestTheWaitlistIsNamedSeparately(t *testing.T) {
 	pages := packEventTable(events, map[int64][]Signup{events[0].ID: roster}, eventTableButtons, 1)
 
 	text := pages[0][0].text
-	if !strings.Contains(text, "(2/8) **Going** ✅ Al, Bo") {
+	if !strings.Contains(text, "✅ **Going** (2/8): Al, Bo") {
 		t.Errorf("block = %q, want the count and the going list", text)
 	}
-	if !strings.Contains(text, "\n**Waitlist** ❌ Cy") {
+	if !strings.Contains(text, "\n❌ **Waitlist**: Cy") {
 		t.Errorf("block = %q, want the waitlist on its own line", text)
 	}
 }
@@ -155,7 +155,7 @@ func TestARowSaysWhatWhenAndWhereThenLinksItsPost(t *testing.T) {
 	// title, and Discord rate-limits thread renames to about two per ten
 	// minutes, so under signups the number people read was two renames old. A
 	// message edit has no such limit.
-	want := "**Board game night**\n🗓️ Tue 9/22 7pm\n📍 The shed\n<#post-9>\n(3/8) **Going** ✅ Al, Bo, Cy"
+	want := "**Board game night**\n🗓️ Tue 9/22 7pm\n📍 The shed\n<#post-9>\n✅ **Going** (3/8): Al, Bo, Cy"
 	if block.text != want {
 		t.Errorf("row =\n%q\nwant\n%q", block.text, want)
 	}
@@ -213,20 +213,20 @@ func TestTheRosterTableHasNoEditButton(t *testing.T) {
 //	🗓️ Tue 9/22 7pm
 //	📍 Heidi's House
 //	<#post>
-//	(13/15) **Going** ✅ Pawadam, Weidi 🫧
+//	✅ **Going** (13/15): Pawadam, Weidi 🫧
 func TestTheRowReadsLikeTheExample(t *testing.T) {
 	reno, _ := time.LoadLocation("America/Los_Angeles")
 	ev := &Event{ID: 1, GuildID: "g1", Name: "Fall Celebration! <Hosted by Heidi>", Status: StatusOpen,
 		Capacity: 15, AttendingCount: 2, Location: "Heidi's House", ForumPostID: "post-9",
 		Timezone: "America/Los_Angeles", StartsAt: time.Date(2026, 9, 22, 19, 0, 0, 0, reno).Unix()}
 	block := buildEventTableBlock(ev, rosterOf("Pawadam", "Weidi 🫧"), true, eventTableButtons)
-	want := "**Fall Celebration! \\<Hosted by Heidi\\>**\n🗓️ Tue 9/22 7pm\n📍 Heidi's House\n<#post-9>\n(2/15) **Going** ✅ Pawadam, Weidi 🫧"
+	want := "**Fall Celebration! \\<Hosted by Heidi\\>**\n🗓️ Tue 9/22 7pm\n📍 Heidi's House\n<#post-9>\n✅ **Going** (2/15): Pawadam, Weidi 🫧"
 	if block.text != want {
 		t.Errorf("row =\n%q\nwant\n%q", block.text, want)
 	}
 	// With no limit the count stands alone in its parentheses.
 	ev.Capacity = 0
-	if got := buildEventTableBlock(ev, rosterOf("Pawadam", "Weidi 🫧"), true, eventTableButtons).text; !strings.Contains(got, "\n(2) **Going** ✅ Pawadam") {
+	if got := buildEventTableBlock(ev, rosterOf("Pawadam", "Weidi 🫧"), true, eventTableButtons).text; !strings.Contains(got, "\n✅ **Going** (2): Pawadam") {
 		t.Errorf("unlimited row = %q, want (2) before the names", got)
 	}
 }
