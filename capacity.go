@@ -289,7 +289,7 @@ func (s *Server) postPastEventLine(eventID int64) error {
 func pastEventLine(ev *Event, roster []Signup) string {
 	attending, _ := splitRoster(roster)
 	attending = hostFirst(attending, ev.CreatedBy)
-	line := eventTableHeadline(ev)
+	line := eventSummaryLine(ev)
 	if ev.ForumPostID != "" {
 		line += fmt.Sprintf("  <#%s>", ev.ForumPostID)
 	}

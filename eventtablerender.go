@@ -33,26 +33,56 @@ const (
 	eventTableCharBudget = 3800
 )
 
-// eventTableHeadline is the event's line: what it is, when and where. The pin
-// is its only emoji — a clock face beside the time came out wider than the
-// text and spaced the line oddly.
-//
-//	**Fall Celebration! <Hosted by Heidi>** - Tue 9/22 7pm 📍 Heidi's House
-//	**Board Game Night** - Tue 9/22 5pm (weekly) 📍 Baldini's Casino
-//
-// Only the title is bold. The time is the event's own zone — the zone it was
-// scheduled in. The forum post is its own mention, which each caller places:
-// the table on the next line, the one-line past-events summary inline.
-func eventTableHeadline(ev *Event) string {
-	line := "**" + escapeMarkdown(ev.Name) + "**"
+// eventHeadlineParts is what an event is, when and where, each ready to
+// print: the title in bold, the day and time in the event's own zone with the
+// repeat in words, and the place after a pin. When or where is empty when the
+// event has none.
+func eventHeadlineParts(ev *Event) (title, when, where string) {
+	title = "**" + escapeMarkdown(ev.Name) + "**"
 	if ev.StartsAt > 0 {
-		line += " - " + eventStartInItsZone(ev).Format("Mon") + " " + compactWhen(ev)
+		when = eventStartInItsZone(ev).Format("Mon") + " " + compactWhen(ev)
 	}
 	if ev.RecurrenceRule != "" {
-		line += " (" + describeRepeat(ev.RecurrenceRule) + ")"
+		when = strings.TrimSpace(when + " (" + describeRepeat(ev.RecurrenceRule) + ")")
 	}
 	if ev.Location != "" {
-		line += " 📍 " + escapeMarkdown(ev.Location)
+		where = "📍 " + escapeMarkdown(ev.Location)
+	}
+	return title, when, where
+}
+
+// eventTableHeadline is the table's head for an event, one part to a line:
+//
+//	**Fall Celebration! <Hosted by Heidi>**
+//	Tue 9/22 7pm
+//	📍 Heidi's House
+//
+// The pin is its only emoji — a clock face beside the time came out wider
+// than the text and spaced the line oddly. The forum post goes on the line
+// after, placed by the caller.
+func eventTableHeadline(ev *Event) string {
+	lines := []string{}
+	title, when, where := eventHeadlineParts(ev)
+	for _, part := range []string{title, when, where} {
+		if part != "" {
+			lines = append(lines, part)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// eventSummaryLine is the same on one line, for the past-events channel,
+// where each event is a single line:
+//
+//	**Board Game Night** - Tue 9/22 5pm (weekly) 📍 Baldini's Casino
+func eventSummaryLine(ev *Event) string {
+	title, when, where := eventHeadlineParts(ev)
+	line := title
+	if when != "" {
+		line += " - " + when
+	}
+	if where != "" {
+		line += " " + where
 	}
 	return line
 }
