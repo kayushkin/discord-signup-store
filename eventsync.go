@@ -253,7 +253,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	22 the host is listed first among the going
 //	23 Create an event at the top of the management table as well as the end
 //	24 the table head puts title, time and place on lines of their own
-const publishFormatVersion = 24
+//	25 a 🗓️ before the time in the table head
+const publishFormatVersion = 25
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //

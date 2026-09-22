@@ -54,15 +54,19 @@ func eventHeadlineParts(ev *Event) (title, when, where string) {
 // eventTableHeadline is the table's head for an event, one part to a line:
 //
 //	**Fall Celebration! <Hosted by Heidi>**
-//	Tue 9/22 7pm
+//	🗓️ Tue 9/22 7pm
 //	📍 Heidi's House
 //
-// The pin is its only emoji — a clock face beside the time came out wider
-// than the text and spaced the line oddly. The forum post goes on the line
-// after, placed by the caller.
+// The calendar is the forum post's own, and each emoji leads its line — a
+// clock face beside the time, mid-line, came out wider than the text and
+// spaced it oddly. The forum post goes on the line after, placed by the
+// caller.
 func eventTableHeadline(ev *Event) string {
 	lines := []string{}
 	title, when, where := eventHeadlineParts(ev)
+	if when != "" {
+		when = "🗓️ " + when
+	}
 	for _, part := range []string{title, when, where} {
 		if part != "" {
 			lines = append(lines, part)
