@@ -71,6 +71,8 @@ type pageData struct {
 	DiscordEventURL      string
 	GuildsWhereMayCreate []Guild
 	Roles                []Role
+	// NamePeople is the names page's rows.
+	NamePeople []namedPerson
 
 	StartsLocal       string
 	EndsLocal         string

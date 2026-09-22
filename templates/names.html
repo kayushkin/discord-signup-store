@@ -1,0 +1,27 @@
+{{define "content"}}
+<div class="card">
+  <h3>Names</h3>
+  <p class="meta">The short name each person is shown by on Discord — in the event
+    tables, Details, forum posts and Discord's own events. Leave a box empty to show
+    their Discord name. Everyone going, maybe or waitlisted on any event is listed.</p>
+  {{if .NamePeople}}
+  <table>
+    <tr><th>Discord name</th><th>Shown as</th><th class="count">Events</th></tr>
+    {{range .NamePeople}}
+    <tr>
+      <td>{{who .DisplayName .DiscordUserID}}</td>
+      <td>
+        <form method="post" action="/names" class="row" style="margin:0;gap:8px">
+          <input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
+          <input name="readable_name" value="{{.ReadableName}}" placeholder="{{.DisplayName}}"
+                 maxlength="64" style="max-width:220px">
+          <button class="ghost">Save</button>
+        </form>
+      </td>
+      <td class="count">{{.Events}}</td>
+    </tr>
+    {{end}}
+  </table>
+  {{end}}
+</div>
+{{end}}

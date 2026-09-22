@@ -168,6 +168,8 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/publish", s.handleWebPublish)
 	mux.HandleFunc("POST /events/{id}/end", s.handleWebEndEvent)
 	mux.HandleFunc("POST /sync", s.handleWebSync)
+	mux.HandleFunc("GET /names", s.handleWebNames)
+	mux.HandleFunc("POST /names", s.handleWebSetName)
 }
 
 // handleSetGuildManagement points a guild's management table at a channel and
