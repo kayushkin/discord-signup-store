@@ -251,7 +251,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	20 the headline's place follows a 📍 again, not an @
 //	21 the host is underlined in the table and named on the forum post
 //	22 the host is listed first among the going
-const publishFormatVersion = 22
+//	23 Create an event at the top of the management table as well as the end
+const publishFormatVersion = 23
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //
