@@ -245,7 +245,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	14 an underway event's management row carries End
 //	15 table rows read "title 🕖 Tue 9/22 7pm  📍 place  <#post>" over "(3/8) 👥 names"
 //	16 bold title, time and place; Going, Maybe and Waitlist lines; a Maybe button
-const publishFormatVersion = 16
+//	17 the forum post on its own line under the headline; the list labels bold
+const publishFormatVersion = 17
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //

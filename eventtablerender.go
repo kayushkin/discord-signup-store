@@ -34,13 +34,13 @@ const (
 	eventTableCharBudget = 3800
 )
 
-// eventTableHeadline is the event's line: what it is, when, where, and its
-// forum post.
+// eventTableHeadline is the event's line: what it is, when and where.
 //
-//	**Fall Celebration! <Hosted by Heidi>** 🕖 **Tue 9/22 7pm**  📍 **Heidi's House**  <#post>
+//	**Fall Celebration! <Hosted by Heidi>** 🕖 **Tue 9/22 7pm**  📍 **Heidi's House**
 //
-// Title, time and place are bold, so they read first. The title is not a link. The post comes after the location as
-// its own mention, so the row reads the same whether or not the event has one.
+// Title, time and place are bold, so they read first. The title is not a link;
+// the forum post is its own mention, which each caller places — the table on
+// the next line, the one-line past-events summary inline.
 // The time is the event's own zone — the zone it was scheduled in — and the
 // clock face is the one nearest that time, to the half hour.
 func eventTableHeadline(ev *Event) string {
@@ -54,9 +54,6 @@ func eventTableHeadline(ev *Event) string {
 	}
 	if ev.Location != "" {
 		line += "  📍 **" + escapeMarkdown(ev.Location) + "**"
-	}
-	if ev.ForumPostID != "" {
-		line += fmt.Sprintf("  <#%s>", ev.ForumPostID)
 	}
 	return line
 }
@@ -128,14 +125,17 @@ func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*
 
 	var b strings.Builder
 	b.WriteString(eventTableHeadline(ev))
+	if ev.ForumPostID != "" {
+		fmt.Fprintf(&b, "\n<#%s>", ev.ForumPostID)
+	}
 	// Then the live count and who is going, who might, and who is waiting —
 	// the last two only when someone is on them. Generous per-line budgets:
 	// the packer decides how many blocks fit in a message, and a single block
 	// only needs trimming when one event alone would fill one.
 	if ev.Capacity > 0 {
-		fmt.Fprintf(&b, "\n(%d/%d) Going: ", ev.AttendingCount, ev.Capacity)
+		fmt.Fprintf(&b, "\n(%d/%d) **Going:** ", ev.AttendingCount, ev.Capacity)
 	} else {
-		fmt.Fprintf(&b, "\n(%d) Going: ", ev.AttendingCount)
+		fmt.Fprintf(&b, "\n(%d) **Going:** ", ev.AttendingCount)
 	}
 	if len(attending) == 0 {
 		b.WriteString("nobody yet")
@@ -143,10 +143,10 @@ func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*
 		b.WriteString(namesWithin(attending, eventTableCharBudget/2))
 	}
 	if maybe := maybeOf(roster); len(maybe) > 0 {
-		b.WriteString("\nMaybe: " + namesWithin(maybe, eventTableCharBudget/4))
+		b.WriteString("\n**Maybe:** " + namesWithin(maybe, eventTableCharBudget/4))
 	}
 	if len(waiting) > 0 {
-		b.WriteString("\nWaitlist: " + namesWithin(waiting, eventTableCharBudget/4))
+		b.WriteString("\n**Waitlist:** " + namesWithin(waiting, eventTableCharBudget/4))
 	}
 	text := trimTo(b.String(), textDisplayLimit)
 
