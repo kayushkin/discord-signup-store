@@ -69,7 +69,7 @@ func escapeMarkdown(text string) string { return markdownSpecial.Replace(text) }
 // namesWithin joins display names inside a rune budget, dropping names off
 // the end rather than cutting one in half.
 func namesWithin(signups []Signup, budget int) string {
-	names := rosterDisplayNames(signups)
+	names := rosterNamesOnDiscord(signups)
 	full := strings.Join(names, ", ")
 	if len([]rune(full)) <= budget {
 		return full

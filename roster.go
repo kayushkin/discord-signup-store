@@ -252,20 +252,22 @@ func (s *Store) Leave(eventID int64, discordUserID, actor string) (*LeaveResult,
 // includeWithdrawn is set.
 func (s *Store) Roster(eventID int64, includeWithdrawn bool) ([]Signup, error) {
 	query := `
-		SELECT id, event_id, discord_user_id, display_name, state, signed_up_at,
-		       state_changed_at, joined_via, discord_interested
-		FROM signups WHERE event_id = ?`
+		SELECT s.id, s.event_id, s.discord_user_id, s.display_name, s.state, s.signed_up_at,
+		       s.state_changed_at, s.joined_via, s.discord_interested, COALESCE(r.readable_name, '')
+		FROM signups s
+		LEFT JOIN readable_names r ON r.discord_user_id = s.discord_user_id
+		WHERE s.event_id = ?`
 	args := []any{eventID}
 	if !includeWithdrawn {
-		query += ` AND state != ?`
+		query += ` AND s.state != ?`
 		args = append(args, StateWithdrawn)
 	}
 	// Attending before waitlisted before maybe before withdrawn, then arrival order within
 	// each. CASE rather than alphabetical: 'attending' < 'waitlisted' happens
 	// to sort correctly today and would break the moment a state is renamed.
 	query += `
-		ORDER BY CASE state WHEN 'attending' THEN 0 WHEN 'waitlisted' THEN 1 WHEN 'maybe' THEN 2 ELSE 3 END,
-		         signed_up_at ASC, id ASC`
+		ORDER BY CASE s.state WHEN 'attending' THEN 0 WHEN 'waitlisted' THEN 1 WHEN 'maybe' THEN 2 ELSE 3 END,
+		         s.signed_up_at ASC, s.id ASC`
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
@@ -279,7 +281,7 @@ func (s *Store) Roster(eventID int64, includeWithdrawn bool) ([]Signup, error) {
 		var sg Signup
 		if err := rows.Scan(&sg.ID, &sg.EventID, &sg.DiscordUserID, &sg.DisplayName,
 			&sg.State, &sg.SignedUpAt, &sg.StateChangedAt,
-			&sg.JoinedVia, &sg.DiscordInterested); err != nil {
+			&sg.JoinedVia, &sg.DiscordInterested, &sg.ReadableName); err != nil {
 			return nil, fmt.Errorf("scan signup: %w", err)
 		}
 		if sg.State == StateWaitlisted {

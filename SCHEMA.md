@@ -232,6 +232,16 @@ No row means Discord's default: `MANAGE_EVENTS` or `ADMINISTRATOR` edits every e
 | `anyone_may_create` | INTEGER | 1 lets every member create events. |
 | `updated_at` | INTEGER | Unix seconds. |
 
+### `readable_names` — the short name a person is shown by
+
+| Column | Type | Meaning |
+|---|---|---|
+| `discord_user_id` | TEXT PK | The person, by Discord user id — so the name follows them across events and servers and survives a nickname change. |
+| `readable_name` | TEXT | "Matt" for "Lil' Fascist Matt 🌟". Set by hand; nothing guesses one. |
+| `updated_at` | INTEGER | Unix seconds. |
+
+No row means their Discord display name is shown. Read by `Roster` with a LEFT JOIN, into `Signup.ReadableName`.
+
 ## The browser surface
 
 ### `web_sessions` — a logged-in browser

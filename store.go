@@ -105,7 +105,12 @@ type Signup struct {
 	EventID       int64  `json:"event_id"`
 	DiscordUserID string `json:"discord_user_id"`
 	// DisplayName is display only. Never join on it.
-	DisplayName    string `json:"display_name"`
+	DisplayName string `json:"display_name"`
+	// ReadableName is the short name someone chose for this person — "Matt"
+	// for "Lil' Fascist Matt 🌟" — from readable_names, joined on the Discord
+	// user id. Empty when nobody has set one; Discord surfaces then show
+	// DisplayName.
+	ReadableName   string `json:"readable_name,omitempty"`
 	State          string `json:"state"`
 	SignedUpAt     int64  `json:"signed_up_at"`
 	StateChangedAt int64  `json:"state_changed_at"`
@@ -121,6 +126,21 @@ type Signup struct {
 	// 0 for anyone not waitlisted. Computed on read from position ordering, so
 	// it stays true after a promotion without anything being renumbered.
 	WaitlistPlace int `json:"waitlist_place"`
+}
+
+// NameOnDiscord is how a person is named on every Discord surface: their
+// readable name when one is set, their display name otherwise, and the raw id
+// only when there is genuinely no name — which shows as a number and is meant
+// to, since inventing a name would be worse.
+func (sg Signup) NameOnDiscord() string {
+	switch {
+	case sg.ReadableName != "":
+		return sg.ReadableName
+	case sg.DisplayName != "":
+		return sg.DisplayName
+	default:
+		return sg.DiscordUserID
+	}
 }
 
 // SignupUpdate is one row of the append-only history of a roster.

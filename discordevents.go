@@ -778,11 +778,11 @@ func rosterLine(heading string, signups []Signup, budget int) string {
 	if len(signups) == 0 {
 		return ""
 	}
-	full := "\n" + heading + ": " + strings.Join(rosterDisplayNames(signups), ", ")
+	full := "\n" + heading + ": " + strings.Join(rosterNamesOnDiscord(signups), ", ")
 	if len([]rune(full)) <= budget {
 		return full
 	}
-	names := rosterDisplayNames(signups)
+	names := rosterNamesOnDiscord(signups)
 	for shown := len(names) - 1; shown >= 1; shown-- {
 		line := fmt.Sprintf("\n%s: %s and %d more", heading,
 			strings.Join(names[:shown], ", "), len(names)-shown)
@@ -797,17 +797,11 @@ func rosterLine(heading string, signups []Signup, budget int) string {
 	return ""
 }
 
-// rosterDisplayNames is the names to print, falling back to the id only when
-// there is genuinely no name — which shows as a raw number and is meant to,
-// since inventing a name would be worse.
-func rosterDisplayNames(signups []Signup) []string {
+// rosterNamesOnDiscord is the names to print on Discord; see NameOnDiscord.
+func rosterNamesOnDiscord(signups []Signup) []string {
 	out := make([]string, 0, len(signups))
 	for _, sg := range signups {
-		name := sg.DisplayName
-		if name == "" {
-			name = sg.DiscordUserID
-		}
-		out = append(out, name)
+		out = append(out, sg.NameOnDiscord())
 	}
 	return out
 }

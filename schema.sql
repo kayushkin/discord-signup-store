@@ -279,3 +279,13 @@ CREATE TABLE IF NOT EXISTS guild_editing_rules (
     anyone_may_create INTEGER NOT NULL DEFAULT 0,
     updated_at        INTEGER NOT NULL
 );
+
+-- readable_names: the short name a person is shown by on Discord — "Matt" for
+-- "Lil' Fascist Matt 🌟". Keyed on the Discord user id, so it follows them
+-- across events and servers and survives a change of nickname. No row means
+-- their Discord display name is shown.
+CREATE TABLE IF NOT EXISTS readable_names (
+    discord_user_id TEXT PRIMARY KEY,
+    readable_name   TEXT NOT NULL,
+    updated_at      INTEGER NOT NULL
+);

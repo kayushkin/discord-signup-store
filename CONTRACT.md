@@ -31,6 +31,9 @@ service's, and proxying any other route publishes roster editing to the world.
 | POST | `/api/events/{id}/signups` | Add someone by id. Goes through the same cap and waitlist as a click. |
 | DELETE | `/api/events/{id}/signups/{userID}?actor=` | Remove someone. Promotes the next in line, same as a click. |
 | POST | `/api/events/{id}/maybe` | Put someone on the Maybe list by id (`discord_user_id`, `display_name`), same as pressing Maybe. Moves someone going or waitlisted to Maybe. |
+| GET | `/api/readable-names` | Every short name set: `{"readable_names":[{"discord_user_id","readable_name","updated_at"}]}`. |
+| PUT | `/api/readable-names/{userID}` | Set the short name a person is shown by on Discord (`{"readable_name":"Matt"}`). Every Discord surface that lists names uses it — the tables, Details, the forum post, the Discord event description; the web page keeps display names. |
+| DELETE | `/api/readable-names/{userID}` | Remove it, so their display name shows again. 404 if none was set. |
 | GET | `/api/events/{id}/history?limit=` | The append-only transition log. |
 | POST | `/api/sync` | Pull native events from **every** server the bot is in and post a card for any new one. What the scheduler job calls; names no guild, so adding a server needs no change. |
 | POST | `/api/guilds/{guildID}/sync` | The same, for one guild. |

@@ -199,7 +199,7 @@ const componentTypeLabel = 18
 // textDisplayLimit is the cap on one block's content.
 const textDisplayLimit = 4000
 
-// rosterNames lists people one per line, by display name.
+// rosterNames lists people one per line, by the name Discord surfaces use.
 //
 // Names rather than <@id> mentions: a modal does not resolve a mention, so one
 // would show as a raw snowflake in angle brackets. This is the surface the
@@ -210,10 +210,7 @@ func rosterNames(signups []Signup) string {
 	}
 	var b strings.Builder
 	for i, sg := range signups {
-		name := sg.DisplayName
-		if name == "" {
-			name = sg.DiscordUserID
-		}
+		name := sg.NameOnDiscord()
 		place := i + 1
 		if sg.State == StateWaitlisted {
 			place = sg.WaitlistPlace

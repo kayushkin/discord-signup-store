@@ -279,7 +279,7 @@ func eventPublishSignature(ev *Event, roster []Signup) string {
 	// the flip within a minute and redraws once.
 	fmt.Fprintf(&b, "\x00%t", eventIsUnderway(ev))
 	for _, sg := range roster {
-		fmt.Fprintf(&b, "\x01%s\x00%s\x00%s", sg.DiscordUserID, sg.DisplayName, sg.State)
+		fmt.Fprintf(&b, "\x01%s\x00%s\x00%s\x00%s", sg.DiscordUserID, sg.DisplayName, sg.ReadableName, sg.State)
 	}
 	sum := sha256.Sum256([]byte(b.String()))
 	return hex.EncodeToString(sum[:])
