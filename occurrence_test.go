@@ -154,9 +154,11 @@ func TestDiscordSlidingTheStartForwardIsARollover(t *testing.T) {
 	}
 }
 
-// TestMovingAFutureDateIsAnEditNotARollover: an organiser pushing next week's
-// game to Thursday has not ended anything, and nobody loses their place.
-func TestMovingAFutureDateIsAnEditNotARollover(t *testing.T) {
+// TestADateMovedInDiscordIsPushedBackNotRolled: this service owns the event,
+// so a date moved in Discord's own event screen is not copied in — and,
+// because nothing has ended, nobody loses their place either. Ours goes back
+// out to Discord.
+func TestADateMovedInDiscordIsPushedBackNotRolled(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
@@ -179,6 +181,7 @@ func TestMovingAFutureDateIsAnEditNotARollover(t *testing.T) {
 	if _, _, err := srv.syncOneScheduledEvent(DiscordScheduledEvent{
 		ID: "native-9", GuildID: "g1", Name: "Games", Status: discordEventScheduled,
 		ScheduledStartTime: time.Unix(moved, 0).UTC().Format(time.RFC3339),
+		ScheduledEndTime:   time.Unix(moved+3600, 0).UTC().Format(time.RFC3339),
 	}, "board"); err != nil {
 		t.Fatalf("sync: %v", err)
 	}
@@ -186,11 +189,21 @@ func TestMovingAFutureDateIsAnEditNotARollover(t *testing.T) {
 		t.Fatalf("sweep: %v", err)
 	}
 	after, _ := store.GetEvent(ev.ID)
-	if after.StartsAt != moved {
-		t.Errorf("starts_at = %d, want the moved %d", after.StartsAt, moved)
+	if after.StartsAt != start {
+		t.Errorf("starts_at = %d, want ours %d — Discord's copy is not the owner", after.StartsAt, start)
 	}
 	if after.AttendingCount != 1 {
 		t.Errorf("Alice lost her place to a date change: %d attending", after.AttendingCount)
+	}
+	pushedBack := false
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPatch && strings.HasSuffix(c.Path, "/scheduled-events/native-9") &&
+			c.Body["scheduled_start_time"] == time.Unix(start, 0).UTC().Format(time.RFC3339) {
+			pushedBack = true
+		}
+	}
+	if !pushedBack {
+		t.Errorf("no PATCH carried our start back to Discord")
 	}
 }
 

@@ -340,6 +340,7 @@ drifting, in both directions, within one sync interval:
 | live | CANCELED | cancel locally |
 | live | COMPLETED | left to the time sweep, which owns completion |
 | cancelled | still listed | delete the native event |
+| live | name, description, times or place differ | push ours back; Discord's are never copied in |
 
 Absence from the LIST endpoint proves nothing — completed events drop out of it
 too — so a missing id is checked with a direct GET, where a 404 is unambiguous.

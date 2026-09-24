@@ -43,7 +43,7 @@ the event at all but the addresses of messages this service has written about it
 | `entity_type` | TEXT | Discord's kind of event: `stage`, `voice` or `external`. |
 | `recurrence_rule` | TEXT | RFC 5545 RRULE. Encoded into Discord's `recurrence_rule` object on every publish since 2026-09-03 — before that it was stored and never sent. `''` means the event does not repeat, and sends `null`. A row with a rule is never completed by the sweep: when its occurrence ends, `starts_at`/`ends_at` move to the next date, the roster is withdrawn and the reminder stamps clear (`RollOverOccurrence`). |
 | `timezone` | TEXT | IANA zone name, never an offset — an offset cannot survive a daylight-saving change. Mandatory whenever `recurrence_rule` is set. |
-| `origin` | TEXT | `local` (made here) or `discord` (imported). **Not** derivable from `discord_scheduled_event_id`: a local event published to Discord also has one. This records who owns the thing. |
+| `origin` | TEXT | `local` (made here) or `discord` (imported). **Not** derivable from `discord_scheduled_event_id`: a local event published to Discord also has one. This records where it came from, not who owns it: this service owns both kinds, and an import copies Discord's details once. |
 | `discord_interested_count` | INTEGER | Discord's own Interested tally. Stored for display, labelled as Discord's, and **never** feeds a capacity decision. |
 | `discord_synced_at` | INTEGER | When the native event was last read. |
 | `created_by` | TEXT | Discord user id of whoever made it. Grants edit rights, and gets them a place on their own roster. |

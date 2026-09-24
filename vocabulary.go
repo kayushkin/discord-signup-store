@@ -130,7 +130,8 @@ const (
 	// OriginDiscord means it was imported from a native Discord scheduled
 	// event. Not derivable from DiscordScheduledEventID being set: a locally
 	// created event that gets published to Discord also carries one. This
-	// records who owns the thing, not whether a link exists.
+	// records where the event came from. It does not decide ownership: this
+	// service owns both kinds, and the import copies Discord's details once.
 	OriginDiscord = "discord"
 )
 

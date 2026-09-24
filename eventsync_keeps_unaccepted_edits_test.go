@@ -2,6 +2,8 @@ package discordsignup
 
 import (
 	"errors"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -60,8 +62,9 @@ func TestSyncKeepsAnEditDiscordHasNotAccepted(t *testing.T) {
 	}
 }
 
-// TestSyncRecordsWhatItChanges: a change copied from Discord shows in the
-// event's history, under the sync's own actor.
+// TestSyncRecordsWhatItChanges: the one thing the sync still takes from
+// Discord that a person would ask about — a cancellation — shows in the
+// event's history under the sync's own actor.
 func TestSyncRecordsWhatItChanges(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
@@ -76,10 +79,9 @@ func TestSyncRecordsWhatItChanges(t *testing.T) {
 	}
 	markPublished(t, store, ev.ID)
 
-	moved := start + 3600
 	if _, _, err := srv.syncOneScheduledEvent(DiscordScheduledEvent{
-		ID: "native-46", GuildID: "g1", Name: "Roller skate", Status: discordEventScheduled,
-		ScheduledStartTime: time.Unix(moved, 0).UTC().Format(time.RFC3339),
+		ID: "native-46", GuildID: "g1", Name: "Roller skate", Status: discordEventCanceled,
+		ScheduledStartTime: time.Unix(start, 0).UTC().Format(time.RFC3339),
 	}, "board"); err != nil {
 		t.Fatalf("sync: %v", err)
 	}
@@ -88,11 +90,46 @@ func TestSyncRecordsWhatItChanges(t *testing.T) {
 		t.Fatalf("history: %v", err)
 	}
 	for _, u := range updates {
-		if u.Field == "starts_at" && u.Actor == syncEventUpdateActor {
+		if u.Field == "status" && u.ToValue == StatusCancelled && u.Actor == syncEventUpdateActor {
 			return
 		}
 	}
-	t.Errorf("history = %+v, want a starts_at row by %q", updates, syncEventUpdateActor)
+	t.Errorf("history = %+v, want a status row by %q", updates, syncEventUpdateActor)
+}
+
+// TestSyncPushesOurNameBackOverADiscordRename: a rename in Discord's own event
+// screen is not copied in; ours goes back out with the name in it.
+func TestSyncPushesOurNameBackOverADiscordRename(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	start := time.Now().Add(6 * time.Hour).Unix()
+	ev, err := store.CreateEvent(Event{
+		GuildID: "g1", ChannelID: "board", Name: "Roller skate",
+		StartsAt: start, DiscordScheduledEventID: "native-47", Origin: OriginDiscord,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	markPublished(t, store, ev.ID)
+
+	if _, _, err := srv.syncOneScheduledEvent(DiscordScheduledEvent{
+		ID: "native-47", GuildID: "g1", Name: "Ice skate", Status: discordEventScheduled,
+		ScheduledStartTime: time.Unix(start, 0).UTC().Format(time.RFC3339),
+		ScheduledEndTime:   time.Unix(start+assumedRunTimeWithoutEndTime, 0).UTC().Format(time.RFC3339),
+	}, "board"); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	after, _ := store.GetEvent(ev.ID)
+	if after.Name != "Roller skate" {
+		t.Errorf("name = %q, want ours kept", after.Name)
+	}
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPatch && strings.HasSuffix(c.Path, "/scheduled-events/native-47") && c.Body["name"] != nil {
+			return
+		}
+	}
+	t.Errorf("no PATCH carried our name back to Discord: %+v", fake.recorded())
 }
 
 // TestUpdateRefusesAnEndBeforeTheStart: Discord refuses such an event, so the
