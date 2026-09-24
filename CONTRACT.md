@@ -340,7 +340,7 @@ drifting, in both directions, within one sync interval:
 | live | CANCELED | cancel locally |
 | live | COMPLETED | left to the time sweep, which owns completion |
 | cancelled | still listed | delete the native event |
-| live | name, description, times or place differ | push ours back; Discord's are never copied in |
+| live | name, description, times or place differ | per field: Discord moved away from what we last wrote → an edit made in Discord, taken through the edit path (actor `discord-event-screen`); Discord still holds what we wrote → ours has not reached it, push ours |
 
 Absence from the LIST endpoint proves nothing — completed events drop out of it
 too — so a missing id is checked with a direct GET, where a 404 is unambiguous.

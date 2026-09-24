@@ -9,7 +9,7 @@ import (
 // Who did it, in words. The history records an actor as the service saw
 // them: "web:<id>" for a web page, "discord:<id>" for a Discord form, a bare
 // id for a button, or a word — user, interested, reaction, promotion, api,
-// discord-event-sync —
+// discord-event-screen, discord-event-sync —
 // for everything that is not one person. The ids are shown as that person's
 // name in the server, which is what an organiser recognises; the words are
 // shown as they are.

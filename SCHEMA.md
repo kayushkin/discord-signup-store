@@ -43,10 +43,12 @@ the event at all but the addresses of messages this service has written about it
 | `entity_type` | TEXT | Discord's kind of event: `stage`, `voice` or `external`. |
 | `recurrence_rule` | TEXT | RFC 5545 RRULE. Encoded into Discord's `recurrence_rule` object on every publish since 2026-09-03 — before that it was stored and never sent. `''` means the event does not repeat, and sends `null`. A row with a rule is never completed by the sweep: when its occurrence ends, `starts_at`/`ends_at` move to the next date, the roster is withdrawn and the reminder stamps clear (`RollOverOccurrence`). |
 | `timezone` | TEXT | IANA zone name, never an offset — an offset cannot survive a daylight-saving change. Mandatory whenever `recurrence_rule` is set. |
-| `origin` | TEXT | `local` (made here) or `discord` (imported). **Not** derivable from `discord_scheduled_event_id`: a local event published to Discord also has one. This records where it came from, not who owns it: this service owns both kinds, and an import copies Discord's details once. |
+| `origin` | TEXT | `local` (made here) or `discord` (imported). **Not** derivable from `discord_scheduled_event_id`: a local event published to Discord also has one. This records where it came from, not who owns it: this service's row is the source of truth for both kinds. |
 | `discord_interested_count` | INTEGER | Discord's own Interested tally. Stored for display, labelled as Discord's, and **never** feeds a capacity decision. |
 | `discord_synced_at` | INTEGER | When the native event was last read. |
 | `created_by` | TEXT | Discord user id of whoever made it. Grants edit rights, and gets them a place on their own roster. |
+| `native_name_written`, `native_description_written`, `native_starts_at_written`, `native_ends_at_written`, `native_location_written` | TEXT / INTEGER | What this service last wrote into the native event, in its own terms (name without the count, description without the roster, end as sent). Each is set only when that field was sent. The sync compares Discord's copy with these to tell an edit made in Discord's event screen from a change of ours Discord has not taken yet. Bookkeeping, not logged. |
+| `native_written_at` | INTEGER | When the above were last recorded; `0` means never, and the sync then treats a difference as ours not yet sent. |
 | `thread_id` | TEXT | A discussion thread from when cards existed; nothing writes it now. Old ones are still archived when their event finishes. |
 | `forum_post_id` | TEXT | The event's post in the forum channel. One id reaches both the post and the card inside it. |
 | `published_signature` | TEXT | Fingerprint of everything that feeds a Discord copy, written only when a publish fully succeeds. `''` means never published, or the last publish failed part way. The minute sweep republishes anything that does not match. |
@@ -139,7 +141,7 @@ place and limit could all change and the only trace was the new value.
 | `field` | TEXT | Which one changed: `name`, `description`, `capacity`, `status`, `starts_at`, `ends_at`, `location`, `timezone`, `recurrence_rule`, `attending_role_id`, `waitlist_role_id`. |
 | `from_value` | TEXT | The old value, raw — a time as the integer it is stored as, not a rendering of it. Presentation belongs at the edge. |
 | `to_value` | TEXT | The new one. |
-| `actor` | TEXT | `web:<discord id>` from the web page, `discord:<discord id>` from a Discord form, `api`, or `discord-event-sync` for a change the sync copied from Discord's own event. |
+| `actor` | TEXT | `web:<discord id>` from the web page, `discord:<discord id>` from a Discord form, `api`, `discord-event-screen` for an edit made in Discord's own event screen, or `discord-event-sync` for a completion or cancellation copied from Discord. |
 | `at` | INTEGER | When. |
 
 Written from `applyEventEdit`, which is the one function every edit passes

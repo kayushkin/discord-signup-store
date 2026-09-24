@@ -90,7 +90,13 @@ type Event struct {
 	TitleWrittenAt     int64  `json:"title_written_at"`
 	NativeTitleWritten string `json:"native_title_written"`
 	ForumTitleWritten  string `json:"forum_title_written"`
-	CreatedAt          int64  `json:"created_at"`
+	// NativeWritten is what this service last wrote into the native event's
+	// name, description, times and place. Comparing Discord's copy with it
+	// tells an edit made in Discord's own event screen (Discord's copy moved
+	// away from what we wrote) from a change of ours Discord has not taken yet
+	// (Discord's copy still says what we wrote). Bookkeeping, like the titles.
+	NativeWritten NativeWritten `json:"native_written"`
+	CreatedAt     int64         `json:"created_at"`
 	UpdatedAt          int64  `json:"updated_at"`
 
 	// AttendingCount and WaitlistCount are computed by the read path. They are
@@ -327,6 +333,17 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// first message shares its id, so this one id reaches both the post (for
 	// retitling and tag flips) and the card inside it (for edits).
 	{"events", "forum_post_id", "TEXT NOT NULL DEFAULT ''"},
+
+	// What the native event's fields last said as this service wrote them —
+	// see NativeWritten. Each is set only when that field was actually sent:
+	// times are not sent once an event has started, and a place only on an
+	// external event.
+	{"events", "native_name_written", "TEXT NOT NULL DEFAULT ''"},
+	{"events", "native_description_written", "TEXT NOT NULL DEFAULT ''"},
+	{"events", "native_starts_at_written", "INTEGER NOT NULL DEFAULT 0"},
+	{"events", "native_ends_at_written", "INTEGER NOT NULL DEFAULT 0"},
+	{"events", "native_location_written", "TEXT NOT NULL DEFAULT ''"},
+	{"events", "native_written_at", "INTEGER NOT NULL DEFAULT 0"},
 
 	// How this person got onto the roster. Not cosmetic: it decides what
 	// un-marking Interested on Discord does to them. Someone who pressed Join
@@ -599,7 +616,10 @@ const eventColumns = `id, guild_id, channel_id, message_id, discord_scheduled_ev
 	starts_at, ends_at, location, entity_type, recurrence_rule, timezone, origin,
 	thread_id, forum_post_id, discord_interested_count, discord_synced_at, created_by,
 	published_signature, reminded_before_at, reminded_start_at,
-	title_written_at, native_title_written, forum_title_written, created_at, updated_at`
+	title_written_at, native_title_written, forum_title_written,
+	native_name_written, native_description_written, native_starts_at_written,
+	native_ends_at_written, native_location_written, native_written_at,
+	created_at, updated_at`
 
 func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 	var e Event
@@ -609,6 +629,8 @@ func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 		&e.Origin, &e.ThreadID, &e.ForumPostID, &e.DiscordInterestedCount, &e.DiscordSyncedAt, &e.CreatedBy,
 		&e.PublishedSignature, &e.RemindedBeforeAt, &e.RemindedStartAt,
 		&e.TitleWrittenAt, &e.NativeTitleWritten, &e.ForumTitleWritten,
+		&e.NativeWritten.Name, &e.NativeWritten.Description, &e.NativeWritten.StartsAt,
+		&e.NativeWritten.EndsAt, &e.NativeWritten.Location, &e.NativeWritten.At,
 		&e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -990,6 +1012,59 @@ func (s *Store) SetTitlesWritten(id int64, native, forum string) error {
 		forum_title_written = ? WHERE id = ?`, now(), native, forum, id)
 	if err != nil {
 		return fmt.Errorf("set titles written: %w", err)
+	}
+	return nil
+}
+
+// NativeWritten is what this service last wrote into an event's native
+// Discord event, in this store's own terms: the name without its count, the
+// description without the roster appended to it, the end as sent (the
+// assumed run time when the event has none), the place without the
+// placeholder. A zero or empty value means that field has not been written
+// since this was first recorded; At is 0 until anything has been.
+type NativeWritten struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	StartsAt    int64  `json:"starts_at"`
+	EndsAt      int64  `json:"ends_at"`
+	Location    string `json:"location"`
+	At          int64  `json:"at"`
+}
+
+// NativeWrite names the fields one write to Discord carried. A nil field was
+// not sent, and its record is left as it was.
+type NativeWrite struct {
+	Name        *string
+	Description *string
+	StartsAt    *int64
+	EndsAt      *int64
+	Location    *string
+}
+
+// RecordNativeWrite notes what a successful write put into the native event.
+// updated_at is left alone: this is the publisher noting what it did.
+func (s *Store) RecordNativeWrite(id int64, w NativeWrite) error {
+	sets := []string{"native_written_at = ?"}
+	args := []any{now()}
+	add := func(col string, val any) { sets = append(sets, col+" = ?"); args = append(args, val) }
+	if w.Name != nil {
+		add("native_name_written", *w.Name)
+	}
+	if w.Description != nil {
+		add("native_description_written", *w.Description)
+	}
+	if w.StartsAt != nil {
+		add("native_starts_at_written", *w.StartsAt)
+	}
+	if w.EndsAt != nil {
+		add("native_ends_at_written", *w.EndsAt)
+	}
+	if w.Location != nil {
+		add("native_location_written", *w.Location)
+	}
+	args = append(args, id)
+	if _, err := s.db.Exec(`UPDATE events SET `+strings.Join(sets, ", ")+` WHERE id = ?`, args...); err != nil {
+		return fmt.Errorf("record native write: %w", err)
 	}
 	return nil
 }

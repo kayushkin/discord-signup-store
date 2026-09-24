@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -278,6 +279,16 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 		if err != nil {
 			return false, false, err
 		}
+		// What the import copied is what Discord holds, so it counts as
+		// written: a later edit in Discord's screen then shows as a move away
+		// from it.
+		copied := discordCopyOf(r)
+		if err := s.store.RecordNativeWrite(created.ID, NativeWrite{
+			Name: &copied.Name, Description: &copied.Description,
+			StartsAt: &copied.StartsAt, EndsAt: &copied.EndsAt, Location: &copied.Location,
+		}); err != nil {
+			return false, false, err
+		}
 		log.Printf("[discord-signup] imported discord event %q as event %d", r.Name, created.ID)
 		return true, true, nil
 	}
@@ -292,7 +303,7 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 	// that has gone. Rolled here, through the same path the sweep uses, so
 	// whichever of the two notices first does the whole job and the other
 	// finds nothing left to do. A date moved in Discord that has not happened
-	// yet is not ours, and is pushed back below.
+	// yet is an edit, and is taken below like any other.
 	if existing.RecurrenceRule != "" && startsAt > existing.StartsAt && finishedBy(existing) < now() {
 		s.rollOverOccurrence(existing, startsAt, endsAt)
 		if existing, err = s.store.GetEvent(existing.ID); err != nil {
@@ -300,23 +311,41 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 		}
 	}
 
-	// This service owns every event it holds, imported ones included: an
-	// import copies Discord's details once, and from then on the native event
-	// is a copy of ours. So Discord's name, description, times and place are
-	// never copied back. Where they differ — somebody edited the event in
-	// Discord's own event screen, or a push of ours was refused — ours goes
-	// back out. Copying them in used to undo edits: on 2026-09-24 Discord
-	// refused a moved date and this sync put the old date back twice.
+	// This service's row is the source of truth; Discord's event screen is one
+	// more place to edit it. So Discord's copy is compared with what we last
+	// wrote there, field by field. Where Discord moved away from what we
+	// wrote, somebody edited it in Discord, and that goes through the same
+	// edit path as the form and the web page — history, the end moving with
+	// the start, every surface redrawn. Where Discord still says what we wrote
+	// but ours has moved on, ours has not reached Discord yet, and goes out.
+	// Copying Discord's stale copy in used to undo edits: on 2026-09-24
+	// Discord refused a moved date and the sync put the old date back twice.
 	roster, err := s.store.Roster(existing.ID, false)
 	if err != nil {
 		return false, false, err
 	}
-	if differing := discordCopyDiffers(existing, r); len(differing) > 0 {
-		log.Printf("[discord-signup] sync: discord's copy of event %d differs in %s; pushing ours back",
-			existing.ID, strings.Join(differing, ", "))
-		nameDiffers := slices.Contains(differing, "name")
-		if err := s.PushEditToDiscord(existing, roster, nameDiffers); err != nil {
-			return false, false, fmt.Errorf("push event %d back to discord: %w", existing.ID, err)
+	discordEdit, ourUnsent := compareWithDiscordCopy(existing, discordCopyOf(r), now())
+	edited := false
+	if discordEdit != (EventPatch{}) {
+		if existing, _, err = s.applyEventEdit(existing, discordEdit, discordEventScreenActor); err != nil {
+			return false, false, fmt.Errorf("take discord's edit of event %d: %w", existing.ID, err)
+		}
+		edited = true
+	} else if len(ourUnsent) > 0 {
+		log.Printf("[discord-signup] sync: event %d's %s not on discord yet; pushing ours",
+			existing.ID, strings.Join(ourUnsent, ", "))
+		if err := s.PushEditToDiscord(existing, roster, slices.Contains(ourUnsent, "name")); err != nil {
+			return false, false, fmt.Errorf("push event %d to discord: %w", existing.ID, err)
+		}
+	} else if existing.NativeWritten.At == 0 {
+		// Both agree and nothing was ever recorded — an event from before the
+		// record existed. Record now, so the next edit in Discord is seen.
+		copied := discordCopyOf(r)
+		if err := s.store.RecordNativeWrite(existing.ID, NativeWrite{
+			Name: &copied.Name, Description: &copied.Description,
+			StartsAt: &copied.StartsAt, EndsAt: &copied.EndsAt, Location: &copied.Location,
+		}); err != nil {
+			return false, false, err
 		}
 	}
 
@@ -334,7 +363,7 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 		patch.DiscordInterestedCount = &count
 	}
 	if patch == (EventPatch{}) {
-		return false, false, nil
+		return edited, false, nil
 	}
 	after, err := s.store.UpdateEvent(existing.ID, patch)
 	if err != nil {
@@ -353,37 +382,77 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 // from Discord's own event: that it completed or was cancelled.
 const syncEventUpdateActor = "discord-event-sync"
 
-// discordCopyDiffers names the fields where Discord's copy of an event no
-// longer matches ours, compared as PushEditToDiscord would write them: the
-// count and signup pointer stripped, the location placeholder stripped, an
-// unset end as the assumed run time. Times count only while the event is
-// ahead, because PushEditToDiscord cannot send them after it starts.
-func discordCopyDiffers(ev *Event, r DiscordScheduledEvent) []string {
-	var differing []string
-	if stripTitleDecorations(r.Name) != ev.Name {
-		differing = append(differing, "name")
+// discordEventScreenActor marks an edit somebody made in Discord's own event
+// screen. Discord does not say who; its audit log would, with a permission
+// this bot does not ask for.
+const discordEventScreenActor = "discord-event-screen"
+
+// discordCopy is a native event's editable fields in this store's terms: the
+// count and signup pointer stripped, the place placeholder stripped.
+type discordCopy struct {
+	Name, Description, Location string
+	StartsAt, EndsAt            int64
+}
+
+func discordCopyOf(r DiscordScheduledEvent) discordCopy {
+	return discordCopy{
+		Name:        stripTitleDecorations(r.Name),
+		Description: stripSignupPointer(r.Description),
+		Location:    stripLocationPlaceholder(r.EntityMetadata.Location),
+		StartsAt:    parseDiscordTime(r.ScheduledStartTime),
+		EndsAt:      parseDiscordTime(r.ScheduledEndTime),
 	}
-	if stripSignupPointer(r.Description) != ev.Description {
-		differing = append(differing, "description")
+}
+
+// compareWithDiscordCopy sorts each field where Discord's copy differs from
+// ours into one of two kinds. Discord's value is not what we last wrote
+// there: somebody edited it in Discord, and it comes back as a patch. Discord
+// still holds what we wrote, or we have no record of writing it: ours has
+// not reached Discord, and its name comes back in ourUnsent.
+//
+// Times are compared only while the event is ahead — once it starts, neither
+// side can move them. The place only on an external event, the only kind
+// that has one. An unset end is compared as the assumed run time, which is
+// what was sent for it.
+func compareWithDiscordCopy(ev *Event, discord discordCopy, at int64) (discordEdit EventPatch, ourUnsent []string) {
+	written := ev.NativeWritten
+	recorded := written.At != 0
+	compare := func(field string, ours, theirs, wrote string, wroteKnown bool, take func()) {
+		switch {
+		case ours == theirs:
+		case wroteKnown && theirs != wrote:
+			take()
+		default:
+			ourUnsent = append(ourUnsent, field)
+		}
 	}
-	if ev.StartsAt > now() {
-		endsAt := ev.EndsAt
-		if endsAt == 0 {
-			endsAt = ev.StartsAt + assumedRunTimeWithoutEndTime
+	compare("name", ev.Name, discord.Name, written.Name, written.Name != "",
+		func() { discordEdit.Name = &discord.Name })
+	compare("description", ev.Description, discord.Description, written.Description, recorded,
+		func() { discordEdit.Description = &discord.Description })
+	if ev.StartsAt > at {
+		ourEnd := ev.EndsAt
+		if ourEnd == 0 {
+			ourEnd = ev.StartsAt + assumedRunTimeWithoutEndTime
 		}
-		if parseDiscordTime(r.ScheduledStartTime) != ev.StartsAt {
-			differing = append(differing, "start")
-		}
-		if parseDiscordTime(r.ScheduledEndTime) != endsAt {
-			differing = append(differing, "end")
+		itoa := func(v int64) string { return strconv.FormatInt(v, 10) }
+		compare("start", itoa(ev.StartsAt), itoa(discord.StartsAt), itoa(written.StartsAt), written.StartsAt != 0,
+			func() { discordEdit.StartsAt = &discord.StartsAt })
+		compare("end", itoa(ourEnd), itoa(discord.EndsAt), itoa(written.EndsAt), written.EndsAt != 0,
+			func() { discordEdit.EndsAt = &discord.EndsAt })
+		// A start moved in Discord comes with the end it was saved with there.
+		// Left out, applyEventEdit would move our end by the same amount and
+		// push that over the end the person kept. An event with no end of its
+		// own keeps none: Discord's is the assumed one we sent.
+		if discordEdit.StartsAt != nil && discordEdit.EndsAt == nil && ev.EndsAt != 0 {
+			discordEdit.EndsAt = &discord.EndsAt
 		}
 	}
 	if ev.EntityType == "" || ev.EntityType == "external" {
-		if stripLocationPlaceholder(r.EntityMetadata.Location) != ev.Location {
-			differing = append(differing, "location")
-		}
+		compare("location", ev.Location, discord.Location, written.Location, recorded,
+			func() { discordEdit.Location = &discord.Location })
 	}
-	return differing
+	return discordEdit, ourUnsent
 }
 
 // parseDiscordTime turns Discord's ISO 8601 timestamp into unix seconds. An
@@ -538,7 +607,16 @@ func (s *Server) PublishToDiscord(eventID int64) (*Event, error) {
 	// Written back immediately. Everything between the line above and this one
 	// is the window in which the gateway can see an event we own but cannot
 	// recognise, which is why syncOneScheduledEvent checks the creator.
-	return s.store.UpdateEvent(eventID, EventPatch{DiscordScheduledEventID: &created.ID})
+	if _, err := s.store.UpdateEvent(eventID, EventPatch{DiscordScheduledEventID: &created.ID}); err != nil {
+		return nil, err
+	}
+	if err := s.store.RecordNativeWrite(eventID, NativeWrite{
+		Name: &ev.Name, Description: &ev.Description,
+		StartsAt: &ev.StartsAt, EndsAt: &endsAt, Location: &ev.Location,
+	}); err != nil {
+		return nil, err
+	}
+	return s.store.GetEvent(eventID)
 }
 
 // locationPlaceholder is what gets sent as a native event's location when the
@@ -1016,6 +1094,7 @@ func (s *Server) PushEditToDiscord(ev *Event, roster []Signup, rename bool) erro
 	payload := map[string]any{
 		"description": nativeEventDescription(ev, roster, s.guildChannels(ev.GuildID).Board),
 	}
+	written := NativeWrite{Description: &ev.Description}
 	// A location is an EXTERNAL event's; a voice or stage event lives in its
 	// channel and Discord refuses entity_metadata on it outright
 	// (GUILD_SCHEDULED_EVENT_ENTITY_METADATA_UNSUPPORTED, measured 2026-09-04
@@ -1024,6 +1103,7 @@ func (s *Server) PushEditToDiscord(ev *Event, roster []Signup, rename bool) erro
 	// own, so "" counts as external.
 	if ev.EntityType == "" || ev.EntityType == "external" {
 		payload["entity_metadata"] = map[string]any{"location": location}
+		written.Location = &ev.Location
 	}
 	// The times go only while the event is still ahead. Discord refuses a
 	// start in the past (GUILD_SCHEDULED_EVENT_SCHEDULE_PAST) and any start on
@@ -1035,11 +1115,13 @@ func (s *Server) PushEditToDiscord(ev *Event, roster []Signup, rename bool) erro
 	if ev.StartsAt > now() {
 		payload["scheduled_start_time"] = time.Unix(ev.StartsAt, 0).UTC().Format(time.RFC3339)
 		payload["scheduled_end_time"] = time.Unix(endsAt, 0).UTC().Format(time.RFC3339)
+		written.StartsAt, written.EndsAt = &ev.StartsAt, &endsAt
 	}
 	// The name is a rename and renames are throttled; the description carries
 	// the live count and names and is not, so it goes every time.
 	if rename {
 		payload["name"] = nativeEventName(ev)
+		written.Name = &ev.Name
 	}
 	// The rule goes every time too — null clears it, which is how "never"
 	// reaches Discord. A rule Discord cannot express is left out rather than
@@ -1049,7 +1131,10 @@ func (s *Server) PushEditToDiscord(ev *Event, roster []Signup, rename bool) erro
 	} else {
 		log.Printf("[discord-signup] event %d: rule %q cannot be expressed to Discord; pushed without it", ev.ID, ev.RecurrenceRule)
 	}
-	return s.discord.ModifyScheduledEvent(ev.GuildID, ev.DiscordScheduledEventID, payload)
+	if err := s.discord.ModifyScheduledEvent(ev.GuildID, ev.DiscordScheduledEventID, payload); err != nil {
+		return err
+	}
+	return s.store.RecordNativeWrite(ev.ID, written)
 }
 
 // pluralise writes "1 place" and "6 places". A count is almost always rendered

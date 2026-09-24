@@ -131,7 +131,7 @@ const (
 	// event. Not derivable from DiscordScheduledEventID being set: a locally
 	// created event that gets published to Discord also carries one. This
 	// records where the event came from. It does not decide ownership: this
-	// service owns both kinds, and the import copies Discord's details once.
+	// service's row is the source of truth for both kinds.
 	OriginDiscord = "discord"
 )
 

@@ -95,8 +95,8 @@ ping everybody about events that already happened.
 
 On a timer, and nothing else: **finished events archived** every 5 minutes;
 **native events imported** every 10 (plus instantly over the gateway) — after
-that the event is ours, and an edit made in Discord's own event screen is
-pushed back over rather than copied in;
+that this service's row is the source of truth, and an edit made in Discord's
+own event screen is taken as an edit like one from the form;
 **reminders checked** every minute. A finished event leaves **one line** in
 past-events — the table row folded flat — not a card of dead buttons.
 An organiser can finish one early with **End**, on the management table or the

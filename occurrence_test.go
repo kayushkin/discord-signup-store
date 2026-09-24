@@ -154,11 +154,10 @@ func TestDiscordSlidingTheStartForwardIsARollover(t *testing.T) {
 	}
 }
 
-// TestADateMovedInDiscordIsPushedBackNotRolled: this service owns the event,
-// so a date moved in Discord's own event screen is not copied in — and,
-// because nothing has ended, nobody loses their place either. Ours goes back
-// out to Discord.
-func TestADateMovedInDiscordIsPushedBackNotRolled(t *testing.T) {
+// TestADateMovedInDiscordIsAnEditNotARollover: an organiser moving next
+// week's game to Thursday in Discord's own event screen has edited it, not
+// ended anything, so the date is taken and nobody loses their place.
+func TestADateMovedInDiscordIsAnEditNotARollover(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
@@ -176,6 +175,7 @@ func TestADateMovedInDiscordIsPushedBackNotRolled(t *testing.T) {
 	}
 	store.Join(ev.ID, "alice", "Alice", JoinedViaButton)
 	markPublished(t, store, ev.ID)
+	recordWrittenAsOurs(t, store, ev.ID)
 
 	moved := start + 2*86400
 	if _, _, err := srv.syncOneScheduledEvent(DiscordScheduledEvent{
@@ -189,21 +189,11 @@ func TestADateMovedInDiscordIsPushedBackNotRolled(t *testing.T) {
 		t.Fatalf("sweep: %v", err)
 	}
 	after, _ := store.GetEvent(ev.ID)
-	if after.StartsAt != start {
-		t.Errorf("starts_at = %d, want ours %d — Discord's copy is not the owner", after.StartsAt, start)
+	if after.StartsAt != moved || after.EndsAt != moved+3600 {
+		t.Errorf("times = %d–%d, want Discord's edit %d–%d", after.StartsAt, after.EndsAt, moved, moved+3600)
 	}
 	if after.AttendingCount != 1 {
 		t.Errorf("Alice lost her place to a date change: %d attending", after.AttendingCount)
-	}
-	pushedBack := false
-	for _, c := range fake.recorded() {
-		if c.Method == http.MethodPatch && strings.HasSuffix(c.Path, "/scheduled-events/native-9") &&
-			c.Body["scheduled_start_time"] == time.Unix(start, 0).UTC().Format(time.RFC3339) {
-			pushedBack = true
-		}
-	}
-	if !pushedBack {
-		t.Errorf("no PATCH carried our start back to Discord")
 	}
 }
 
