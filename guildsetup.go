@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Setting a server up in one go: the category and the five channels this
+// Setting a server up in one go: the category and the six channels this
 // service posts into, recorded on the guild's row, the forum adopted, the
 // tables drawn. Runs when the bot joins a server and on
 // POST /api/guilds/{id}/setup, and is safe to run again: a channel that
@@ -27,6 +27,7 @@ const (
 	setupForumChannelName    = "event-forum"
 	setupPastChannelName     = "past-events"
 	setupReminderChannelName = "event-reminders"
+	setupNewEventsName       = "new-events"
 
 	discordChannelTypeText     = 0
 	discordChannelTypeCategory = 4
@@ -115,6 +116,10 @@ func (s *Server) SetUpGuild(guildID string) (*GuildTable, error) {
 	if err != nil {
 		return nil, err
 	}
+	newEvents, err := find(existing.NewEventsChannelID, setupNewEventsName, discordChannelTypeText)
+	if err != nil {
+		return nil, err
+	}
 	forumRecorded := ""
 	if f, err := s.store.GuildForum(guildID); err == nil {
 		forumRecorded = f.ChannelID
@@ -126,7 +131,7 @@ func (s *Server) SetUpGuild(guildID string) (*GuildTable, error) {
 
 	// Recorded before anything is posted, so a failure below leaves a row
 	// that says where things are and a second run picks up from there.
-	if err := s.store.SetGuildChannels(guildID, GuildChannels{Board: board, Past: past, Reminder: reminders}); err != nil {
+	if err := s.store.SetGuildChannels(guildID, GuildChannels{Board: board, Past: past, Reminder: reminders, NewEvents: newEvents}); err != nil {
 		return nil, err
 	}
 	if err := s.store.SetGuildTable(guildID, board); err != nil {
@@ -144,8 +149,8 @@ func (s *Server) SetUpGuild(guildID string) (*GuildTable, error) {
 	if err := s.RefreshManagementTable(guildID); err != nil {
 		return nil, fmt.Errorf("draw management table: %w", err)
 	}
-	log.Printf("[discord-signup] guild %s set up: board %s, management %s, forum %s, past %s, reminders %s",
-		guildID, board, management, forum, past, reminders)
+	log.Printf("[discord-signup] guild %s set up: board %s, management %s, forum %s, past %s, reminders %s, new events %s",
+		guildID, board, management, forum, past, reminders, newEvents)
 	return s.store.GuildTable(guildID)
 }
 

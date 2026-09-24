@@ -71,6 +71,7 @@ func TestSyncPushesAnEditDiscordHasNotTaken(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
+	t.Cleanup(srv.WaitForBackgroundWork)
 	start := time.Now().Add(6 * time.Hour).Unix()
 	ev, err := store.CreateEvent(Event{
 		GuildID: "g1", ChannelID: "board", Name: "Roller skate",
@@ -107,6 +108,7 @@ func TestSyncTakesARenameMadeInDiscord(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
+	t.Cleanup(srv.WaitForBackgroundWork)
 	start := time.Now().Add(6 * time.Hour).Unix()
 	ev, err := store.CreateEvent(Event{
 		GuildID: "g1", ChannelID: "board", Name: "Roller skate",
@@ -140,6 +142,7 @@ func TestADiscordEditAndAnUnsentOneBothSurvive(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
+	t.Cleanup(srv.WaitForBackgroundWork)
 	start := time.Now().Add(6 * time.Hour).Unix()
 	ev, err := store.CreateEvent(Event{
 		GuildID: "g1", ChannelID: "board", Name: "Roller skate",
@@ -171,6 +174,7 @@ func TestSyncRecordsWhatItAgreesWith(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
+	t.Cleanup(srv.WaitForBackgroundWork)
 	start := time.Now().Add(6 * time.Hour).Unix()
 	ev, err := store.CreateEvent(Event{
 		GuildID: "g1", ChannelID: "board", Name: "Roller skate",
@@ -198,6 +202,7 @@ func TestSyncRecordsWhatItChanges(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
+	t.Cleanup(srv.WaitForBackgroundWork)
 	start := time.Now().Add(6 * time.Hour).Unix()
 	ev, err := store.CreateEvent(Event{
 		GuildID: "g1", ChannelID: "board", Name: "Roller skate",
@@ -245,6 +250,7 @@ func TestApiEditMovingTheStartMovesTheEnd(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
+	t.Cleanup(srv.WaitForBackgroundWork)
 	start := time.Now().Add(6 * time.Hour).Unix()
 	ev, err := store.CreateEvent(Event{
 		GuildID: "g1", ChannelID: "board", Name: "Roller skate",

@@ -1056,6 +1056,13 @@ func (s *Server) finishEventEverywhere(id int64) {
 	if err := s.postPastEventLine(id); err != nil {
 		log.Printf("[discord-signup] move event %d to past events: %v", id, err)
 	}
+	// Its line leaves #new-events as its line arrives in past events, so the
+	// event is in exactly one of the two.
+	if finished, err := s.store.GetEvent(id); err != nil {
+		log.Printf("[discord-signup] remove event %d from new events: %v", id, err)
+	} else if err := s.removeNewEventsLine(finished); err != nil {
+		log.Printf("[discord-signup] remove event %d from new events: %v", id, err)
+	}
 	// It has left the live list, so both tables have to stop showing it and its
 	// discussion closes with it.
 	ev, err := s.store.GetEvent(id)
@@ -1269,6 +1276,9 @@ func (s *Server) cancelEventEverywhere(ev *Event, why string) error {
 		return err
 	}
 	log.Printf("[discord-signup] event %d (%q) cancelled: %s", ev.ID, ev.Name, why)
+	if err := s.removeNewEventsLine(updated); err != nil {
+		log.Printf("[discord-signup] remove cancelled event %d from new events: %v", ev.ID, err)
+	}
 	s.refreshTablesQuietly(ev.GuildID)
 	s.refreshForumPostQuietly(updated)
 	if updated.ThreadID != "" {

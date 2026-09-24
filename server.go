@@ -250,14 +250,16 @@ func (s *Server) handleSetGuildTable(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, table)
 }
 
-// handleSetGuildChannels records where a guild's cards, past-events lines and
-// reminders go. All three every time — a PUT is the whole value — and an
-// empty reminder channel turns reminders off for that guild.
+// handleSetGuildChannels records where a guild's cards, past-events lines,
+// reminders and new-events lines go. All four every time — a PUT is the whole
+// value — and an empty reminder or new-events channel turns that off for the
+// guild.
 func (s *Server) handleSetGuildChannels(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		BoardChannelID    string `json:"board_channel_id"`
 		PastChannelID     string `json:"past_channel_id"`
-		ReminderChannelID string `json:"reminder_channel_id"`
+		ReminderChannelID  string `json:"reminder_channel_id"`
+		NewEventsChannelID string `json:"new_events_channel_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "malformed JSON"})
@@ -269,7 +271,8 @@ func (s *Server) handleSetGuildChannels(w http.ResponseWriter, r *http.Request) 
 	}
 	guildID := r.PathValue("guildID")
 	if err := s.store.SetGuildChannels(guildID, GuildChannels{
-		Board: in.BoardChannelID, Past: in.PastChannelID, Reminder: in.ReminderChannelID}); err != nil {
+		Board: in.BoardChannelID, Past: in.PastChannelID, Reminder: in.ReminderChannelID,
+		NewEvents: in.NewEventsChannelID}); err != nil {
 		writeStoreError(w, err)
 		return
 	}

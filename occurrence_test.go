@@ -161,6 +161,7 @@ func TestADateMovedInDiscordIsAnEditNotARollover(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
+	t.Cleanup(srv.WaitForBackgroundWork)
 	srv.EnableWeb(nil)
 	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 	start := time.Now().Add(48 * time.Hour).Unix()

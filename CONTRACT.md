@@ -40,8 +40,8 @@ service's, and proxying any other route publishes roster editing to the world.
 | GET | `/api/events/{id}/history?limit=` | The append-only transition log. |
 | POST | `/api/sync` | Pull native events from **every** server the bot is in and post a card for any new one. What the scheduler job calls; names no guild, so adding a server needs no change. |
 | POST | `/api/guilds/{guildID}/sync` | The same, for one guild. |
-| PUT | `/api/guilds/{guildID}/channels` | Record the guild's board, past-events and reminder channels: `{"board_channel_id","past_channel_id","reminder_channel_id"}`. Board is required; the other two may be empty, and an empty reminder channel turns reminders off for that guild. Needs no table first. |
-| POST | `/api/guilds/{guildID}/setup` | Make a server ready in one call: an **Events** category with `#events` (board and table), `#event-management`, `#event-forum` (tags added), `#past-events` and `#event-reminders` — each reused if a channel of that name exists, created otherwise — then the row written, the forum adopted and both tables drawn. Runs by itself when the bot joins a server. Safe to repeat. |
+| PUT | `/api/guilds/{guildID}/channels` | Record the guild's board, past-events, reminder and new-events channels: `{"board_channel_id","past_channel_id","reminder_channel_id","new_events_channel_id"}`. Board is required; the others may be empty, and an empty reminder or new-events channel turns that off for the guild. A PUT is the whole value, so one that leaves out a channel clears it. Needs no table first. |
+| POST | `/api/guilds/{guildID}/setup` | Make a server ready in one call: an **Events** category with `#events` (board and table), `#event-management`, `#event-forum` (tags added), `#past-events`, `#event-reminders` and `#new-events` — each reused if a channel of that name exists, created otherwise — then the row written, the forum adopted and both tables drawn. Runs by itself when the bot joins a server. Safe to repeat. |
 | GET | `/api/guilds/{guildID}/channels` | The guild's row back: table, management and the three channels. |
 | GET | `/api/guilds/{guildID}/editing` | The server's editing rule: `{"guild_id","editor_role_id","anyone_may_create","updated_at"}`. A server with none answers the default (`""`, `false`). |
 | PUT | `/api/guilds/{guildID}/editing` | Replace it. Both `editor_role_id` (`""` for the default) and `anyone_may_create` are required; an unknown field, or a role that is not one of the server's, is **400**. |
@@ -200,7 +200,9 @@ Every channel this service posts into is recorded **per guild**, on the
 `guild_tables` row: the event table and the management table (below), and
 since 2026-09-04 the **board** (where cards go and what a native event's
 description points at), **past-events** (where a finished event's line goes)
-and **reminders** (where the hour-before and starting-now messages go). Until
+and **reminders** (where the hour-before and starting-now messages go); and
+since 2026-09-24 **new-events** (where each event not yet in past-events keeps
+the same line, edited in place). Until
 then the last three were one process-wide env var each, which made the
 service single-guild in every way but the tables — a second server's cards,
 past lines and reminders all landed in the first server's channels.

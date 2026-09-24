@@ -40,15 +40,16 @@ func TestSettingUpAServerMakesWhatIsMissingAndReusesWhatIsThere(t *testing.T) {
 	if table.BoardChannelID != "ch-events" || table.ChannelID != "ch-events" {
 		t.Errorf("board/table = %s/%s, want the existing #events reused", table.BoardChannelID, table.ChannelID)
 	}
-	if table.ManagementChannelID != "new-event-management" || table.PastChannelID != "new-past-events" || table.ReminderChannelID != "new-event-reminders" {
+	if table.ManagementChannelID != "new-event-management" || table.PastChannelID != "new-past-events" || table.ReminderChannelID != "new-event-reminders" ||
+		table.NewEventsChannelID != "new-new-events" {
 		t.Errorf("row = %+v; want the missing channels created", table)
 	}
 	forum, err := store.GuildForum("g7")
 	if err != nil || forum.ChannelID != "new-event-forum" || forum.TagFinished != "t3" {
 		t.Errorf("forum = %+v, %v", forum, err)
 	}
-	if created != 5 { // category, management, past, reminders, forum
-		t.Errorf("%d channels created, want 5", created)
+	if created != 6 { // category, management, past, reminders, new events, forum
+		t.Errorf("%d channels created, want 6", created)
 	}
 	var parented int
 	for _, c := range fake.recorded() {
@@ -56,7 +57,7 @@ func TestSettingUpAServerMakesWhatIsMissingAndReusesWhatIsThere(t *testing.T) {
 			parented++
 		}
 	}
-	if parented != 4 {
-		t.Errorf("%d channels created under the category, want 4", parented)
+	if parented != 5 {
+		t.Errorf("%d channels created under the category, want 5", parented)
 	}
 }

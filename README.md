@@ -153,15 +153,15 @@ operation.
 8. **Per server.** Invite the bot with the OAuth2 URL from the Developer
    Portal (scopes `bot` and `applications.commands`). On joining it sets the
    server up by itself — an **Events** category with `#events`,
-   `#event-management`, `#event-forum`, `#past-events` and
-   `#event-reminders`, reusing any channel of that name — and
+   `#event-management`, `#event-forum`, `#past-events`, `#event-reminders`
+   and `#new-events`, reusing any channel of that name — and
    `POST /api/guilds/{id}/setup` does the same on demand. To point it at
    channels of your own instead, record them — every channel is per guild,
    none is an env var:
    ```bash
    G=<guild id>; S=http://127.0.0.1:8312
    curl -s -X PUT $S/api/guilds/$G/channels -H 'Content-Type: application/json' \
-     -d '{"board_channel_id":"…","past_channel_id":"…","reminder_channel_id":"…"}'
+     -d '{"board_channel_id":"…","past_channel_id":"…","reminder_channel_id":"…","new_events_channel_id":"…"}'
    curl -s -X PUT $S/api/guilds/$G/table      -H 'Content-Type: application/json' -d '{"channel_id":"…"}'
    curl -s -X PUT $S/api/guilds/$G/management -H 'Content-Type: application/json' -d '{"channel_id":"…"}'
    curl -s -X PUT $S/api/guilds/$G/forum      -H 'Content-Type: application/json' -d '{"channel_id":"…"}'

@@ -230,7 +230,7 @@ func (s *Server) postOccurrencePastLine(ev *Event) error {
 		return err
 	}
 	_, err = s.discord.CreateMessage(pastChannelID, map[string]any{
-		"content":          pastEventLine(ev, roster),
+		"content":          foldedEventLine(ev, roster),
 		"allowed_mentions": map[string]any{"parse": []string{}},
 	})
 	if err != nil {

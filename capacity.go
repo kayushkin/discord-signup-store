@@ -276,7 +276,7 @@ func (s *Server) postPastEventLine(eventID int64) error {
 		return err
 	}
 	messageID, err := s.discord.CreateMessage(pastChannelID, map[string]any{
-		"content":          pastEventLine(ev, roster),
+		"content":          foldedEventLine(ev, roster),
 		"allowed_mentions": map[string]any{"parse": []string{}},
 	})
 	if err != nil {
@@ -289,13 +289,13 @@ func (s *Server) postPastEventLine(eventID int64) error {
 	return nil
 }
 
-// pastEventLine is a table row folded onto one line:
+// foldedEventLine is a table row folded onto one line — an event's line in
+// past events, and its line in #new-events before that:
 //
 //	<#thread>  📍  in my butt  ·  2/10 👥 Twili Midna, Slava
 //
-// Names, never mentions — this is posted, not edited, and a mention in a new
-// message pings.
-func pastEventLine(ev *Event, roster []Signup) string {
+// Names, never mentions — a mention in a new message pings.
+func foldedEventLine(ev *Event, roster []Signup) string {
 	attending, _ := splitRoster(roster)
 	attending = hostFirst(attending, ev.CreatedBy)
 	line := eventSummaryLine(ev)

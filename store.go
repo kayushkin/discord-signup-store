@@ -96,7 +96,10 @@ type Event struct {
 	// away from what we wrote) from a change of ours Discord has not taken yet
 	// (Discord's copy still says what we wrote). Bookkeeping, like the titles.
 	NativeWritten NativeWritten `json:"native_written"`
-	CreatedAt     int64         `json:"created_at"`
+	// NewEventsMessageID is the event's line in the guild's #new-events
+	// channel; '' when it has none.
+	NewEventsMessageID string `json:"new_events_message_id"`
+	CreatedAt          int64  `json:"created_at"`
 	UpdatedAt          int64  `json:"updated_at"`
 
 	// AttendingCount and WaitlistCount are computed by the read path. They are
@@ -344,6 +347,13 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	{"events", "native_ends_at_written", "INTEGER NOT NULL DEFAULT 0"},
 	{"events", "native_location_written", "TEXT NOT NULL DEFAULT ''"},
 	{"events", "native_written_at", "INTEGER NOT NULL DEFAULT 0"},
+
+	// The #new-events channel, per guild, and each event's line in it. The
+	// line is edited in place while the event is ahead or underway and deleted
+	// when the event's line goes to past events. Bookkeeping: written by the
+	// publisher, read only by the publisher.
+	{"guild_tables", "new_events_channel_id", "TEXT NOT NULL DEFAULT ''"},
+	{"events", "new_events_message_id", "TEXT NOT NULL DEFAULT ''"},
 
 	// How this person got onto the roster. Not cosmetic: it decides what
 	// un-marking Interested on Discord does to them. Someone who pressed Join
@@ -619,7 +629,7 @@ const eventColumns = `id, guild_id, channel_id, message_id, discord_scheduled_ev
 	title_written_at, native_title_written, forum_title_written,
 	native_name_written, native_description_written, native_starts_at_written,
 	native_ends_at_written, native_location_written, native_written_at,
-	created_at, updated_at`
+	new_events_message_id, created_at, updated_at`
 
 func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 	var e Event
@@ -631,7 +641,7 @@ func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 		&e.TitleWrittenAt, &e.NativeTitleWritten, &e.ForumTitleWritten,
 		&e.NativeWritten.Name, &e.NativeWritten.Description, &e.NativeWritten.StartsAt,
 		&e.NativeWritten.EndsAt, &e.NativeWritten.Location, &e.NativeWritten.At,
-		&e.CreatedAt, &e.UpdatedAt)
+		&e.NewEventsMessageID, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -1065,6 +1075,16 @@ func (s *Store) RecordNativeWrite(id int64, w NativeWrite) error {
 	args = append(args, id)
 	if _, err := s.db.Exec(`UPDATE events SET `+strings.Join(sets, ", ")+` WHERE id = ?`, args...); err != nil {
 		return fmt.Errorf("record native write: %w", err)
+	}
+	return nil
+}
+
+// SetNewEventsMessageID records the event's line in #new-events, or '' once
+// it is deleted. updated_at is left alone: this is the publisher noting what
+// it did.
+func (s *Store) SetNewEventsMessageID(id int64, messageID string) error {
+	if _, err := s.db.Exec(`UPDATE events SET new_events_message_id = ? WHERE id = ?`, messageID, id); err != nil {
+		return fmt.Errorf("set new-events message: %w", err)
 	}
 	return nil
 }

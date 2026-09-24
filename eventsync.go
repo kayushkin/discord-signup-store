@@ -159,13 +159,17 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 	// due? The second can be yes while the first is no: ten minutes pass with
 	// nobody joining, and the count the title shows is still the one from
 	// before the last three signups.
+	// A missing #new-events line counts as out of date too: the signature
+	// cannot see it, because a guild gaining the channel changes nothing
+	// about the event.
 	signature := eventPublishSignature(ev, roster)
+	current := signature == ev.PublishedSignature && !s.newEventsLineMissing(ev)
 	wantNative, wantForum := nativeEventName(ev), forumPostTitle(ev)
 	rename := titleRenameDue(ev, wantNative, wantForum, now())
-	if signature == ev.PublishedSignature && !rename {
+	if current && !rename {
 		return
 	}
-	if signature == ev.PublishedSignature {
+	if current {
 		// Title only. The card, the table and the description are already
 		// current; only the two renames go, and only the titles are recorded.
 		if err := s.renameForumPostOnly(ev); err != nil {
@@ -188,6 +192,10 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 	s.refreshTablesQuietly(ev.GuildID)
 	if err := s.refreshForumPost(ev, rename); err != nil {
 		log.Printf("[discord-signup] refresh forum post for event %d: %v", ev.ID, err)
+		published = false
+	}
+	if err := s.refreshNewEventsLine(ev, roster); err != nil {
+		log.Printf("[discord-signup] refresh new-events line for event %d: %v", ev.ID, err)
 		published = false
 	}
 	// The native event's description carries the live count and names and
@@ -255,7 +263,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	24 the table head puts title, time and place on lines of their own
 //	25 a 🗓️ before the time in the table head
 //	26 list lines lead with their emoji: "✅ **Going** (3/8): names"
-const publishFormatVersion = 26
+//	27 every event not yet in past events keeps its folded line in #new-events
+const publishFormatVersion = 27
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //
@@ -319,7 +328,7 @@ func (s *Server) RepublishStaleEvents(guildID string) {
 			log.Printf("[discord-signup] sweep event=%d: roster: %v", ev.ID, err)
 			continue
 		}
-		stale := eventPublishSignature(ev, roster) != ev.PublishedSignature
+		stale := eventPublishSignature(ev, roster) != ev.PublishedSignature || s.newEventsLineMissing(ev)
 		renameDue := titleRenameDue(ev, nativeEventName(ev), forumPostTitle(ev), now())
 		if !stale && !renameDue {
 			continue

@@ -69,7 +69,7 @@ func TestTheHostIsListedFirstWhenGoing(t *testing.T) {
 	if content, _ := RenderForumCard(ev, roster)["content"].(string); !strings.Contains(content, "<@u-kat>, <@u-al>, <@u-bo>") {
 		t.Errorf("forum card = %q, want the host first", content)
 	}
-	if line := pastEventLine(ev, roster); !strings.Contains(line, "__Kat__, Al, Bo") {
+	if line := foldedEventLine(ev, roster); !strings.Contains(line, "__Kat__, Al, Bo") {
 		t.Errorf("past line = %q, want the host first", line)
 	}
 	// A host who is not going moves nobody.

@@ -49,6 +49,7 @@ the event at all but the addresses of messages this service has written about it
 | `created_by` | TEXT | Discord user id of whoever made it. Grants edit rights, and gets them a place on their own roster. |
 | `native_name_written`, `native_description_written`, `native_starts_at_written`, `native_ends_at_written`, `native_location_written` | TEXT / INTEGER | What this service last wrote into the native event, in its own terms (name without the count, description without the roster, end as sent). Each is set only when that field was sent. The sync compares Discord's copy with these to tell an edit made in Discord's event screen from a change of ours Discord has not taken yet. Bookkeeping, not logged. |
 | `native_written_at` | INTEGER | When the above were last recorded; `0` means never, and the sync then treats a difference as ours not yet sent. |
+| `new_events_message_id` | TEXT | The event's line in its guild's `#new-events`; `''` when it has none. Cleared when the line is deleted — as the event's line goes to past events, or on cancelling. Bookkeeping. |
 | `thread_id` | TEXT | A discussion thread from when cards existed; nothing writes it now. Old ones are still archived when their event finishes. |
 | `forum_post_id` | TEXT | The event's post in the forum channel. One id reaches both the post and the card inside it. |
 | `published_signature` | TEXT | Fingerprint of everything that feeds a Discord copy, written only when a publish fully succeeds. `''` means never published, or the last publish failed part way. The minute sweep republishes anything that does not match. |
@@ -169,6 +170,7 @@ service has written. They are why a *UI* change needs storage at all.
 | `board_channel_id` | TEXT | Where this guild's cards are posted and what its native events point at. Per guild since 2026-09-04; before that a process-wide env var. Required before the Create form works. |
 | `past_channel_id` | TEXT | Where this guild's finished events leave their line. `''` keeps finished cards where they are. |
 | `reminder_channel_id` | TEXT | Where this guild's hour-before and starting-now reminders go. `''` turns reminders off for the guild without stamping anything. |
+| `new_events_channel_id` | TEXT | Where each of this guild's events keeps its line until it goes to past events. `''` means no such channel. |
 | `updated_at` | INTEGER | |
 
 ⚠️ **"Table" here means the UI thing** — a Discord message listing every
