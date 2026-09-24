@@ -330,3 +330,39 @@ func TestAReopenedEventUnarchivesItsForumPost(t *testing.T) {
 		t.Errorf("the reopening PATCH = %v, want archived:false in it", last)
 	}
 }
+
+// TestALiveEventsPostArchivedForQuietIsReopenedBeforeItsCardIsEdited: Discord
+// archives a forum post that has been quiet for a while, event ahead or not,
+// and refuses to edit a message in it (50083). Measured 2026-09-24 on two
+// events three weeks old, which then failed every publish once a minute.
+func TestALiveEventsPostArchivedForQuietIsReopenedBeforeItsCardIsEdited(t *testing.T) {
+	fake, store, srv := forumFake(t)
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Games",
+		StartsAt: time.Now().Add(48 * time.Hour).Unix()})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	postID := "post-1"
+	if ev, err = store.UpdateEvent(ev.ID, EventPatch{ForumPostID: &postID}); err != nil {
+		t.Fatalf("link post: %v", err)
+	}
+	archived := true
+	fake.on(http.MethodPatch, "/channels/post-1", func(w http.ResponseWriter, r *http.Request) {
+		calls := fake.recorded()
+		if a, ok := calls[len(calls)-1].Body["archived"].(bool); ok {
+			archived = a
+		}
+		fmt.Fprint(w, `{"id":"post-1"}`)
+	})
+	fake.on(http.MethodPatch, "/channels/post-1/messages/post-1", func(w http.ResponseWriter, r *http.Request) {
+		if archived {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"message":"Thread is archived","code":50083}`)
+			return
+		}
+		fmt.Fprint(w, `{"id":"post-1"}`)
+	})
+	if err := srv.refreshForumPost(ev, false); err != nil {
+		t.Errorf("refresh = %v, want the post reopened and the card edited", err)
+	}
+}

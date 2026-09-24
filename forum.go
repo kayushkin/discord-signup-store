@@ -268,11 +268,25 @@ func (s *Server) refreshForumPost(ev *Event, rename bool) error {
 		return nil
 	}
 
-	// The first message shares the post's id.
+	// The first message shares the post's id. Discord refuses to edit a
+	// message in an archived thread (50083), and archives a post that has been
+	// quiet for a while even though its event is still ahead — so for a live
+	// event the thread is patched first, which unarchives it, and the card
+	// after. A finished event goes the other way round: the card loses its
+	// buttons while the thread is still open, then the thread is archived.
+	if IsArchived(ev.Status) {
+		if err := s.discord.EditMessage(ev.ForumPostID, ev.ForumPostID, card); err != nil {
+			return fmt.Errorf("edit forum card: %w", err)
+		}
+		return s.patchForumThread(ev, forum, title, tag, rename)
+	}
+	if err := s.patchForumThread(ev, forum, title, tag, rename); err != nil {
+		return err
+	}
 	if err := s.discord.EditMessage(ev.ForumPostID, ev.ForumPostID, card); err != nil {
 		return fmt.Errorf("edit forum card: %w", err)
 	}
-	return s.patchForumThread(ev, forum, title, tag, rename)
+	return nil
 }
 
 // patchForumThread writes the thread's tag, its archived flag, and — only
