@@ -256,8 +256,8 @@ func (s *Server) handleSetGuildTable(w http.ResponseWriter, r *http.Request) {
 // guild.
 func (s *Server) handleSetGuildChannels(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		BoardChannelID    string `json:"board_channel_id"`
-		PastChannelID     string `json:"past_channel_id"`
+		BoardChannelID     string `json:"board_channel_id"`
+		PastChannelID      string `json:"past_channel_id"`
 		ReminderChannelID  string `json:"reminder_channel_id"`
 		NewEventsChannelID string `json:"new_events_channel_id"`
 	}

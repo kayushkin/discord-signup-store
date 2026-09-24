@@ -203,7 +203,7 @@ since 2026-09-04 the **board** (where cards go and what a native event's
 description points at), **past-events** (where a finished event's line goes)
 and **reminders** (where the hour-before and starting-now messages go); and
 since 2026-09-24 **new-events** (where each event not yet in past-events keeps
-the same line, edited in place). Until
+a message of its own: its #events text as plain content, edited in place). Until
 then the last three were one process-wide env var each, which made the
 service single-guild in every way but the tables — a second server's cards,
 past lines and reminders all landed in the first server's channels.

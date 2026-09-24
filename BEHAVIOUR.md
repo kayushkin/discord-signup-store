@@ -99,10 +99,11 @@ that this service's row is the source of truth, and an edit made in Discord's
 own event screen is taken as an edit like one from the form;
 **reminders checked** every minute. A finished event leaves **one line** in
 past-events — the table row folded flat — not a card of dead buttons. Until
-then the same line sits in **#new-events**, posted when the event is first
-published and edited in place as it changes, and deleted as the event's line
-arrives in past-events or it is cancelled — so an event is in exactly one of
-the two.
+then it has a message of its own in **#new-events** — the same text as its
+#events entry, without the buttons, so it can be forwarded whole — posted when
+the event is first published, edited in place as it changes, and deleted as
+the event's line arrives in past-events or it is cancelled. An event is in
+exactly one of the two.
 An organiser can finish one early with **End**, on the management table or the
 web page, once it has started; it takes the same path as the timer.
 

@@ -46,7 +46,7 @@ type GuildTable struct {
 	BoardChannelID    string `json:"board_channel_id"`    // where cards go, and what the native description points at
 	PastChannelID     string `json:"past_channel_id"`     // where a finished event's line goes
 	ReminderChannelID string `json:"reminder_channel_id"` // where the hour-before and starting-now messages go
-	// Where each event that has not reached past events keeps one line, edited
+	// Where each event that has not reached past events keeps a message, edited
 	// in place as it changes and deleted when its line goes to past events.
 	// Empty means the guild has no such channel.
 	NewEventsChannelID string `json:"new_events_channel_id"`

@@ -159,11 +159,11 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 	// due? The second can be yes while the first is no: ten minutes pass with
 	// nobody joining, and the count the title shows is still the one from
 	// before the last three signups.
-	// A missing #new-events line counts as out of date too: the signature
+	// A missing #new-events message counts as out of date too: the signature
 	// cannot see it, because a guild gaining the channel changes nothing
 	// about the event.
 	signature := eventPublishSignature(ev, roster)
-	current := signature == ev.PublishedSignature && !s.newEventsLineMissing(ev)
+	current := signature == ev.PublishedSignature && !s.newEventsMessageMissing(ev)
 	wantNative, wantForum := nativeEventName(ev), forumPostTitle(ev)
 	rename := titleRenameDue(ev, wantNative, wantForum, now())
 	if current && !rename {
@@ -194,8 +194,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 		log.Printf("[discord-signup] refresh forum post for event %d: %v", ev.ID, err)
 		published = false
 	}
-	if err := s.refreshNewEventsLine(ev, roster); err != nil {
-		log.Printf("[discord-signup] refresh new-events line for event %d: %v", ev.ID, err)
+	if err := s.refreshNewEventsMessage(ev, roster); err != nil {
+		log.Printf("[discord-signup] refresh new-events message for event %d: %v", ev.ID, err)
 		published = false
 	}
 	// The native event's description carries the live count and names and
@@ -264,7 +264,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	25 a 🗓️ before the time in the table head
 //	26 list lines lead with their emoji: "✅ **Going** (3/8): names"
 //	27 every event not yet in past events keeps its folded line in #new-events
-const publishFormatVersion = 27
+//	28 the #new-events message is the event's #events text, as plain content
+const publishFormatVersion = 28
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //
@@ -328,7 +329,7 @@ func (s *Server) RepublishStaleEvents(guildID string) {
 			log.Printf("[discord-signup] sweep event=%d: roster: %v", ev.ID, err)
 			continue
 		}
-		stale := eventPublishSignature(ev, roster) != ev.PublishedSignature || s.newEventsLineMissing(ev)
+		stale := eventPublishSignature(ev, roster) != ev.PublishedSignature || s.newEventsMessageMissing(ev)
 		renameDue := titleRenameDue(ev, nativeEventName(ev), forumPostTitle(ev), now())
 		if !stale && !renameDue {
 			continue

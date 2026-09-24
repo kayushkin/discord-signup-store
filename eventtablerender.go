@@ -147,6 +147,26 @@ type eventTableBlock struct {
 // many times one carrying none, so a fixed count would either waste most of a
 // message or overflow it.
 func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*Event) []any) eventTableBlock {
+	text := eventTableText(ev, roster, eventTableCharBudget, textDisplayLimit)
+
+	// One text block, one action row, its buttons, and the separator that
+	// divides this block from the one above it.
+	rowButtons := buttons(ev)
+	components := 2 + len(rowButtons)
+	if !first {
+		components++
+	}
+	return eventTableBlock{event: ev, text: text, buttons: rowButtons,
+		components: components, characters: len([]rune(text))}
+}
+
+// eventTableText is how #events writes an event: the headline one part to a
+// line, the forum post, then who is going, who might and who is waiting. Also
+// the whole of an event's message in #new-events, so the two read the same.
+//
+// budget sizes the name lists — half of it for Going, a quarter each for Maybe
+// and Waitlist — and limit is the most the text may run to.
+func eventTableText(ev *Event, roster []Signup, budget, limit int) string {
 	attending, waiting := splitRoster(roster)
 	attending = hostFirst(attending, ev.CreatedBy)
 
@@ -167,25 +187,15 @@ func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*
 	if len(attending) == 0 {
 		b.WriteString("nobody yet")
 	} else {
-		b.WriteString(namesWithin(attending, ev.CreatedBy, eventTableCharBudget/2))
+		b.WriteString(namesWithin(attending, ev.CreatedBy, budget/2))
 	}
 	if maybe := maybeOf(roster); len(maybe) > 0 {
-		b.WriteString("\n🤷 **Maybe**: " + namesWithin(maybe, ev.CreatedBy, eventTableCharBudget/4))
+		b.WriteString("\n🤷 **Maybe**: " + namesWithin(maybe, ev.CreatedBy, budget/4))
 	}
 	if len(waiting) > 0 {
-		b.WriteString("\n❌ **Waitlist**: " + namesWithin(waiting, ev.CreatedBy, eventTableCharBudget/4))
+		b.WriteString("\n❌ **Waitlist**: " + namesWithin(waiting, ev.CreatedBy, budget/4))
 	}
-	text := trimTo(b.String(), textDisplayLimit)
-
-	// One text block, one action row, its buttons, and the separator that
-	// divides this block from the one above it.
-	rowButtons := buttons(ev)
-	components := 2 + len(rowButtons)
-	if !first {
-		components++
-	}
-	return eventTableBlock{event: ev, text: text, buttons: rowButtons,
-		components: components, characters: len([]rune(text))}
+	return trimTo(b.String(), limit)
 }
 
 // packEventTable fills each message as full as it will go and starts another

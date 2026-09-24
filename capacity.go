@@ -289,8 +289,7 @@ func (s *Server) postPastEventLine(eventID int64) error {
 	return nil
 }
 
-// foldedEventLine is a table row folded onto one line — an event's line in
-// past events, and its line in #new-events before that:
+// foldedEventLine is a table row folded onto one line, for past events:
 //
 //	<#thread>  📍  in my butt  ·  2/10 👥 Twili Midna, Slava
 //

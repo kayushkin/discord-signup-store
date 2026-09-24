@@ -35,9 +35,9 @@ func callsTo(fake *fakeDiscord, method, path string) []recordedCall {
 	return out
 }
 
-// TestAnEventGetsOneLineInNewEventsEditedInPlace: the first publish posts the
+// TestAnEventGetsOneMessageInNewEventsEditedInPlace: the first publish posts the
 // line; a later change edits that same message rather than posting another.
-func TestAnEventGetsOneLineInNewEventsEditedInPlace(t *testing.T) {
+func TestAnEventGetsOneMessageInNewEventsEditedInPlace(t *testing.T) {
 	fake, store, srv, ev := newEventsFixture(t)
 	fake.on(http.MethodPost, "/channels/new/messages", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"id":"line-1"}`))
@@ -45,8 +45,17 @@ func TestAnEventGetsOneLineInNewEventsEditedInPlace(t *testing.T) {
 
 	srv.publishEventToDiscord(ev.ID, nil)
 	posted := callsTo(fake, http.MethodPost, "/channels/new/messages")
-	if len(posted) != 1 || !strings.Contains(posted[0].Body["content"].(string), "Roller skate") {
-		t.Fatalf("posts = %+v, want one line naming the event", posted)
+	if len(posted) != 1 {
+		t.Fatalf("posts = %+v, want one message", posted)
+	}
+	// The #events text, as plain content: no container and no buttons, so a
+	// forwarded copy carries all of it.
+	if content, _ := posted[0].Body["content"].(string); content != eventTableText(ev, nil, newEventsMessageLimit, newEventsMessageLimit) ||
+		!strings.Contains(content, "✅ **Going**") {
+		t.Errorf("content = %q, want the event's #events text", content)
+	}
+	if _, has := posted[0].Body["components"]; has {
+		t.Errorf("message carries components; want plain content only")
 	}
 	got, _ := store.GetEvent(ev.ID)
 	if got.NewEventsMessageID != "line-1" {
@@ -67,9 +76,9 @@ func TestAnEventGetsOneLineInNewEventsEditedInPlace(t *testing.T) {
 	}
 }
 
-// TestFinishingMovesTheLineOutOfNewEvents: when the event's line goes to past
+// TestFinishingMovesTheMessageOutOfNewEvents: when the event's line goes to past
 // events, its #new-events line is deleted.
-func TestFinishingMovesTheLineOutOfNewEvents(t *testing.T) {
+func TestFinishingMovesTheMessageOutOfNewEvents(t *testing.T) {
 	fake, store, srv, ev := newEventsFixture(t)
 	if err := store.SetNewEventsMessageID(ev.ID, "line-1"); err != nil {
 		t.Fatalf("seed: %v", err)
@@ -92,9 +101,9 @@ func TestFinishingMovesTheLineOutOfNewEvents(t *testing.T) {
 	}
 }
 
-// TestALineDeletedByHandIsPostedAgain: an edit that finds the message gone
+// TestAMessageDeletedByHandIsPostedAgain: an edit that finds the message gone
 // posts a fresh line rather than failing every publish.
-func TestALineDeletedByHandIsPostedAgain(t *testing.T) {
+func TestAMessageDeletedByHandIsPostedAgain(t *testing.T) {
 	fake, store, srv, ev := newEventsFixture(t)
 	if err := store.SetNewEventsMessageID(ev.ID, "line-gone"); err != nil {
 		t.Fatalf("seed: %v", err)
@@ -107,7 +116,7 @@ func TestALineDeletedByHandIsPostedAgain(t *testing.T) {
 		w.Write([]byte(`{"id":"line-2"}`))
 	})
 	got, _ := store.GetEvent(ev.ID)
-	if err := srv.refreshNewEventsLine(got, nil); err != nil {
+	if err := srv.refreshNewEventsMessage(got, nil); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	got, _ = store.GetEvent(ev.ID)
@@ -116,9 +125,9 @@ func TestALineDeletedByHandIsPostedAgain(t *testing.T) {
 	}
 }
 
-// TestTheSweepBackfillsAMissingLine: an event already published before the
+// TestTheSweepBackfillsAMissingMessage: an event already published before the
 // guild had #new-events gets its line from the every-minute sweep.
-func TestTheSweepBackfillsAMissingLine(t *testing.T) {
+func TestTheSweepBackfillsAMissingMessage(t *testing.T) {
 	fake, store, srv, ev := newEventsFixture(t)
 	fake.on(http.MethodPost, "/channels/new/messages", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"id":"line-1"}`))
