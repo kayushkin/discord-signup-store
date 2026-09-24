@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -79,6 +80,8 @@ func TestAnUnknownBotIDIsIndistinguishableFromNotMeAtTheImportGuard(t *testing.T
 		CreatorID: guardBotID,
 		Name:      "An event this bot published",
 		Status:    discordEventScheduled,
+		// An event with no start is refused before either guard is reached.
+		ScheduledStartTime: time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339),
 	}
 
 	t.Run("bot id known — the guard fires and the event is skipped", func(t *testing.T) {
@@ -266,6 +269,7 @@ func eventWithForumPost(t *testing.T, store *Store) *Event {
 	t.Helper()
 	ev, err := store.CreateEvent(Event{
 		GuildID: "g1", ChannelID: "c1", Name: "Test event", Capacity: 3,
+		StartsAt: time.Now().Add(48 * time.Hour).Unix(),
 	})
 	if err != nil {
 		t.Fatalf("create event: %v", err)
