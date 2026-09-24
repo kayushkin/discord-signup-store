@@ -10,32 +10,32 @@ import (
 	"time"
 
 	discordsignup "github.com/kayushkin/discord-signup-store"
+	"github.com/kayushkin/llm-bridge/servicesettings"
 )
 
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
 func main() {
+	// Every variable this process reads is declared in settings.go. A value
+	// that does not parse, or a set DISCORD_ variable nobody declared, stops
+	// the start here and names itself.
+	settings, err := discordsignup.NewSettingsRegistry(servicesettings.ProcessEnvironment())
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// Loopback by default, deliberately. The admin routes on this server edit
 	// rosters and have no auth of their own; nginx publishes only /interactions.
 	// A wildcard bind here would put the whole API on the network.
-	addr := envOr("DISCORD_SIGNUP_ADDR", "127.0.0.1:8312")
-	dataDir := os.Getenv("DISCORD_SIGNUP_DATA_DIR")
+	addr := settings.String(discordsignup.SettingListenAddress)
+	dataDir := settings.String(discordsignup.SettingDataDirectory)
 
 	// No fallback and no default. Without the right public key every request
 	// from Discord fails verification, the endpoint will not even save in the
 	// Developer Portal, and a service that started anyway would look healthy
 	// while answering 401 to everything.
-	publicKey := os.Getenv("DISCORD_APPLICATION_PUBLIC_KEY")
-	if publicKey == "" {
-		log.Fatal("DISCORD_APPLICATION_PUBLIC_KEY is not set — " +
-			"copy it from the Discord Developer Portal, General Information")
+	if err := settings.CheckRequired(); err != nil {
+		log.Fatal(err)
 	}
-	verifier, err := discordsignup.NewInteractionVerifier(publicKey)
+	verifier, err := discordsignup.NewInteractionVerifier(settings.String(discordsignup.SettingApplicationPublicKey))
 	if err != nil {
 		log.Fatalf("discord public key: %v", err)
 	}
@@ -49,12 +49,12 @@ func main() {
 	// The bot token is resolved from auth-store on first use, not read here, so
 	// a token rotation is picked up by a 401 retry rather than a restart.
 	discord := discordsignup.NewDiscordClient(
-		envOr("DISCORD_API_BASE", discordsignup.DiscordAPIBase),
+		settings.String(discordsignup.SettingDiscordAPIBase),
 		discordsignup.AuthStoreTokenResolver(
-			envOr("AUTH_STORE_URL", "http://127.0.0.1:8303"),
-			os.Getenv("AUTH_STORE_TOKEN"),
-			envOr("DISCORD_CREDENTIAL_PROVIDER", "discord"),
-			envOr("DISCORD_CREDENTIAL_ACCOUNT", "default"),
+			settings.String(discordsignup.SettingAuthStoreURL),
+			settings.String(discordsignup.SettingAuthStoreToken),
+			settings.String(discordsignup.SettingBotTokenCredentialProvider),
+			settings.String(discordsignup.SettingBotTokenCredentialAccount),
 		),
 	)
 
@@ -63,7 +63,7 @@ func main() {
 	// The zone a time typed into a Discord form is read in. One per deployment
 	// because a modal holds five fields and a timezone picker is not worth one
 	// of them; the form's own label prints it so nobody has to guess.
-	if zone := os.Getenv("DISCORD_DEFAULT_TIMEZONE"); zone != "" {
+	if zone := settings.String(discordsignup.SettingDefaultTimezone); zone != "" {
 		if _, err := time.LoadLocation(zone); err != nil {
 			log.Fatalf("DISCORD_DEFAULT_TIMEZONE=%q is not an IANA zone name: %v", zone, err)
 		}
@@ -75,20 +75,20 @@ func main() {
 
 	// The browser surface is optional. Without a redirect URL the login routes
 	// answer 501 and everything else — buttons, rosters, the API — still works.
-	if redirect := os.Getenv("DISCORD_OAUTH_REDIRECT_URL"); redirect != "" {
+	if redirect := settings.String(discordsignup.SettingOAuthRedirectURL); redirect != "" {
 		srvAPI.EnableWeb(&discordsignup.OAuthConfig{
 			// The application id doubles as the OAuth client id.
-			ClientID:    envOr("DISCORD_APPLICATION_ID", ""),
+			ClientID:    settings.String(discordsignup.SettingApplicationID),
 			RedirectURL: redirect,
 			// A DIFFERENT auth-store credential from the bot token. Two
 			// secrets with different blast radii should not share a row: the
 			// client secret can mint user logins, the bot token can act in
 			// every server.
 			ResolveClientSecret: discordsignup.AuthStoreTokenResolver(
-				envOr("AUTH_STORE_URL", "http://127.0.0.1:8303"),
-				os.Getenv("AUTH_STORE_TOKEN"),
-				envOr("DISCORD_CREDENTIAL_PROVIDER", "discord"),
-				envOr("DISCORD_OAUTH_CREDENTIAL_ACCOUNT", "oauth-client"),
+				settings.String(discordsignup.SettingAuthStoreURL),
+				settings.String(discordsignup.SettingAuthStoreToken),
+				settings.String(discordsignup.SettingBotTokenCredentialProvider),
+				settings.String(discordsignup.SettingOAuthClientSecretCredentialAccount),
 			),
 		})
 		log.Printf("web surface enabled, callback %s", redirect)
@@ -102,12 +102,12 @@ func main() {
 	// closes, because everything else here — buttons, rosters, the web page,
 	// the interaction endpoint — works without it, and refusing to boot over a
 	// socket would take all of that down with it. /healthz carries its state.
-	if os.Getenv("DISCORD_GATEWAY_DISABLED") == "" {
+	if !settings.Boolean(discordsignup.SettingGatewayDisabled) {
 		gatewaySupervisor := discordsignup.NewGatewaySupervisor(srvAPI, discordsignup.AuthStoreTokenResolver(
-			envOr("AUTH_STORE_URL", "http://127.0.0.1:8303"),
-			os.Getenv("AUTH_STORE_TOKEN"),
-			envOr("DISCORD_CREDENTIAL_PROVIDER", "discord"),
-			envOr("DISCORD_CREDENTIAL_ACCOUNT", "default"),
+			settings.String(discordsignup.SettingAuthStoreURL),
+			settings.String(discordsignup.SettingAuthStoreToken),
+			settings.String(discordsignup.SettingBotTokenCredentialProvider),
+			settings.String(discordsignup.SettingBotTokenCredentialAccount),
 		))
 		srvAPI.ReportGatewayStatus(gatewaySupervisor.Status)
 		// Never stopped: the process exits by signal and Discord times the
@@ -141,6 +141,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	srvAPI.RegisterHandlers(mux)
+	discordsignup.RegisterSettingsHandler(mux, settings)
 
 	srv := &http.Server{
 		Addr:              addr,

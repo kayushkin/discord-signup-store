@@ -193,15 +193,33 @@ type LeaveResult struct {
 	Promoted *Signup `json:"promoted,omitempty"`
 }
 
+// defaultDataDir is ~/.config/discord-signup-store.
+func defaultDataDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home: %w", err)
+	}
+	return filepath.Join(home, ".config", "discord-signup-store"), nil
+}
+
+// DefaultDataDir is the directory Open uses when given none, or empty when the
+// home directory is unknown, in which case Open refuses rather than guess.
+func DefaultDataDir() string {
+	dataDir, err := defaultDataDir()
+	if err != nil {
+		return ""
+	}
+	return dataDir
+}
+
 // Open opens or creates the roster database. dataDir defaults to
 // ~/.config/discord-signup-store.
 func Open(dataDir string) (*Store, error) {
 	if dataDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("resolve home: %w", err)
+		var err error
+		if dataDir, err = defaultDataDir(); err != nil {
+			return nil, err
 		}
-		dataDir = filepath.Join(home, ".config", "discord-signup-store")
 	}
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)

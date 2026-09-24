@@ -100,8 +100,8 @@ operation.
   modals arrive as HTTP interactions, but `GUILD_SCHEDULED_EVENT_USER_ADD` is
   delivered only over the gateway, so `gateway.go` holds one WebSocket. It asks
   for no privileged intents (`GuildScheduledEvents`, `GuildMessageReactions`,
-  `Guilds`). Set `DISCORD_GATEWAY_DISABLED` to run without it; the Interested
-  button then does not feed the roster.
+  `Guilds`). Set `DISCORD_GATEWAY_DISABLED=true` to run without it; the
+  Interested button then does not feed the roster.
 - **The bot's permissions.** Invite it with scope `bot` and permissions
   `17618224360528`: View Channel, Send Messages, Read Message History, Add
   Reactions, Manage Messages, Manage Channels (only for the first setup),
@@ -190,6 +190,12 @@ curl -s http://127.0.0.1:8312/events/1/history
 ```
 
 `CONTRACT.md` is the full route table.
+
+Every environment variable the service reads is declared once, in
+`settings.go`. `GET /api/settings` describes them (a secret shows only whether
+it is set), and the service refuses to start on a value that does not parse or
+on a set `DISCORD_` variable nobody declared. It is under `/api/`, not at
+`/settings`, because the public vhost refuses only `/api/`.
 
 ## Layout
 
