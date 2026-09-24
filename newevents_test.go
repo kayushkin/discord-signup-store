@@ -50,7 +50,7 @@ func TestAnEventGetsOneMessageInNewEventsEditedInPlace(t *testing.T) {
 	}
 	// The #events text, as plain content: no container and no buttons, so a
 	// forwarded copy carries all of it.
-	if content, _ := posted[0].Body["content"].(string); content != eventTableText(ev, nil, newEventsMessageLimit, newEventsMessageLimit) ||
+	if content, _ := posted[0].Body["content"].(string); !strings.HasPrefix(content, "### Roller skate\n🗓️ ") ||
 		!strings.Contains(content, "✅ **Going**") {
 		t.Errorf("content = %q, want the event's #events text", content)
 	}

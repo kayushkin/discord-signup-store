@@ -265,7 +265,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	26 list lines lead with their emoji: "✅ **Going** (3/8): names"
 //	27 every event not yet in past events keeps its folded line in #new-events
 //	28 the #new-events message is the event's #events text, as plain content
-const publishFormatVersion = 28
+//	29 the #new-events message's title is a heading
+const publishFormatVersion = 29
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //

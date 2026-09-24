@@ -46,7 +46,7 @@ func (s *Server) refreshNewEventsMessage(ev *Event, roster []Signup) error {
 		return nil
 	}
 	payload := map[string]any{
-		"content":          eventTableText(ev, roster, newEventsMessageLimit, newEventsMessageLimit),
+		"content":          eventTableText(ev, roster, newEventsTitle(ev), newEventsMessageLimit, newEventsMessageLimit),
 		"allowed_mentions": map[string]any{"parse": []string{}},
 	}
 	if ev.NewEventsMessageID != "" {
@@ -65,6 +65,14 @@ func (s *Server) refreshNewEventsMessage(ev *Event, roster []Signup) error {
 		return fmt.Errorf("post new-events message: %w", err)
 	}
 	return s.store.SetNewEventsMessageID(ev.ID, messageID)
+}
+
+// newEventsTitle is the event's name as a heading. Discord stacks one
+// author's messages under a single name, so without it a channel of them reads
+// as one long post; a heading is larger and sets a gap above itself, which
+// marks where each event starts.
+func newEventsTitle(ev *Event) string {
+	return "### " + escapeMarkdown(ev.Name)
 }
 
 // newEventsMessageLimit is Discord's cap on a plain message's content.

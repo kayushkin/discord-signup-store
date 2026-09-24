@@ -100,7 +100,8 @@ own event screen is taken as an edit like one from the form;
 **reminders checked** every minute. A finished event leaves **one line** in
 past-events — the table row folded flat — not a card of dead buttons. Until
 then it has a message of its own in **#new-events** — the same text as its
-#events entry, without the buttons, so it can be forwarded whole — posted when
+#events entry with the title as a heading, without the buttons, so it can be
+forwarded whole — posted when
 the event is first published, edited in place as it changes, and deleted as
 the event's line arrives in past-events or it is cancelled. An event is in
 exactly one of the two.

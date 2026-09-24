@@ -62,8 +62,15 @@ func eventHeadlineParts(ev *Event) (title, when, where string) {
 // spaced it oddly. The forum post goes on the line after, placed by the
 // caller.
 func eventTableHeadline(ev *Event) string {
+	title, _, _ := eventHeadlineParts(ev)
+	return eventHeadlineUnder(ev, title)
+}
+
+// eventHeadlineUnder is the same headline under a title of the caller's
+// choosing: #events prints the name in bold, #new-events as a heading.
+func eventHeadlineUnder(ev *Event, title string) string {
 	lines := []string{}
-	title, when, where := eventHeadlineParts(ev)
+	_, when, where := eventHeadlineParts(ev)
 	if when != "" {
 		when = "🗓️ " + when
 	}
@@ -147,7 +154,8 @@ type eventTableBlock struct {
 // many times one carrying none, so a fixed count would either waste most of a
 // message or overflow it.
 func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*Event) []any) eventTableBlock {
-	text := eventTableText(ev, roster, eventTableCharBudget, textDisplayLimit)
+	title, _, _ := eventHeadlineParts(ev)
+	text := eventTableText(ev, roster, title, eventTableCharBudget, textDisplayLimit)
 
 	// One text block, one action row, its buttons, and the separator that
 	// divides this block from the one above it.
@@ -160,18 +168,19 @@ func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*
 		components: components, characters: len([]rune(text))}
 }
 
-// eventTableText is how #events writes an event: the headline one part to a
-// line, the forum post, then who is going, who might and who is waiting. Also
-// the whole of an event's message in #new-events, so the two read the same.
+// eventTableText is how #events writes an event: the title, the time and
+// place one to a line, the forum post, then who is going, who might and who
+// is waiting. Also the whole of an event's message in #new-events, so the two
+// read the same; only the title's styling differs, so it is passed in.
 //
 // budget sizes the name lists — half of it for Going, a quarter each for Maybe
 // and Waitlist — and limit is the most the text may run to.
-func eventTableText(ev *Event, roster []Signup, budget, limit int) string {
+func eventTableText(ev *Event, roster []Signup, title string, budget, limit int) string {
 	attending, waiting := splitRoster(roster)
 	attending = hostFirst(attending, ev.CreatedBy)
 
 	var b strings.Builder
-	b.WriteString(eventTableHeadline(ev))
+	b.WriteString(eventHeadlineUnder(ev, title))
 	if ev.ForumPostID != "" {
 		fmt.Fprintf(&b, "\n<#%s>", ev.ForumPostID)
 	}
