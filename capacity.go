@@ -170,6 +170,15 @@ func (s *Server) SetCapacity(eventID int64, capacity int, actor string) (*Event,
 // count it had at the last signup, so raising a limit from the web page left
 // Discord telling the server "[3/8]" while the card underneath said 3/10.
 func (s *Server) applyEventEdit(before *Event, patch EventPatch, actor string) (*Event, []Signup, error) {
+	// Moving the start moves the end with it, keeping the length. The Discord
+	// form has no end field, so an edit from there leaves the old end behind:
+	// on 2026-09-24 a start moved a day later sat 18 hours after its own end,
+	// Discord refused every push of it, and the sync then copied Discord's old
+	// start back over the edit. An edit that names its own end keeps it.
+	if patch.StartsAt != nil && patch.EndsAt == nil && before.EndsAt != 0 {
+		movedEndsAt := before.EndsAt + (*patch.StartsAt - before.StartsAt)
+		patch.EndsAt = &movedEndsAt
+	}
 	if _, err := s.store.UpdateEvent(before.ID, patch); err != nil {
 		return nil, nil, err
 	}
@@ -223,8 +232,8 @@ func (s *Server) applyEventEdit(before *Event, patch EventPatch, actor string) (
 func (s *Server) ApplyEventForm(before *Event, values *EventFormResult, zone, actor string) (*Event, []Signup, error) {
 	// EndsAt is deliberately absent. The Discord form carries no end time, so
 	// including it here would send zero every time and wipe an end somebody set
-	// on the web page. A field the form does not collect is a field this must
-	// not touch.
+	// on the web page. applyEventEdit moves an existing end along with the
+	// start.
 	patch := EventPatch{
 		Name:        &values.Name,
 		StartsAt:    &values.StartsAt,

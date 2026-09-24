@@ -139,11 +139,12 @@ place and limit could all change and the only trace was the new value.
 | `field` | TEXT | Which one changed: `name`, `description`, `capacity`, `status`, `starts_at`, `ends_at`, `location`, `timezone`, `recurrence_rule`, `attending_role_id`, `waitlist_role_id`. |
 | `from_value` | TEXT | The old value, raw — a time as the integer it is stored as, not a rendering of it. Presentation belongs at the edge. |
 | `to_value` | TEXT | The new one. |
-| `actor` | TEXT | `web:<discord id>`, a raw Discord id from a form, or `api`. |
+| `actor` | TEXT | `web:<discord id>` from the web page, `discord:<discord id>` from a Discord form, `api`, or `discord-event-sync` for a change the sync copied from Discord's own event. |
 | `at` | INTEGER | When. |
 
 Written from `applyEventEdit`, which is the one function every edit passes
-through, so no surface can change an event and leave no trace. **Bookkeeping is
+through, so no surface can change an event and leave no trace, and from the
+Discord sync, which changes events without passing through it. **Bookkeeping is
 deliberately not logged** — message ids, thread and forum ids,
 `published_signature`, the reminder stamps. Those change without anybody editing
 anything, and recording them would bury the rows somebody cares about.

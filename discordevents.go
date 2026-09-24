@@ -299,21 +299,40 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 		}
 	}
 
+	// While an edit made here has not reached Discord, Discord's copy is the
+	// old one, not a newer edit. Copying its name, times or place back would
+	// undo the edit: on 2026-09-24 Discord refused a moved date, and this sync
+	// put the old date back twice with nothing in the history to show it. The
+	// republish sweep keeps retrying the push, and logs each failure.
+	roster, err := s.store.Roster(existing.ID, false)
+	if err != nil {
+		return false, false, err
+	}
+	discordHasOurLatest := eventPublishSignature(existing, roster) == existing.PublishedSignature
+
 	// Only push fields Discord owns. Capacity, roles and message_id are ours
 	// and must survive a sync — overwriting them here would reset the cap to
 	// unlimited every few minutes.
 	patch := EventPatch{}
-	if incoming := stripTitleDecorations(r.Name); existing.Name != incoming {
-		patch.Name = &incoming
-	}
-	if incoming := stripSignupPointer(r.Description); existing.Description != incoming {
-		patch.Description = &incoming
-	}
-	if existing.StartsAt != startsAt {
-		patch.StartsAt = &startsAt
-	}
-	if existing.EndsAt != endsAt {
-		patch.EndsAt = &endsAt
+	if discordHasOurLatest {
+		if incoming := stripTitleDecorations(r.Name); existing.Name != incoming {
+			patch.Name = &incoming
+		}
+		if incoming := stripSignupPointer(r.Description); existing.Description != incoming {
+			patch.Description = &incoming
+		}
+		if existing.StartsAt != startsAt {
+			patch.StartsAt = &startsAt
+		}
+		if existing.EndsAt != endsAt {
+			patch.EndsAt = &endsAt
+		}
+		if incoming := stripLocationPlaceholder(r.EntityMetadata.Location); existing.Location != incoming {
+			patch.Location = &incoming
+		}
+	} else {
+		log.Printf("[discord-signup] sync: event %d has changes Discord has not accepted yet; "+
+			"keeping ours rather than copying Discord's name, times and place", existing.ID)
 	}
 	// Closed is a decision made HERE that Discord cannot represent: its own
 	// statuses are scheduled, active, completed and cancelled, and a closed
@@ -325,9 +344,6 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 	if existing.Status != status && !(existing.Status == StatusClosed && status == StatusOpen) {
 		patch.Status = &status
 	}
-	if incoming := stripLocationPlaceholder(r.EntityMetadata.Location); existing.Location != incoming {
-		patch.Location = &incoming
-	}
 	if existing.DiscordInterestedCount != r.UserCount {
 		count := r.UserCount
 		patch.DiscordInterestedCount = &count
@@ -335,11 +351,23 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 	if patch == (EventPatch{}) {
 		return false, false, nil
 	}
-	if _, err := s.store.UpdateEvent(existing.ID, patch); err != nil {
+	after, err := s.store.UpdateEvent(existing.ID, patch)
+	if err != nil {
 		return false, false, err
+	}
+	// A change copied from Discord is an edit like any other, so it goes in
+	// the history. Without it a sync that overwrote somebody's edit left the
+	// edit on record and no sign of what undid it.
+	if err := s.store.LogEventUpdates(existing, after, syncEventUpdateActor); err != nil {
+		return false, false, fmt.Errorf("log sync changes to event %d: %w", existing.ID, err)
 	}
 	return true, false, nil
 }
+
+// syncEventUpdateActor marks a change in event_updates that the sync copied
+// from Discord's own event: an edit made in Discord's event screen, or a
+// value Discord filled in.
+const syncEventUpdateActor = "discord-event-sync"
 
 // parseDiscordTime turns Discord's ISO 8601 timestamp into unix seconds. An
 // empty or unparseable value becomes 0, which every read path already treats as

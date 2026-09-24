@@ -173,6 +173,7 @@ func TestMovingAFutureDateIsAnEditNotARollover(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 	store.Join(ev.ID, "alice", "Alice", JoinedViaButton)
+	markPublished(t, store, ev.ID)
 
 	moved := start + 2*86400
 	if _, _, err := srv.syncOneScheduledEvent(DiscordScheduledEvent{

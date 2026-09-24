@@ -107,7 +107,9 @@ Closed sets, defined in `vocabulary.go` and validated on write.
 Max attendees, Location, Description — prefilled when editing and empty when
 creating. There is no end-time field, and `ApplyEventForm` deliberately omits
 `EndsAt` from its patch: sending zero for a field the form never collected is
-how an end time set on the web page would get silently wiped. Five is
+how an end time set on the web page would get silently wiped. Moving the
+start moves an existing end with it, keeping the event's length, on every edit
+surface: an end left behind a moved start is an event Discord refuses. Five is
 Discord's hard ceiling on a modal, so description, recurrence and roles live on
 the web page instead.
 

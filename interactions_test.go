@@ -328,12 +328,11 @@ func TestEditButtonOpensAPrefilledFormAndSaves(t *testing.T) {
 	if got.Description != "Bring dice and snacks." {
 		t.Errorf("description = %q, want the edited value", got.Description)
 	}
-	// The form has no end time field, so editing from Discord must leave the
-	// one set on the web page exactly where it was. Sending zero for a field
-	// the form never collected is how that gets silently wiped.
-	if got.EndsAt != start+7200 {
-		t.Errorf("ends_at = %d, want it untouched at %d — a field the Discord form does "+
-			"not collect must not be cleared by it", got.EndsAt, start+7200)
+	// The form has no end time field. Sending zero for it would wipe the end
+	// set on the web page; leaving it where it was would strand it behind a
+	// moved start. It moves with the start and keeps its two hours.
+	if got.EndsAt != got.StartsAt+7200 {
+		t.Errorf("ends_at = %d, want %d — two hours after the moved start", got.EndsAt, got.StartsAt+7200)
 	}
 	if got.AttendingCount != 3 || got.WaitlistCount != 0 {
 		t.Errorf("%d attending / %d waiting, want 3 / 0 — raising the limit should have "+

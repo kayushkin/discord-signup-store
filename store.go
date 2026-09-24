@@ -810,6 +810,19 @@ func (s *Store) UpdateEvent(id int64, patch EventPatch) (*Event, error) {
 	if patch.EndsAt != nil {
 		add("ends_at", *patch.EndsAt)
 	}
+	// Checked against the values the row will end up with, as CreateEvent
+	// checks a new one. Discord refuses an event that ends before it starts,
+	// so a row like that can never be published.
+	startsAt, endsAt := existing.StartsAt, existing.EndsAt
+	if patch.StartsAt != nil {
+		startsAt = *patch.StartsAt
+	}
+	if patch.EndsAt != nil {
+		endsAt = *patch.EndsAt
+	}
+	if (patch.StartsAt != nil || patch.EndsAt != nil) && endsAt != 0 && endsAt < startsAt {
+		return nil, fmt.Errorf("%w: ends_at is before starts_at", ErrInvalidEvent)
+	}
 	if patch.Location != nil {
 		add("location", *patch.Location)
 	}
