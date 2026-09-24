@@ -294,6 +294,16 @@ func eventTableButtons(ev *Event) []any {
 	return buttons
 }
 
+// closeToggleSubject is what the Close/Reopen toggle opens or closes:
+// "waitlist" when the event is full, since a new signup can only be
+// waitlisted, and "signups" otherwise.
+func closeToggleSubject(ev *Event) string {
+	if eventIsFull(ev) {
+		return "waitlist"
+	}
+	return "signups"
+}
+
 // managementButtons is the row on the management table: what an organiser
 // does to an event, and nothing a member does.
 func managementButtons(ev *Event) []any {
@@ -304,14 +314,15 @@ func managementButtons(ev *Event) []any {
 			"label": "Repeat", "custom_id": RepeatCustomID(ev.ID)},
 	}
 	// One toggle whose label says which way it goes. Closed means nobody new
-	// can join while everyone on it stays; it is not cancelled.
+	// can join while everyone on it stays; it is not cancelled. On a full
+	// event the only way in is the waitlist, so the label names that.
 	switch ev.Status {
 	case StatusOpen:
 		buttons = append(buttons, map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
-			"label": "Close signups", "custom_id": CloseCustomID(ev.ID)})
+			"label": "Close " + closeToggleSubject(ev), "custom_id": CloseCustomID(ev.ID)})
 	case StatusClosed:
 		buttons = append(buttons, map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
-			"label": "Reopen signups", "custom_id": CloseCustomID(ev.ID)})
+			"label": "Reopen " + closeToggleSubject(ev), "custom_id": CloseCustomID(ev.ID)})
 	}
 	// End only while it is underway; before then Cancel is the way to stop it.
 	// With it the row is five buttons, which is all an action row holds —

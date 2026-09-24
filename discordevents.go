@@ -691,9 +691,15 @@ const titleRenameInterval = 10 * 60
 // thread name alike.
 const discordEventNameLimit = 100
 
+// eventIsFull reports whether a capped event has no room left, so a new
+// signup would go on the waitlist. An uncapped event is never full.
+func eventIsFull(ev *Event) bool {
+	return ev.Capacity > 0 && ev.AttendingCount >= ev.Capacity
+}
+
 // titlePrefix is "[Full] " for a capped event with no room, else empty.
 func titlePrefix(ev *Event) string {
-	if ev.Capacity > 0 && ev.AttendingCount >= ev.Capacity {
+	if eventIsFull(ev) {
 		return "[Full] "
 	}
 	return ""

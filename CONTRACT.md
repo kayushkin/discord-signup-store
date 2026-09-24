@@ -218,7 +218,8 @@ events that already exist.
 `PUT /api/guilds/{guildID}/management {"channel_id"}` points the management
 table at a channel and draws it. It is the event table drawn for organisers:
 the same events, the same packing, with **Edit**, **Repeat**, **Close signups** /
-**Reopen signups**, **End** (only once the event has started) and **Cancel** on
+**Reopen signups** (**Close waitlist** / **Reopen waitlist** while the event is
+full, since then a new signup can only be waitlisted), **End** (only once the event has started) and **Cancel** on
 each row instead of Join, Leave and Details, and **Create an event** on the last
 page. That is five buttons, all one action row holds. End asks first, privately,
 then does what the end time passing would do and ends the native Discord event

@@ -55,6 +55,18 @@ func TestTheManagementRowIsEditCloseCancel(t *testing.T) {
 	if got := labels(&Event{ID: 1, Status: StatusClosed}); strings.Join(got, ",") != "Edit,Repeat,Reopen signups,Cancel" {
 		t.Errorf("closed row = %v", got)
 	}
+	full := &Event{ID: 1, Status: StatusOpen, Capacity: 2, AttendingCount: 2}
+	if got := labels(full); strings.Join(got, ",") != "Edit,Repeat,Close waitlist,Cancel" {
+		t.Errorf("full open row = %v", got)
+	}
+	full.Status = StatusClosed
+	if got := labels(full); strings.Join(got, ",") != "Edit,Repeat,Reopen waitlist,Cancel" {
+		t.Errorf("full closed row = %v", got)
+	}
+	roomLeft := &Event{ID: 1, Status: StatusOpen, Capacity: 3, AttendingCount: 2}
+	if got := labels(roomLeft); strings.Join(got, ",") != "Edit,Repeat,Close signups,Cancel" {
+		t.Errorf("row with room left = %v", got)
+	}
 	for _, b := range managementButtons(&Event{ID: 1, Status: StatusOpen}) {
 		m := b.(map[string]any)
 		if m["label"] == "Cancel" && m["style"] != buttonStyleDanger {

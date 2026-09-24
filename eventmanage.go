@@ -35,9 +35,17 @@ func (s *Server) handleCloseToggle(w http.ResponseWriter, in *Interaction, event
 	var next, said string
 	switch ev.Status {
 	case StatusOpen:
-		next, said = StatusClosed, fmt.Sprintf("Signups for **%s** are closed. Nobody new can join; everyone on it stays.", ev.Name)
+		if eventIsFull(ev) {
+			next, said = StatusClosed, fmt.Sprintf("The waitlist for **%s** is closed. Nobody new can join it; everyone on the event and the waitlist stays.", ev.Name)
+		} else {
+			next, said = StatusClosed, fmt.Sprintf("Signups for **%s** are closed. Nobody new can join; everyone on it stays.", ev.Name)
+		}
 	case StatusClosed:
-		next, said = StatusOpen, fmt.Sprintf("Signups for **%s** are open again.", ev.Name)
+		if eventIsFull(ev) {
+			next, said = StatusOpen, fmt.Sprintf("The waitlist for **%s** is open again.", ev.Name)
+		} else {
+			next, said = StatusOpen, fmt.Sprintf("Signups for **%s** are open again.", ev.Name)
+		}
 	default:
 		s.replyEphemeral(w, fmt.Sprintf("**%s** is %s, so there are no signups to open or close.", ev.Name, ev.Status))
 		return
