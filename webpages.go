@@ -77,6 +77,9 @@ type pageData struct {
 	// those of them not going on the current date.
 	PinnedIDs  map[string]bool
 	PinnedAway []EventPin
+	// InvitedIDs are the people invited who have not answered, space
+	// separated, so a person picked in Add someone can say so.
+	InvitedIDs string
 	// FreePlaces is how many places are neither taken nor held, on an event
 	// with a limit: what an invite could hold.
 	FreePlaces int
@@ -134,6 +137,7 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 	"localTime": localTimeHTML,
 	"dateBox":   dateBox,
 	"clockTime": clockTime,
+	"shortTime": shortTime,
 	// percent is part of whole as a width, capped at 100 so a list taken
 	// over its limit fills the bar rather than spilling out of it.
 	"percent": func(part, whole int) int {

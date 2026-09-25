@@ -5,7 +5,7 @@
 {{define "locationinput"}}
 <div class="location-input" data-location>
   <div class="location-row">
-    <input name="location" value="{{.}}" placeholder="An address, a place name, or a Google Maps link" autocomplete="off">
+    <input name="location" value="{{.}}" placeholder="Address, place or Maps link" autocomplete="off">
     <a class="btn-sm map-search" href="https://www.google.com/maps" target="_blank" rel="noopener" data-map-search>{{template "pin"}} Find on Google Maps</a>
   </div>
   <iframe class="map-preview" data-map-preview title="Map of the location" loading="lazy" referrerpolicy="no-referrer-when-downgrade" hidden></iframe>
@@ -159,8 +159,9 @@
       {{range $i, $s := .Going}}
       <li class="person">
         <span class="place">{{add $i 1}}</span>
-        <span class="who">{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}{{if index $.PinnedIDs $s.DiscordUserID}} <span class="pin-mark" title="Pinned: a place on every date">{{template "pin"}}</span>{{end}}</span>
-        <span class="when">joined {{localTime $s.SignedUpAt}}</span>
+        <span class="person-main">
+          <span class="who">{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}{{if index $.PinnedIDs $s.DiscordUserID}} <span class="pin-mark" title="Pinned: a place on every date">{{template "pin"}}</span>{{end}}</span>
+          <span class="when">joined {{shortTime $s.SignedUpAt}}</span></span>
         {{if $canManage}}<span class="row-actions">
           {{if $ev.RecurrenceRule}}{{$pinned := index $.PinnedIDs $s.DiscordUserID}}
           <form method="post" action="/events/{{$ev.ID}}/pins" data-async>
@@ -195,8 +196,9 @@
       {{range .Waiting}}
       <li class="person">
         <span class="place wait" title="Number {{.WaitlistPlace}} in line">#{{.WaitlistPlace}}</span>
-        <span class="who">{{person .ReadableName .DisplayName .DiscordUserID}}</span>
-        <span class="when">joined {{localTime .SignedUpAt}}</span>
+        <span class="person-main">
+          <span class="who">{{person .ReadableName .DisplayName .DiscordUserID}}</span>
+          <span class="when">joined {{shortTime .SignedUpAt}}</span></span>
         {{if $canManage}}<span class="row-actions">
           <span class="mover">
             <form method="post" action="/events/{{$ev.ID}}/waitlist/move" data-async>
@@ -229,8 +231,9 @@
       {{range .Maybes}}
       <li class="person">
         <span class="place muted">?</span>
-        <span class="who">{{person .ReadableName .DisplayName .DiscordUserID}}</span>
-        <span class="when">since {{localTime .StateChangedAt}}</span>
+        <span class="person-main">
+          <span class="who">{{person .ReadableName .DisplayName .DiscordUserID}}</span>
+          <span class="when">since {{shortTime .StateChangedAt}}</span></span>
         {{if $canManage}}<span class="row-actions">
           <form method="post" action="/events/{{$ev.ID}}/roster/promote" data-async
                 data-confirm="Give {{or .ReadableName .DisplayName}} a place now{{if $ev.Capacity}}, past the limit if it is full{{end}}? They will be messaged.">
@@ -256,7 +259,7 @@
          a name is never sent, since two members can share one. Then the box
          becomes that person, and what can be done with them appears under
          their name. */}}
-    <form method="post" action="/events/{{$ev.ID}}/invite" data-async data-member-search="/events/{{$ev.ID}}/members" class="add-form"{{if .PlaceFreesOnLeave}} data-place-frees{{end}}>
+    <form method="post" action="/events/{{$ev.ID}}/invite" data-async data-member-search="/events/{{$ev.ID}}/members" class="add-form"{{if .PlaceFreesOnLeave}} data-place-frees{{end}} data-invited="{{.InvitedIDs}}">
       {{/* The search box finds one member at a time; each pick joins the
            list under it as a hidden discord_user_id. Names are never sent —
            two members can share one. */}}
@@ -334,8 +337,9 @@
     <ol class="people">
       {{range .Invites}}
       <li class="person">
-        <span class="who">{{person .ReadableName .DisplayName .DiscordUserID}}</span>
-        <span class="when">invited {{localTime .At}}</span>
+        <span class="person-main">
+          <span class="who">{{person .ReadableName .DisplayName .DiscordUserID}}</span>
+          <span class="when">invited {{shortTime .At}}</span></span>
         <span class="row-actions">
           {{if and .HoldsPlace (not .HoldEndedAt)}}
           <span class="pill held">place held</span>
@@ -365,7 +369,7 @@
     {{if .EventLog}}
     <div class="table-scroll"><table class="log">
       {{range .EventLog}}
-      <tr><td class="meta nowrap">{{localTime .At}}</td>
+      <tr><td class="meta nowrap">{{shortTime .At}}</td>
           <td>{{.Subject}}</td>
           <td>{{.What}}</td>
           <td class="meta">{{.By}}</td></tr>

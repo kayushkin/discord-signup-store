@@ -35,7 +35,7 @@ a.event-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .datebox{flex:none;width:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;
   background:#1b1c20;border:1px solid var(--line);border-radius:10px;padding:6px 0;line-height:1.1}
 .datebox.none{font-size:11px;color:var(--dim);height:62px}
-.db-dow,.db-mon{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim)}
+.db-dow,.db-mon{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim)}
 .db-day{font-size:22px;font-weight:700;margin:1px 0}
 .ec-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .ec-title{font-weight:600;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -106,7 +106,7 @@ details.aka[open] .caret{transform:rotate(180deg)}
 .aka-pop{position:absolute;left:0;top:calc(100% + 6px);z-index:20;min-width:160px;max-width:260px;
   background:#2f3136;border:1px solid var(--line);border-radius:8px;padding:8px 10px;
   box-shadow:0 8px 24px #0007;font-size:13px;white-space:normal}
-.aka-label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin-bottom:2px}
+.aka-label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin-bottom:2px}
 .bad{color:var(--bad)}
 .small{font-size:13px}
 .nowrap{white-space:nowrap}
@@ -162,7 +162,9 @@ main:has(.event-layout){max-width:1140px}
 .icon-btn.ok:hover{background:#2eb87222;color:var(--ok)}
 .field-edit label{margin:0;font-size:12px}
 .field-edit label input,.field-edit label select{margin-top:4px}
-.editbar{display:flex;align-items:center;gap:6px;margin-top:8px}
+.editbar{display:flex;align-items:center;gap:8px;margin-top:8px}
+.editbar .icon-btn{border-color:var(--line);margin:0}
+.editbar form,.editbar > *{vertical-align:middle}
 .field-error{color:var(--bad);font-size:13px;margin-left:6px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 @media (max-width:600px){.grid3,.grid2{grid-template-columns:1fr}}
@@ -170,13 +172,16 @@ input.narrow,select.narrow{max-width:260px}
 
 /* People lists. */
 ol.people{list-style:none;margin:4px 0 0;padding:0}
-.person{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #2d2f35;flex-wrap:wrap}
+.person{display:flex;align-items:center;gap:6px 12px;padding:9px 0;border-bottom:1px solid #2d2f35;flex-wrap:wrap}
+.person-main{flex:1 1 140px;min-width:0;display:flex;flex-direction:column;gap:1px}
+.person-main .when{font-size:12px}
+.person-main .who{flex:none}
 .person:last-child{border-bottom:0}
 .place{flex:none;min-width:30px;text-align:center;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
 .place.wait{background:#e8a33d1f;color:var(--warn);border-radius:6px;padding:2px 6px;font-weight:600}
 .who{flex:1 1 140px;min-width:0}
 .when{color:var(--dim);font-size:12px}
-.row-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
+.row-actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
 .row-actions form{margin:0}
 .mover{display:inline-flex;border:1px solid var(--line);border-radius:7px}
 .mover form{display:inline-flex}
@@ -250,7 +255,7 @@ label.force-tile:has(input:checked) .tile-box{background:var(--warn);border-colo
 .choice-title{display:flex;align-items:center;flex-wrap:wrap;gap:4px 7px;font-weight:600}
 .choice.force{border-color:#e8a33d55;background:linear-gradient(180deg,#e8a33d0f,transparent 70%)}
 .choice.force .choice-title{color:var(--warn)}
-.tag{font-size:11px;font-weight:500;color:var(--warn);border:1px solid #e8a33d55;border-radius:999px;padding:0 7px}
+.tag{font-size:12px;font-weight:500;color:var(--warn);border:1px solid #e8a33d55;border-radius:999px;padding:0 7px}
 .choice > button{align-self:flex-start}
 .segmented{display:flex;border:1px solid #e8a33d66;border-radius:8px;overflow:hidden;align-self:flex-start}
 .seg{background:transparent;color:var(--ink);border:0;border-radius:0;padding:7px 14px;font-size:14px}
@@ -288,6 +293,53 @@ table.log td{vertical-align:top}
   table.log td{border:0;padding:0}
   table.log td:first-child{grid-column:1 / -1;font-size:12px}
   table.log td:nth-child(4){grid-column:1 / -1;font-size:12px}
+}
+
+/* Phones. Field labels go above their values, lists get room to breathe,
+   and nothing a thumb needs is under 40 pixels. */
+.form-actions{display:flex;gap:10px;align-items:center;margin-top:22px}
+.count-word{display:none}
+@media (max-width:600px){
+  main{padding:14px 12px 60px}
+  header{padding:10px 12px}
+  .card{padding:14px}
+  .title-row h2{font-size:20px}
+  .facts .field{grid-template-columns:1fr;gap:3px}
+  .facts dt{font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .facts dd{grid-column:1}
+  .field-view{justify-content:space-between}
+  .field-view > span:first-child{flex:1}
+  .person .place{min-width:24px}
+  .choice-title{font-size:15px}
+  .segmented{align-self:stretch}
+  .segmented .seg{flex:1}
+  a.event-card .ec-title{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  a.event-card .ec-meta{white-space:normal}
+  /* The names page: one card per person, the box and Save on one line. */
+  .names-add > div{flex:1 1 100%}
+  .names-add input{max-width:none!important}
+  table.names-table,table.names-table tbody{display:block}
+  table.names-table tr:first-child{display:none}
+  table.names-table tr{display:grid;grid-template-columns:1fr auto;gap:8px 10px;padding:12px 0;border-bottom:1px solid var(--line)}
+  table.names-table td{border:0;padding:0}
+  table.names-table td:nth-child(2){grid-column:1 / -1;order:3}
+  table.names-table td.count{color:var(--dim);font-size:13px}
+  table.names-table .count-word{display:inline}
+  table.names-table form.row{flex-wrap:nowrap}
+  table.names-table form input{max-width:none!important;flex:1}
+}
+@media (pointer:coarse){
+  .icon-btn{width:40px;height:40px}
+  .icon-btn.edit{margin-top:-8px;margin-bottom:-8px}
+  .btn-sm{min-height:38px;padding:7px 12px}
+  .mover{gap:0}
+  .mover .icon-btn,.mover form .icon-btn{width:40px;height:38px}
+  .map-link{padding:8px 4px;margin:-8px 0}
+  .row-actions{gap:8px}
+  .seg{padding:10px 16px}
+  .seg-control button{padding:10px 8px}
+  button,.btn{min-height:40px}
+  details.aka summary{padding:4px 0}
 }
 
 /* Dialog and toast. */
@@ -334,6 +386,13 @@ dialog.dialog label{margin:14px 0 0}
     el.querySelector(".db-dow").textContent = dow.format(when);
     el.querySelector(".db-day").textContent = day.format(when);
     el.querySelector(".db-mon").textContent = mon.format(when);
+    el.title = fmt.format(when);
+  });
+  var short = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  document.querySelectorAll("time.ts-short").forEach(function (el) {
+    var when = new Date(el.getAttribute("datetime"));
+    if (isNaN(when.getTime())) return;
+    el.textContent = short.format(when);
     el.title = fmt.format(when);
   });
   document.querySelectorAll("time.clock").forEach(function (el) {
@@ -713,7 +772,9 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
       }
       var sub = document.createElement("div"); sub.className = "picked-sub";
       sub.textContent = m.pasted ? "Pasted id · checked against the server when you go ahead"
-        : "@" + m.username + " · " + (standing[m.on_roster] || "not on this event yet");
+        : "@" + m.username + " · " + (standing[m.on_roster] ||
+          ((" " + (form.getAttribute("data-invited") || "") + " ").indexOf(" " + m.user_id + " ") >= 0
+            ? "invited, no answer yet" : "not on this event yet"));
       text.appendChild(nameEl); text.appendChild(sub);
       var id = document.createElement("input");
       id.type = "hidden"; id.name = "discord_user_id"; id.value = m.user_id;

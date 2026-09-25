@@ -440,7 +440,7 @@ func (s *Server) webRosterLink(ev *Event) string {
 	if origin == "" {
 		return ""
 	}
-	return fmt.Sprintf("-# 🌐 [Manage the roster on the web](%s/events/%d)", origin, ev.ID)
+	return fmt.Sprintf("-# 🌐 [Roster management settings](%s/events/%d)", origin, ev.ID)
 }
 
 // webOrigin is where the web pages are served, taken from the OAuth

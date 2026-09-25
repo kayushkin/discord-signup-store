@@ -73,6 +73,18 @@ func dateBox(unix int64) template.HTML {
 		t.Format(time.RFC3339), t.Format("Mon 2 Jan 2006, 15:04"), t.Format("Mon"), t.Day(), t.Format("Jan")))
 }
 
+// shortTime is an instant as a short date and time — "Sep 25, 9:24 PM" —
+// for lists, where the full form wraps on a phone. The full one is its
+// tooltip; both are rewritten into the reader's zone.
+func shortTime(unix int64) template.HTML {
+	if unix == 0 {
+		return template.HTML("—")
+	}
+	t := time.Unix(unix, 0).UTC()
+	return template.HTML(fmt.Sprintf(`<time class="ts-short" datetime="%s">%s UTC</time>`,
+		t.Format(time.RFC3339), t.Format("Jan 2, 15:04")))
+}
+
 // clockTime is the time of day alone, rewritten into the reader's zone.
 func clockTime(unix int64) template.HTML {
 	t := time.Unix(unix, 0).UTC()

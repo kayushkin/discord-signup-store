@@ -187,6 +187,13 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		Notice:            notice,
 		Error:             strings.Join(problems, " "),
 	}
+	var unanswered []string
+	for _, inv := range invites {
+		if inv.CurrentState == "" {
+			unanswered = append(unanswered, inv.DiscordUserID)
+		}
+	}
+	data.InvitedIDs = strings.Join(unanswered, " ")
 	data.PinnedIDs = map[string]bool{}
 	going := map[string]bool{}
 	for _, sg := range roster {
