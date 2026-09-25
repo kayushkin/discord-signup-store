@@ -9,10 +9,11 @@ import (
 )
 
 // The names page: one place to set the short name each person is shown by on
-// Discord. It lists everyone on any list — going, maybe or waitlisted — in the
-// servers where the viewer may edit every event, and only lets them name those
-// people: naming someone changes how every table shows them, which is an
-// organiser's call, not any member's.
+// Discord and on these pages. Only site admins and a server's owner may open
+// it — anyone else gets a 404, and the home page does not link it. A short
+// name is one per person across every server, so it is the call of whoever
+// runs the bot, or owns the server, and not of every organiser. A site admin
+// sees everyone on a list in every server; an owner, the people in theirs.
 
 // namedPerson is one row on the names page.
 type namedPerson struct {
@@ -57,9 +58,45 @@ func (s *Store) PeopleOnListsIn(guildIDs []string) ([]namedPerson, error) {
 	return out, rows.Err()
 }
 
+// guildsWhereMayName is every server the bot is in for a site admin, and
+// for anyone else the ones they own.
+func (s *Server) guildsWhereMayName(session *WebSession) ([]Guild, error) {
+	if s.discord == nil {
+		return nil, errors.New("no discord client configured")
+	}
+	admin, err := s.store.IsSiteAdmin(session.DiscordUserID)
+	if err != nil {
+		return nil, err
+	}
+	botGuilds, err := s.discord.ListBotGuilds()
+	if err != nil {
+		return nil, fmt.Errorf("list bot guilds: %w", err)
+	}
+	var out []Guild
+	for _, g := range botGuilds {
+		if admin {
+			out = append(out, g)
+			continue
+		}
+		// Discord reports every permission for a server's owner, so anyone
+		// without Administrator is not the owner and costs no lookup.
+		if !session.IsMemberOf(g.ID) || session.GuildPermissions[g.ID]&permissionAdministrator == 0 {
+			continue
+		}
+		ownerID, err := s.discord.GuildOwnerID(g.ID)
+		if err != nil {
+			return nil, fmt.Errorf("read the owner of %s: %w", g.Name, err)
+		}
+		if ownerID == session.DiscordUserID {
+			out = append(out, g)
+		}
+	}
+	return out, nil
+}
+
 // nameableBy is the servers whose people a viewer may name, and those people.
 func (s *Server) nameableBy(session *WebSession) ([]Guild, []namedPerson, error) {
-	guilds, err := s.guildsWhereMayEditAll(session)
+	guilds, err := s.guildsWhereMayName(session)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -76,13 +113,14 @@ func (s *Server) handleWebNames(w http.ResponseWriter, r *http.Request) {
 	if session == nil {
 		return
 	}
-	data := pageData{Title: "Names", Session: session, Notice: r.URL.Query().Get("notice")}
+	data := pageData{Title: "Names", Session: session, Notice: r.URL.Query().Get("notice"), MayName: true}
 	guilds, people, err := s.nameableBy(session)
-	switch {
-	case err != nil:
+	if err == nil && len(guilds) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
 		data.Error = "Could not load the names: " + err.Error()
-	case len(guilds) == 0:
-		data.Error = "Names can be set by whoever may edit every event in a server, and you may not in any this bot is in."
 	}
 	data.NamePeople = people
 	data.NameableGuilds = guilds
@@ -126,8 +164,12 @@ func (s *Server) handleWebSetName(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if person == nil && len(guilds) == 0 {
+		http.NotFound(w, r)
+		return
+	}
 	if person == nil {
-		http.Error(w, "that person is not in a server where you may edit every event", http.StatusForbidden)
+		http.Error(w, "that person is not in a server where you may name people", http.StatusForbidden)
 		return
 	}
 	var notice string
@@ -167,6 +209,10 @@ func (s *Server) handleWebNameSearch(w http.ResponseWriter, r *http.Request) {
 	allowed := false
 	for _, g := range guilds {
 		allowed = allowed || g.ID == guildID
+	}
+	if len(guilds) == 0 {
+		http.NotFound(w, r)
+		return
 	}
 	if !allowed {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "you may not name people in that server"})

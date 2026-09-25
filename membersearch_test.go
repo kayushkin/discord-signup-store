@@ -124,8 +124,8 @@ func TestAddingByIDTakesTheNameFromDiscord(t *testing.T) {
 	})
 	ev := publishedEvent(t, store, 4)
 
-	rec := postForm(t, mux, token, eventPath(ev)+"/roster/add", url.Values{"discord_user_id": {"222"}})
-	if !strings.Contains(rec.Header().Get("Location"), url.QueryEscape("Added Alfie.")) {
+	rec := postForm(t, mux, token, eventPath(ev)+"/roster/add", url.Values{"discord_user_id": {"222"}, "list": {StateAttending}})
+	if !strings.Contains(rec.Header().Get("Location"), url.QueryEscape("Alfie is going now")) {
 		t.Errorf("redirected to %s", rec.Header().Get("Location"))
 	}
 	roster, _ := store.Roster(ev.ID, false)
@@ -145,7 +145,7 @@ func TestAnIDThatIsNotAMemberAddsNobody(t *testing.T) {
 	ev := publishedEvent(t, store, 4)
 
 	for _, id := range []string{"404404", ""} {
-		rec := postForm(t, mux, token, eventPath(ev)+"/roster/add", url.Values{"discord_user_id": {id}})
+		rec := postForm(t, mux, token, eventPath(ev)+"/roster/add", url.Values{"discord_user_id": {id}, "list": {StateAttending}})
 		if !strings.Contains(rec.Header().Get("Location"), "Nobody+was+added") {
 			t.Errorf("id %q: redirected to %s", id, rec.Header().Get("Location"))
 		}

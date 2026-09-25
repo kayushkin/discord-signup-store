@@ -34,6 +34,11 @@ var ErrInvalidEvent = errors.New("invalid event")
 // other end needs to be told.
 var ErrEventNotOpen = errors.New("event is not open for signups")
 
+// ErrEventFull is returned when someone tries to join a full event whose
+// organiser turned its waitlist off. Distinct from ErrEventNotOpen because
+// signups are open: a place freeing up lets the next person to press Join in.
+var ErrEventFull = errors.New("event is full and has no waitlist")
+
 // Store is the roster database.
 type Store struct {
 	db      *sql.DB
@@ -99,8 +104,12 @@ type Event struct {
 	// NewEventsMessageID is the event's message in the guild's #new-events
 	// channel; '' when it has none.
 	NewEventsMessageID string `json:"new_events_message_id"`
-	CreatedAt          int64  `json:"created_at"`
-	UpdatedAt          int64  `json:"updated_at"`
+	// WaitlistDisabled refuses someone joining a full event instead of
+	// putting them on the waitlist; anyone already waiting stays and still
+	// moves up in order. Off — the zero value — is the ordinary waitlist.
+	WaitlistDisabled bool  `json:"waitlist_disabled"`
+	CreatedAt        int64 `json:"created_at"`
+	UpdatedAt        int64 `json:"updated_at"`
 
 	// AttendingCount and WaitlistCount are computed by the read path. They are
 	// never stored, so they can never disagree with the signups table.
@@ -171,6 +180,9 @@ type SignupUpdate struct {
 	// when somebody last saw it, and copying it here would freeze a stale
 	// spelling into an append-only table that can never be corrected.
 	DisplayName string `json:"display_name"`
+	// ReadableName is the short name set for them, joined on read for the
+	// same reason.
+	ReadableName string `json:"readable_name,omitempty"`
 }
 
 // JoinResult is what happened when someone pressed Join.
@@ -372,6 +384,11 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// publisher, read only by the publisher.
 	{"guild_tables", "new_events_channel_id", "TEXT NOT NULL DEFAULT ''"},
 	{"events", "new_events_message_id", "TEXT NOT NULL DEFAULT ''"},
+
+	// Whether a full event refuses people rather than taking them onto a
+	// waitlist. Off by default, so every event made before the switch keeps
+	// its waitlist.
+	{"events", "waitlist_disabled", "INTEGER NOT NULL DEFAULT 0"},
 
 	// How this person got onto the roster. Not cosmetic: it decides what
 	// un-marking Interested on Discord does to them. Someone who pressed Join
@@ -647,7 +664,7 @@ const eventColumns = `id, guild_id, channel_id, message_id, discord_scheduled_ev
 	title_written_at, native_title_written, forum_title_written,
 	native_name_written, native_description_written, native_starts_at_written,
 	native_ends_at_written, native_location_written, native_written_at,
-	new_events_message_id, created_at, updated_at`
+	new_events_message_id, waitlist_disabled, created_at, updated_at`
 
 func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 	var e Event
@@ -659,7 +676,7 @@ func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 		&e.TitleWrittenAt, &e.NativeTitleWritten, &e.ForumTitleWritten,
 		&e.NativeWritten.Name, &e.NativeWritten.Description, &e.NativeWritten.StartsAt,
 		&e.NativeWritten.EndsAt, &e.NativeWritten.Location, &e.NativeWritten.At,
-		&e.NewEventsMessageID, &e.CreatedAt, &e.UpdatedAt)
+		&e.NewEventsMessageID, &e.WaitlistDisabled, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -906,6 +923,9 @@ func (s *Store) UpdateEvent(id int64, patch EventPatch) (*Event, error) {
 	if patch.CreatedBy != nil {
 		add("created_by", strings.TrimSpace(*patch.CreatedBy))
 	}
+	if patch.WaitlistDisabled != nil {
+		add("waitlist_disabled", boolToInt(*patch.WaitlistDisabled))
+	}
 	if patch.DiscordInterestedCount != nil {
 		add("discord_interested_count", *patch.DiscordInterestedCount)
 		add("discord_synced_at", now())
@@ -950,6 +970,9 @@ type EventPatch struct {
 	// creator. A Discord user id, never a name. Only the machine API sets it;
 	// neither the web form nor the Discord modal builds it.
 	CreatedBy *string `json:"created_by"`
+	// WaitlistDisabled turns the waitlist off or back on. Turning it back
+	// on promotes nobody: the waitlist only fills from new joins.
+	WaitlistDisabled *bool `json:"waitlist_disabled"`
 }
 
 // validateRecurrence enforces the one rule that cannot be defaulted: a

@@ -183,7 +183,7 @@ func TestAddingSomeoneFromTheWebPagePushesTheNewCount(t *testing.T) {
 	_, store, fake, mux, token := webTestServer(t)
 	ev := publishedEvent(t, store, 3, "alice")
 
-	postForm(t, mux, token, eventPath(ev)+"/roster/add", url.Values{"discord_user_id": {"bob"}})
+	postForm(t, mux, token, eventPath(ev)+"/roster/add", url.Values{"discord_user_id": {"bob"}, "list": {StateAttending}})
 
 	descs := nativeDescriptionsPushed(t, fake, "native-9")
 	if len(descs) == 0 {

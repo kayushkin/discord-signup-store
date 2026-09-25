@@ -1,47 +1,151 @@
 {{define "content"}}
 {{$canManage := .CanManage}}
+{{$ev := .Event}}
 <div class="card">
   <div class="row">
-    <h3>{{.Event.Name}}</h3>
-    <span class="pill {{.Event.Status}}">{{.Event.Status}}</span>
-    {{if eq .Event.Origin "discord"}}<span class="pill discord">from Discord</span>{{end}}
+    <h3>{{$ev.Name}}</h3>
+    <span class="pill {{$ev.Status}}">{{$ev.Status}}</span>
+    {{if eq $ev.Origin "discord"}}<span class="pill discord">from Discord</span>{{end}}
+    {{if $ev.WaitlistDisabled}}<span class="pill">no waitlist</span>{{end}}
   </div>
-  {{if .Event.Description}}<p>{{.Event.Description}}</p>{{end}}
+  {{if not $canManage}}
+  {{if $ev.Description}}<p>{{$ev.Description}}</p>{{end}}
   <div class="meta">
-    {{if .Event.StartsAt}}{{localTime .Event.StartsAt}}{{else}}no date set{{end}}
-    {{if .Event.Location}} · {{.Event.Location}}{{end}}
-    {{if .Event.RecurrenceRule}} · 🔁 repeats {{repeats .Event.RecurrenceRule}}{{end}}
-    {{if .Event.Timezone}}<br><span class="muted">Times above are shown in your own timezone.
-      This event was scheduled in {{.Event.Timezone}}.</span>{{end}}
+    {{if $ev.StartsAt}}{{localTime $ev.StartsAt}}{{else}}no date set{{end}}
+    {{if $ev.Location}} · {{$ev.Location}}{{end}}
+    {{if $ev.RecurrenceRule}} · 🔁 repeats {{repeats $ev.RecurrenceRule}}{{end}}
+    {{if $ev.Timezone}}<br><span class="muted">Times above are shown in your own timezone.
+      This event was scheduled in {{$ev.Timezone}}.</span>{{end}}
   </div>
+  {{end}}
   <div class="meta count" style="margin-top:8px">
-    {{if .Event.Capacity}}<strong>{{.Event.AttendingCount}}/{{.Event.Capacity}}</strong> places taken{{else}}<strong>{{.Event.AttendingCount}}</strong> signed up · no limit{{end}}
-    {{if .Event.WaitlistCount}} · {{.Event.WaitlistCount}} on the waitlist{{end}}
+    {{if $ev.Capacity}}<strong>{{$ev.AttendingCount}}/{{$ev.Capacity}}</strong> places taken{{else}}<strong>{{$ev.AttendingCount}}</strong> signed up · no limit{{end}}
+    {{if $ev.WaitlistCount}} · {{$ev.WaitlistCount}} on the waitlist{{end}}
+    {{if and .EventFull $ev.WaitlistDisabled}} · <span class="bad">full, and new signups are refused</span>{{end}}
   </div>
-  {{if .Event.DiscordScheduledEventID}}
+  {{if $ev.DiscordScheduledEventID}}
   <div class="meta" style="margin-top:6px">
     <a href="{{.DiscordEventURL}}">Native Discord event</a> shows
-    <strong>{{.Event.DiscordInterestedCount}} interested</strong> —
+    <strong>{{$ev.DiscordInterestedCount}} interested</strong> —
     a different number from the roster above, and it always will be.
     Discord counts people who asked to be notified; this counts people who have a place.
     It cannot be capped and nobody can be removed from it.
   </div>
   {{end}}
+
   {{if $canManage}}
-  <p style="margin-top:16px" class="row">
-    <a class="btn" href="/events/{{.Event.ID}}/edit">Edit</a>
-    {{if not .Event.DiscordScheduledEventID}}
-    <form method="post" action="/events/{{.Event.ID}}/publish" style="margin:0">
+  <div class="actions">
+    {{if or (eq $ev.Status "open") (eq $ev.Status "closed")}}
+    <form method="post" action="/events/{{$ev.ID}}/signups">
+      {{/* The label says which way the press goes, as on Discord's
+           management row; on a full event with a waitlist, the waitlist is
+           the only way in, so that is what it names. */}}
+      <button class="ghost">{{if eq $ev.Status "open"}}Close{{else}}Open{{end}} {{toggleSubject $ev}}</button></form>
+    {{end}}
+    {{if not $ev.DiscordScheduledEventID}}
+    <form method="post" action="/events/{{$ev.ID}}/publish">
       <button class="ghost">Publish to Discord events</button></form>
     {{end}}
     {{if .EventUnderway}}
     {{/* Only while it is underway: before the start, cancelling is
          the way to stop it. */}}
-    <form method="post" action="/events/{{.Event.ID}}/end" style="margin:0"
-          onsubmit="return confirm({{if .Event.RecurrenceRule}}'End this date now? It moves to past events and the event moves on to its next date with an empty roster.'{{else}}'End this event now? Signups stop and it moves to past events. This cannot be undone.'{{end}})">
+    <form method="post" action="/events/{{$ev.ID}}/end"
+          onsubmit="return confirm({{if $ev.RecurrenceRule}}'End this date now? It moves to past events and the event moves on to its next date with an empty roster.'{{else}}'End this event now? Signups stop and it moves to past events. This cannot be undone.'{{end}})">
       <button class="danger">End event</button></form>
     {{end}}
-  </p>
+    {{if not (isArchived $ev.Status)}}
+    <details>
+      <summary class="meta" style="cursor:pointer">Cancel event…</summary>
+      <form method="post" action="/events/{{$ev.ID}}/cancel" class="row" style="margin-top:8px;align-items:center">
+        <input name="confirm_name" required autocomplete="off" placeholder="Type “{{$ev.Name}}” to cancel it" style="max-width:320px">
+        <button class="danger">Cancel it</button>
+      </form>
+      <div class="hint">Deletes its Discord event, and nobody can join. Cannot be undone.</div>
+    </details>
+    {{end}}
+  </div>
+
+  <form method="post" action="/events/{{$ev.ID}}" style="margin-top:6px">
+    <label>Name</label>
+    <input name="name" required maxlength="100" value="{{.Form.Name}}">
+
+    <label>Description</label>
+    <textarea name="description">{{.Form.Description}}</textarea>
+
+    <div class="grid2">
+      <div>
+        <label>Starts <span style="color:var(--bad)">*</span></label>
+        <input type="text" name="starts_at" required value="{{.Form.StartsAt}}"
+               placeholder="9/29 5pm" autocomplete="off">
+      </div>
+      <div>
+        <label>Ends</label>
+        <input type="text" name="ends_at" value="{{.Form.EndsAt}}"
+               placeholder="9/29 8pm" autocomplete="off">
+      </div>
+    </div>
+    <div class="hint">Read in the timezone below. <code>9/29 3</code>, <code>tomorrow 6pm</code>,
+      <code>friday noon</code> all work; with no am/pm, 1 to 11 means pm.</div>
+
+    <div class="grid2">
+      <div>
+        <label>Timezone <span style="color:var(--bad)">*</span></label>
+        <input name="timezone" required list="zones" value="{{.Form.Timezone}}" placeholder="America/Los_Angeles">
+        <datalist id="zones">{{range .Zones}}<option value="{{.}}">{{end}}</datalist>
+      </div>
+      <div>
+        <label>Location</label>
+        <input name="location" value="{{.Form.Location}}" placeholder="Where it happens">
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <label>Limit</label>
+        <input type="number" name="capacity" min="0" value="{{.Form.Capacity}}">
+        <div class="hint">0 means no limit. Lowering it removes nobody; raising it
+          lets the waitlist in, in order.</div>
+      </div>
+      <div>
+        <label>When it is full</label>
+        <select name="waitlist">
+          <option value="on" {{if not .Form.WaitlistDisabled}}selected{{end}}>New signups join the waitlist</option>
+          <option value="off" {{if .Form.WaitlistDisabled}}selected{{end}}>New signups are refused (no waitlist)</option>
+        </select>
+        <div class="hint">With no waitlist, a place that opens goes to the next person to
+          press Join. Anyone already waiting stays and still moves up first.</div>
+      </div>
+    </div>
+
+    <label>Repeats</label>
+    <select name="recurrence_rule">
+      <option value="" {{if eq .Form.RecurrenceRule ""}}selected{{end}}>Does not repeat</option>
+      {{range .RecurrenceChoices}}
+        <option value="{{.Rule}}" {{if eq $.Form.RecurrenceRule .Rule}}selected{{end}}>{{.Label}}</option>
+      {{end}}
+    </select>
+
+    <div class="grid2">
+      <div>
+        <label>Attending role (optional)</label>
+        <select name="attending_role_id">
+          <option value="">none</option>
+          {{range .Roles}}<option value="{{.ID}}" {{if eq $.Form.AttendingRoleID .ID}}selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </div>
+      <div>
+        <label>Waitlist role (optional)</label>
+        <select name="waitlist_role_id">
+          <option value="">none</option>
+          {{range .Roles}}<option value="{{.ID}}" {{if eq $.Form.WaitlistRoleID .ID}}selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </div>
+    </div>
+    <div class="hint">Granted and taken away as people join, move up or leave. The bot's
+      own role must sit above these in the server's role list.</div>
+
+    <p style="margin-top:18px"><button>Save changes</button></p>
+  </form>
   {{end}}
 </div>
 
@@ -49,7 +153,7 @@
   <h3>Roster</h3>
   {{if not .Roster}}<p class="meta">Nobody yet.</p>{{end}}
   {{if .Roster}}
-  <table>
+  <div class="table-scroll"><table>
     <tr><th>#</th><th>Who</th><th>State</th><th>Signed up</th>{{if $canManage}}<th></th>{{end}}</tr>
     {{range $i, $s := .Roster}}
     <tr>
@@ -58,58 +162,103 @@
            stored number would be a second copy of that order able to disagree
            with it. */}}
       <td class="count">{{if eq $s.State "waitlisted"}}<span class="muted">wait {{$s.WaitlistPlace}}</span>{{else if eq $s.State "maybe"}}<span class="muted">maybe</span>{{else}}{{add $i 1}}{{end}}</td>
-      <td>{{who $s.DisplayName $s.DiscordUserID}}</td>
+      <td>{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}</td>
       <td><span class="pill {{if eq $s.State "attending"}}open{{else}}closed{{end}}">{{$s.State}}</span></td>
       <td class="meta">{{localTime $s.SignedUpAt}}</td>
       {{if $canManage}}
       <td style="text-align:right">
         {{if or (eq $s.State "waitlisted") (eq $s.State "maybe")}}
-        <form method="post" action="/events/{{$.Event.ID}}/roster/promote" style="margin:0;display:inline">
+        <form method="post" action="/events/{{$ev.ID}}/roster/promote" style="margin:0;display:inline">
           <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
-          <button class="ghost">Promote</button></form>
+          <button class="ghost">Give a place</button></form>
         {{end}}
-        <form method="post" action="/events/{{$.Event.ID}}/roster/remove" style="margin:0;display:inline">
+        <form method="post" action="/events/{{$ev.ID}}/roster/remove" style="margin:0;display:inline">
           <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
           <button class="danger">Remove</button></form>
       </td>{{end}}
     </tr>
     {{end}}
-  </table>
-  <p class="hint">Removing someone who holds a place promotes whoever has waited
-    longest, and messages them. Promote gives someone on the waitlist or the Maybe
-    list a place straight away — even past the limit — and messages them.</p>
-  {{end}}
-
+  </table></div>
   {{if $canManage}}
+  <p class="hint">Removing someone who holds a place gives it to whoever has waited
+    longest, and messages them. Give a place moves someone off the waitlist or the
+    Maybe list to going straight away — even past the limit — and messages them.
+    Hover over or tap a name to see what Discord calls them.</p>
+  {{else}}
+  <p class="hint">Hover over or tap a name to see what Discord calls them.</p>
+  {{end}}
+  {{end}}
+</div>
+
+{{if $canManage}}
+<div class="card">
+  <h3>Add people</h3>
   {{/* The box searches the server's members by name as you type; picking one
        puts their user id in the hidden field, and the id is what is sent. A
-       name is never sent on its own: two members can share one. */}}
-  <form method="post" action="/events/{{.Event.ID}}/roster/add" class="row"
-        style="margin-top:16px;align-items:flex-end" data-member-search="/events/{{.Event.ID}}/members">
-    <div style="flex:1;position:relative"><label>Add someone</label>
+       name is never sent on its own: two members can share one. Both buttons
+       send the same person to a different place. */}}
+  <form method="post" action="/events/{{$ev.ID}}/invite" data-member-search="/events/{{$ev.ID}}/members">
+    <div style="position:relative"><label>Who</label>
       <input class="member-name" autocomplete="off" role="combobox" aria-autocomplete="list"
              aria-expanded="false" placeholder="Start typing their name, or paste a Discord user id">
       <input type="hidden" name="discord_user_id">
       <ul class="picker" role="listbox" hidden></ul></div>
-    <button class="ghost">Add</button>
+    <div class="actions">
+      <button formaction="/events/{{$ev.ID}}/invite">Send invite</button>
+      <span class="meta">or</span>
+      <select name="list" style="width:auto">
+        <option value="attending">Add as going</option>
+        <option value="maybe">Add as maybe</option>
+        <option value="waitlisted" {{if or (not .EventFull) $ev.WaitlistDisabled}}disabled{{end}}>Add to the waitlist{{if $ev.WaitlistDisabled}} (turned off){{else if not .EventFull}} (only when full){{end}}</option>
+      </select>
+      <button class="ghost" formaction="/events/{{$ev.ID}}/roster/add">Add now</button>
+    </div>
   </form>
-  <div class="hint">Names match from the start: a username, a display name or a
-    server nickname. Goes through the same capacity and waitlist rules as pressing Join.</div>
+  <div class="hint" style="margin-top:10px">
+    <strong>Send invite</strong> asks them. They get a DM with the event and its Join and
+    Maybe buttons, and nothing is held for them: when they answer, the limit and the
+    waitlist apply as for anyone else.<br>
+    <strong>Add now</strong> decides for them. They go straight onto the list you pick —
+    as going even past the limit — and get a DM saying so.</div>
+
+  {{if .Invites}}
+  <p class="section-label">Invited</p>
+  <div class="table-scroll"><table>
+    <tr><th>Who</th><th>Invited</th><th>Now</th></tr>
+    {{range .Invites}}
+    <tr>
+      <td>{{person .ReadableName .DisplayName .DiscordUserID}}</td>
+      <td class="meta">{{localTime .At}}</td>
+      <td>{{if eq .Delivery "dms-closed"}}<span class="bad">not delivered — DMs closed</span>
+          {{else if eq .Delivery "failed"}}<span class="bad">not delivered</span>
+          {{else if eq .CurrentState "attending"}}<span class="pill open">going</span>
+          {{else if eq .CurrentState "waitlisted"}}<span class="pill closed">waitlisted</span>
+          {{else if eq .CurrentState "maybe"}}<span class="pill closed">maybe</span>
+          {{else if eq .CurrentState "withdrawn"}}<span class="muted">left</span>
+          {{else}}<span class="muted">no answer yet</span>{{end}}</td>
+    </tr>
+    {{end}}
+  </table></div>
   {{end}}
 </div>
+{{end}}
 
 <div class="card">
-  <h3>History</h3>
-  <p class="hint">Everything that ever happened to this roster. Discord keeps no
-    equivalent record — its own API has no timestamps on RSVPs at all.</p>
-  <table>
+  <h3>Log</h3>
+  <p class="hint">Everything that happened to this event, newest first: signups, edits
+    and invites. Discord keeps no equivalent record — its own API has no timestamps on
+    RSVPs at all.</p>
+  {{if not .EventLog}}<p class="meta">Nothing yet.</p>{{end}}
+  {{if .EventLog}}
+  <div class="table-scroll"><table>
     <tr><th>When</th><th>Who</th><th>What</th><th>By</th></tr>
-    {{range .History}}
+    {{range .EventLog}}
     <tr><td class="meta">{{localTime .At}}</td>
-        <td>{{who .DisplayName .DiscordUserID}}</td>
-        <td>{{signupUpdateText .Action .ToState}}</td>
-        <td class="meta">{{with index $.HistoryActorNames .Actor}}{{.}}{{else}}{{.Actor}}{{end}}</td></tr>
+        <td>{{.Subject}}</td>
+        <td>{{.What}}</td>
+        <td class="meta">{{.By}}</td></tr>
     {{end}}
-  </table>
+  </table></div>
+  {{end}}
 </div>
 {{end}}

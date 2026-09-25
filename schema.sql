@@ -306,3 +306,23 @@ CREATE TABLE IF NOT EXISTS user_preferences (
     home_guild_id   TEXT NOT NULL DEFAULT '',
     updated_at      INTEGER NOT NULL
 );
+
+-- event_invites: an organiser asking someone to come, by DM with Join and
+-- Maybe buttons. Append-only: a second invite to the same person is a second
+-- row. Whether they came is not stored here — it is their row in signups, read
+-- when the page is drawn. delivery says whether Discord took the DM: 'sent',
+-- 'dms-closed' (error 50007, their DMs from server members are off) or
+-- 'failed', with Discord's words in delivery_error.
+CREATE TABLE IF NOT EXISTS event_invites (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    display_name    TEXT NOT NULL DEFAULT '',
+    -- 'web:<id>', as event_updates records it.
+    invited_by      TEXT NOT NULL,
+    delivery        TEXT NOT NULL,
+    delivery_error  TEXT NOT NULL DEFAULT '',
+    at              INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_invites_event ON event_invites(event_id, at);

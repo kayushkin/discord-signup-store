@@ -160,6 +160,10 @@ func (s *Server) handleDashboardAction(w http.ResponseWriter, in *Interaction, a
 	switch action {
 	case "dash-join":
 		result, err := s.store.Join(eventID, userID, displayName, JoinedViaButton)
+		if errors.Is(err, ErrEventFull) {
+			s.replyEphemeral(w, "This one is full, and its organiser turned the waitlist off.")
+			return
+		}
 		if err != nil && !errors.Is(err, ErrEventNotOpen) {
 			log.Printf("[discord-signup] dash join event=%d user=%s: %v", eventID, userID, err)
 			s.replyEphemeral(w, "Something went wrong. Nothing was changed — try again.")

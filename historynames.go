@@ -30,13 +30,19 @@ func actorUserID(actor string) (userID, via string) {
 	return "", ""
 }
 
-// historyActorNames maps each actor in a history that is a person to their
-// name in the event's server, as "Mal (web)". An actor Discord cannot name —
+// historyActorNames maps each actor in a history that is a person to who
+// they are: their short name, if one is set, and their name in the event's
+// server. An actor Discord cannot name and nobody gave a short name —
 // someone who has left — is left out, and the page shows it raw.
-func (s *Server) historyActorNames(guildID string, actors []string) map[string]string {
-	names := map[string]string{}
-	if s.discord == nil {
-		return names
+func (s *Server) historyActorNames(guildID string, actors []string) map[string]actorName {
+	names := map[string]actorName{}
+	readable := map[string]string{}
+	if set, err := s.store.ReadableNames(); err != nil {
+		log.Printf("[discord-signup] read short names for a history: %v", err)
+	} else {
+		for _, n := range set {
+			readable[n.DiscordUserID] = n.ReadableName
+		}
 	}
 	byID := map[string]string{}
 	for _, actor := range actors {
@@ -47,22 +53,19 @@ func (s *Server) historyActorNames(guildID string, actors []string) map[string]s
 		if userID == "" {
 			continue
 		}
-		name, seen := byID[userID]
-		if !seen {
+		display, seen := byID[userID]
+		if !seen && s.discord != nil {
 			looked, err := s.discord.GuildMemberDisplayName(guildID, userID)
 			if err != nil {
 				log.Printf("[discord-signup] name history actor %s in %s: %v", userID, guildID, err)
 			}
-			name = looked
-			byID[userID] = name
+			display = looked
+			byID[userID] = display
 		}
-		if name == "" {
+		if display == "" && readable[userID] == "" {
 			continue
 		}
-		if via != "" {
-			name += " (" + via + ")"
-		}
-		names[actor] = name
+		names[actor] = actorName{ReadableName: readable[userID], DisplayName: display, UserID: userID, Via: via}
 	}
 	return names
 }

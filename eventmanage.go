@@ -1,6 +1,7 @@
 package discordsignup
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -32,33 +33,48 @@ func (s *Server) handleCloseToggle(w http.ResponseWriter, in *Interaction, event
 		s.replyEphemeral(w, why)
 		return
 	}
-	var next, said string
-	switch ev.Status {
-	case StatusOpen:
-		if eventIsFull(ev) {
-			next, said = StatusClosed, fmt.Sprintf("The waitlist for **%s** is closed. Nobody new can join it; everyone on the event and the waitlist stays.", ev.Name)
-		} else {
-			next, said = StatusClosed, fmt.Sprintf("Signups for **%s** are closed. Nobody new can join; everyone on it stays.", ev.Name)
-		}
-	case StatusClosed:
-		if eventIsFull(ev) {
-			next, said = StatusOpen, fmt.Sprintf("The waitlist for **%s** is open again.", ev.Name)
-		} else {
-			next, said = StatusOpen, fmt.Sprintf("Signups for **%s** are open again.", ev.Name)
-		}
-	default:
+	userID, _ := in.actor()
+	said, err := s.toggleSignups(ev, userID)
+	if errors.Is(err, errSignupsNotToggleable) {
 		s.replyEphemeral(w, fmt.Sprintf("**%s** is %s, so there are no signups to open or close.", ev.Name, ev.Status))
 		return
 	}
-	userID, _ := in.actor()
-	// Through the one edit path, so it is logged in event_updates and every
-	// copy is republished — the card and the row lose or regain Join.
-	if _, _, err := s.applyEventEdit(ev, EventPatch{Status: &next}, userID); err != nil {
+	if err != nil {
 		log.Printf("[discord-signup] toggle signups for event %d: %v", ev.ID, err)
 		s.replyEphemeral(w, "Something went wrong. Nothing was changed.")
 		return
 	}
 	s.replyEphemeral(w, said)
+}
+
+// errSignupsNotToggleable is a completed or cancelled event: it has no
+// signups to open or close.
+var errSignupsNotToggleable = errors.New("only an open or closed event can have its signups opened or closed")
+
+// toggleSignups opens a closed event or closes an open one, and says what it
+// did in words for the person who asked. The management row's button and the
+// web page both come here, so they cannot word it differently.
+func (s *Server) toggleSignups(ev *Event, actor string) (string, error) {
+	subject := closeToggleSubject(ev)
+	var next, said string
+	switch {
+	case ev.Status == StatusOpen && subject == "waitlist":
+		next, said = StatusClosed, fmt.Sprintf("The waitlist for **%s** is closed. Nobody new can join it; everyone on the event and the waitlist stays.", ev.Name)
+	case ev.Status == StatusOpen:
+		next, said = StatusClosed, fmt.Sprintf("Signups for **%s** are closed. Nobody new can join; everyone on it stays.", ev.Name)
+	case ev.Status == StatusClosed && subject == "waitlist":
+		next, said = StatusOpen, fmt.Sprintf("The waitlist for **%s** is open again.", ev.Name)
+	case ev.Status == StatusClosed:
+		next, said = StatusOpen, fmt.Sprintf("Signups for **%s** are open again.", ev.Name)
+	default:
+		return "", errSignupsNotToggleable
+	}
+	// Through the one edit path, so it is logged in event_updates and every
+	// copy is republished — the card and the row lose or regain Join.
+	if _, _, err := s.applyEventEdit(ev, EventPatch{Status: &next}, actor); err != nil {
+		return "", err
+	}
+	return said, nil
 }
 
 // handleCancelButton opens the confirm. Cancelling deletes the native Discord

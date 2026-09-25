@@ -49,6 +49,7 @@ the event at all but the addresses of messages this service has written about it
 | `created_by` | TEXT | Discord user id of whoever made it. Grants edit rights, and gets them a place on their own roster. |
 | `native_name_written`, `native_description_written`, `native_starts_at_written`, `native_ends_at_written`, `native_location_written` | TEXT / INTEGER | What this service last wrote into the native event, in its own terms (name without the count, description without the roster, end as sent). Each is set only when that field was sent. The sync compares Discord's copy with these to tell an edit made in Discord's event screen from a change of ours Discord has not taken yet. Bookkeeping, not logged. |
 | `native_written_at` | INTEGER | When the above were last recorded; `0` means never, and the sync then treats a difference as ours not yet sent. |
+| `waitlist_disabled` | INTEGER | `1` when a full event refuses a Join instead of waitlisting it; set on the web page. `0`, the default, is the ordinary waitlist. Turning it on removes nobody already waiting. Logged in `event_updates`. |
 | `new_events_message_id` | TEXT | The event's message in its guild's `#new-events`; `''` when it has none. Cleared when the message is deleted — as the event's line goes to past events, or on cancelling. Bookkeeping. |
 | `thread_id` | TEXT | A discussion thread from when cards existed; nothing writes it now. Old ones are still archived when their event finishes. |
 | `forum_post_id` | TEXT | The event's post in the forum channel. One id reaches both the post and the card inside it. |
@@ -118,7 +119,7 @@ Append-only. Never updated, never deleted except by cascade.
 | `id` | INTEGER PK | |
 | `event_id` | INTEGER | → `events(id)`, **ON DELETE CASCADE**. |
 | `discord_user_id` | TEXT | Who moved. |
-| `action` | TEXT | `joined`, `waitlisted`, `withdrew`, `promoted`, `rejoined`. |
+| `action` | TEXT | `joined`, `waitlisted`, `withdrew`, `promoted`, `rejoined`, `maybe`, and `added` — put on a list by an organiser from the web page, who is the `actor`. |
 | `from_state` | TEXT | `''` when there was no prior row. |
 | `to_state` | TEXT | Where they landed. |
 | `actor` | TEXT | Who caused it: `user` for a press, `promotion` for an automatic move, `reaction`, or an operator's own id. Without this an automatic promotion and an admin's manual add are the same row. |
@@ -139,7 +140,7 @@ place and limit could all change and the only trace was the new value.
 |---|---|---|
 | `id` | INTEGER PK | |
 | `event_id` | INTEGER | → `events(id)` ON DELETE CASCADE. |
-| `field` | TEXT | Which one changed: `name`, `description`, `capacity`, `status`, `starts_at`, `ends_at`, `location`, `timezone`, `recurrence_rule`, `attending_role_id`, `waitlist_role_id`. |
+| `field` | TEXT | Which one changed: `name`, `description`, `capacity`, `status`, `starts_at`, `ends_at`, `location`, `timezone`, `recurrence_rule`, `attending_role_id`, `waitlist_role_id`, `waitlist_disabled`, `created_by`. |
 | `from_value` | TEXT | The old value, raw — a time as the integer it is stored as, not a rendering of it. Presentation belongs at the edge. |
 | `to_value` | TEXT | The new one. |
 | `actor` | TEXT | `web:<discord id>` from the web page, `discord:<discord id>` from a Discord form, `api`, `discord-event-screen` for an edit made in Discord's own event screen, or `discord-event-sync` for a completion or cancellation copied from Discord. |
@@ -285,6 +286,24 @@ Indexed by `expires_at` (the sweep) and `discord_user_id`.
 | `created_at` | INTEGER | Swept hourly; without that this grows by one row per abandoned login. |
 
 ---
+
+## `event_invites` — 8 columns · append-only, new 2026-09-25
+
+An organiser asking someone to come: a DM with the event's own Join and Maybe
+buttons, sent from the web page. A second invite to the same person is a second
+row. **Whether they came is not stored here** — it is their row in `signups`,
+joined when the page is drawn.
+
+| column | type | description |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `event_id` | INTEGER | → `events(id)` ON DELETE CASCADE. |
+| `discord_user_id` | TEXT | Who was invited. |
+| `display_name` | TEXT | Their name in the server when invited. Display only. |
+| `invited_by` | TEXT | `web:<discord id>`, as `event_updates.actor`. |
+| `delivery` | TEXT | `sent`, `dms-closed` (Discord's 50007) or `failed`. |
+| `delivery_error` | TEXT | Discord's words when not `sent`. |
+| `at` | INTEGER | When. |
 
 ## `event_table_rows` — **dropped 2026-09-02**
 

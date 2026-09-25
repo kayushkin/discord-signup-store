@@ -8,18 +8,54 @@ import (
 	"testing"
 )
 
-func namesPageServer(t *testing.T) (*Store, http.Handler, string) {
+// namesPageServer logs in as a site admin, who may use the names page.
+func namesPageServer(t *testing.T) (*Store, *fakeDiscord, http.Handler, string) {
 	t.Helper()
 	_, store, fake, mux, token := webTestServer(t)
 	fake.on(http.MethodGet, "/users/@me/guilds", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`[{"id":"g1","name":"Games club"}]`))
 	})
-	return store, mux, token
+	if _, err := store.AddSiteAdmin("manager"); err != nil {
+		t.Fatal(err)
+	}
+	return store, fake, mux, token
+}
+
+// TestOnlySiteAdminsAndServerOwnersSeeTheNamesPage: a short name holds in
+// every server, so an organiser with Manage Events gets a 404 and no link,
+// and a server's owner gets the page.
+func TestOnlySiteAdminsAndServerOwnersSeeTheNamesPage(t *testing.T) {
+	_, store, fake, mux, organiser := webTestServer(t)
+	fake.on(http.MethodGet, "/users/@me/guilds", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`[{"id":"g1","name":"Games club"}]`))
+	})
+	fake.on(http.MethodGet, "/guilds/g1", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"id":"g1","owner_id":"owner"}`))
+	})
+	if rec := getPage(t, mux, organiser, "/names"); rec.Code != http.StatusNotFound {
+		t.Errorf("an organiser opening /names got %d, want 404", rec.Code)
+	}
+	if strings.Contains(getPage(t, mux, organiser, "/").Body.String(), `href="/names"`) {
+		t.Error("the home page links the names page for an organiser")
+	}
+
+	owner, _ := store.CreateWebSession("owner", "Owner", "", map[string]uint64{"g1": permissionAdministrator})
+	if rec := getPage(t, mux, owner.Token, "/names"); rec.Code != http.StatusOK {
+		t.Errorf("the server's owner opening /names got %d, want 200", rec.Code)
+	}
+	if !strings.Contains(getPage(t, mux, owner.Token, "/").Body.String(), `href="/names"`) {
+		t.Error("the home page does not link the names page for the server's owner")
+	}
+	// Administrator alone is not ownership.
+	admin, _ := store.CreateWebSession("admin", "Admin", "", map[string]uint64{"g1": permissionAdministrator})
+	if rec := getPage(t, mux, admin.Token, "/names"); rec.Code != http.StatusNotFound {
+		t.Errorf("a server administrator who is not its owner got %d, want 404", rec.Code)
+	}
 }
 
 // TestTheNamesPageListsEveryoneOnAListAndSavesByID.
 func TestTheNamesPageListsEveryoneOnAListAndSavesByID(t *testing.T) {
-	store, mux, token := namesPageServer(t)
+	store, _, mux, token := namesPageServer(t)
 	ev := publishedEvent(t, store, 1, "u-matt", "u-al")
 	store.MarkMaybe(ev.ID, "u-cy", "Cy", JoinedViaButton)
 	store.Join(ev.ID, "u-gone", "Gone", JoinedViaButton)
@@ -58,7 +94,7 @@ func TestTheNamesPageListsEveryoneOnAListAndSavesByID(t *testing.T) {
 // TestTheNamesPageNamesOnlyPeopleOnYourServersLists: naming someone changes
 // how every table shows them, so a stranger's id is refused.
 func TestTheNamesPageNamesOnlyPeopleOnYourServersLists(t *testing.T) {
-	store, mux, token := namesPageServer(t)
+	store, _, mux, token := namesPageServer(t)
 	publishedEvent(t, store, 4, "u-al")
 	req := httptest.NewRequest(http.MethodPost, "/names",
 		strings.NewReader(url.Values{"discord_user_id": {"u-stranger"}, "readable_name": {"X"}}.Encode()))

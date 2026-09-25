@@ -31,7 +31,7 @@ func TestTheHistoryNamesThePeopleWhoDidThings(t *testing.T) {
 	})
 	srv := NewServer(testStore(t), nil, fake.client())
 	names := srv.historyActorNames("g1", []string{"web:493904201101869067", "110122051179687936", "user"})
-	if names["web:493904201101869067"] != "Waleeha (web)" {
+	if got := names["web:493904201101869067"]; got.DisplayName != "Waleeha" || got.Via != "web" {
 		t.Errorf("names = %v", names)
 	}
 	if _, ok := names["110122051179687936"]; ok {
@@ -88,10 +88,7 @@ func TestTheHomePageRemembersWhichServer(t *testing.T) {
 // TestTheNamesPageCanNameSomeoneOnNoList, found by search, and only in a
 // server the viewer may name people in.
 func TestTheNamesPageCanNameSomeoneOnNoList(t *testing.T) {
-	_, store, fake, mux, token := webTestServer(t)
-	fake.on(http.MethodGet, "/users/@me/guilds", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`[{"id":"g1","name":"Games club"}]`))
-	})
+	store, fake, mux, token := namesPageServer(t)
 	onMemberSearch(fake, "g1")
 	fake.on(http.MethodGet, "/guilds/g1/members/222", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"nick":null,"user":{"id":"222","username":"alfie","global_name":"Alfie"}}`))
@@ -142,7 +139,7 @@ func TestAddingSomeoneAlreadyGoingSaysSo(t *testing.T) {
 		w.Write([]byte(`{"nick":null,"user":{"id":"222","username":"alfie","global_name":"Alfie"}}`))
 	})
 	ev := publishedEvent(t, store, 4, "222")
-	rec := postForm(t, mux, token, eventPath(ev)+"/roster/add", url.Values{"discord_user_id": {"222"}})
+	rec := postForm(t, mux, token, eventPath(ev)+"/roster/add", url.Values{"discord_user_id": {"222"}, "list": {StateAttending}})
 	if loc := rec.Header().Get("Location"); !strings.Contains(loc, url.QueryEscape("Alfie is already going")) {
 		t.Errorf("notice = %s", loc)
 	}

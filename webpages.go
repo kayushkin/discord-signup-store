@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 )
 
 //go:embed templates/*.html
@@ -63,7 +62,17 @@ type pageData struct {
 	Event    *Event
 
 	Roster  []Signup
-	History []SignupUpdate
+	Invites []EventInvite
+	// EventLog is the event page's log: signups, edits and invites, newest
+	// first.
+	EventLog []eventLogEntry
+	// Form is the event page's edit fields.
+	Form eventFormValues
+	// EventFull is whether a capped event has no free place, which is when
+	// the waitlist can be added to.
+	EventFull bool
+	// MayName is whether the viewer may open the names page.
+	MayName bool
 
 	CanManage bool
 	// EventUnderway offers End on the detail page: started, not yet over.
@@ -71,9 +80,6 @@ type pageData struct {
 	DiscordEventURL      string
 	GuildsWhereMayCreate []Guild
 	Roles                []Role
-	// HistoryActorNames names the people in an event's history: actor as
-	// recorded → their name in the server.
-	HistoryActorNames map[string]string
 	// HomeGuildChoices are the servers the home page can be narrowed to, and
 	// HomeGuildID the one chosen ("" for all).
 	HomeGuildChoices []Guild
@@ -89,7 +95,6 @@ type pageData struct {
 	RecurrenceValue   string
 	RecurrenceChoices []recurrenceChoice
 	Zones             []string
-	Statuses          []string
 }
 
 var templates = template.Must(template.New("").Funcs(template.FuncMap{
@@ -111,23 +116,13 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 	// The text inside the element is the no-JavaScript fallback and says UTC
 	// out loud. A time shown without its zone is the bug being fixed here, so
 	// the degraded path must not reintroduce it.
-	"localTime": func(unix int64) template.HTML {
-		if unix == 0 {
-			return template.HTML("—")
-		}
-		t := time.Unix(unix, 0).UTC()
-		return template.HTML(fmt.Sprintf(`<time class="ts" datetime="%s">%s</time>`,
-			t.Format(time.RFC3339), t.Format("Mon 2 Jan 2006, 15:04")+" UTC"))
-	},
-	// signupUpdateText drops the resulting state when the action already names
-	// it, so "waitlisted → waitlisted" reads as "waitlisted". Where the two
-	// differ the arrow carries real information and stays.
-	"signupUpdateText": func(action, toState string) string {
-		if action == toState {
-			return action
-		}
-		return action + " → " + toState
-	},
+	"localTime": localTimeHTML,
+	// person shows someone by their short name with their Discord name
+	// behind it.
+	"person": personHTML,
+	// toggleSubject is what the Open/Close button opens or closes: the
+	// waitlist, on a full event that has one, or signups.
+	"toggleSubject": closeToggleSubject,
 	// isArchived lets a template dim a card without restating which statuses
 	// count as over — that answer lives in vocabulary.go and nowhere else.
 	"isArchived": IsArchived,
@@ -170,7 +165,6 @@ func splitByArchived(events []Event) (live, archived []Event) {
 
 func (s *Server) render(w http.ResponseWriter, page string, data pageData) {
 	data.Zones = commonZones
-	data.Statuses = ValidStatuses()
 	data.RecurrenceChoices = recurrenceChoices
 	tmpl, err := templates.Clone()
 	if err != nil {
@@ -243,6 +237,11 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[discord-signup] home page server choices for %s: %v", session.DiscordUserID, err)
 	} else {
 		data.HomeGuildChoices = choices
+	}
+	if guilds, err := s.guildsWhereMayName(session); err != nil {
+		log.Printf("[discord-signup] may %s open the names page: %v", session.DiscordUserID, err)
+	} else {
+		data.MayName = len(guilds) > 0
 	}
 	var visible []Event
 	for guildID := range guildIDs {

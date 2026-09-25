@@ -298,6 +298,12 @@ func eventPublishSignature(ev *Event, roster []Signup) string {
 	// this the row would wait for the next signup to show it. The sweep sees
 	// the flip within a minute and redraws once.
 	fmt.Fprintf(&b, "\x00%t", eventIsUnderway(ev))
+	// The management row's toggle says "waitlist" only when a full event has
+	// one. Written only when off, so turning the switch on for the first time
+	// left every existing signature as it was.
+	if ev.WaitlistDisabled {
+		b.WriteString("\x00no-waitlist")
+	}
 	for _, sg := range roster {
 		fmt.Fprintf(&b, "\x01%s\x00%s\x00%s\x00%s", sg.DiscordUserID, sg.DisplayName, sg.ReadableName, sg.State)
 	}

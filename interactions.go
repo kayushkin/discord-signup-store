@@ -239,6 +239,18 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		eventID = ev.ID
 	}
 
+	// A press in a DM — an invite's buttons — carries the person's global
+	// name, not what the server calls them. The roster shows the server's.
+	if in.GuildID == "" && (action == "join" || action == "maybe") && s.discord != nil {
+		if ev, err := s.store.GetEvent(eventID); err == nil {
+			if name, err := s.discord.GuildMemberDisplayName(ev.GuildID, userID); err == nil {
+				displayName = name
+			} else {
+				log.Printf("[discord-signup] name DM click by %s in %s: %v", userID, ev.GuildID, err)
+			}
+		}
+	}
+
 	switch action {
 	case "join":
 		s.handleJoin(w, in, eventID, userID, displayName)
@@ -286,6 +298,11 @@ func (s *Server) handleJoin(w http.ResponseWriter, in *Interaction, eventID int6
 	}
 	if errors.Is(err, ErrEventNotOpen) {
 		s.replyEphemeral(w, "Signups for this event are closed.")
+		return
+	}
+	if errors.Is(err, ErrEventFull) {
+		s.replyEphemeral(w, "This one is full, and its organiser turned the waitlist off. "+
+			"If someone drops out, the next person to press Join gets the place.")
 		return
 	}
 	if err != nil {

@@ -1,20 +1,18 @@
 {{define "content"}}
 <div class="card">
-  <h3>{{if .Event}}Edit event{{else}}New event{{end}}</h3>
-  <form method="post" action="{{if .Event}}/events/{{.Event.ID}}{{else}}/events/new{{end}}">
+  <h3>New event</h3>
+  <form method="post" action="/events/new">
 
     <label>Name</label>
-    <input name="name" required maxlength="100" value="{{with .Event}}{{.Name}}{{end}}">
+    <input name="name" required maxlength="100" value="">
 
     <label>Description</label>
-    <textarea name="description">{{with .Event}}{{.Description}}{{end}}</textarea>
+    <textarea name="description"></textarea>
 
-    {{if not .Event}}
     <label>Server</label>
     <select name="guild_id" required>
       {{range .GuildsWhereMayCreate}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
     </select>
-    {{end}}
 
     <div class="grid2">
       <div>
@@ -46,13 +44,13 @@
     <div class="grid2">
       <div>
         <label>Capacity</label>
-        <input type="number" name="capacity" min="0" value="{{if .Event}}{{.Event.Capacity}}{{else}}0{{end}}">
+        <input type="number" name="capacity" min="0" value="0">
         <div class="hint">0 means no limit. Lowering it never removes anyone
           already in — the new limit applies to the next person to sign up.</div>
       </div>
       <div>
         <label>Location</label>
-        <input name="location" value="{{with .Event}}{{.Location}}{{end}}" placeholder="Where it happens">
+        <input name="location" placeholder="Where it happens">
       </div>
     </div>
 
@@ -66,26 +64,19 @@
     <div class="hint">Stored as an RFC 5545 rule, the same grammar Discord accepts
       on its own scheduled events, so one rule drives both.</div>
 
-    {{if .Event}}
-    <label>Status</label>
-    <select name="status">
-      {{range .Statuses}}<option value="{{.}}" {{if eq $.Event.Status .}}selected{{end}}>{{.}}</option>{{end}}
-    </select>
-    {{end}}
-
     <div class="grid2">
       <div>
         <label>Attending role (optional)</label>
         <select name="attending_role_id">
           <option value="">none</option>
-          {{range .Roles}}<option value="{{.ID}}" {{if and $.Event (eq $.Event.AttendingRoleID .ID)}}selected{{end}}>{{.Name}}</option>{{end}}
+          {{range .Roles}}<option value="{{.ID}}" >{{.Name}}</option>{{end}}
         </select>
       </div>
       <div>
         <label>Waitlist role (optional)</label>
         <select name="waitlist_role_id">
           <option value="">none</option>
-          {{range .Roles}}<option value="{{.ID}}" {{if and $.Event (eq $.Event.WaitlistRoleID .ID)}}selected{{end}}>{{.Name}}</option>{{end}}
+          {{range .Roles}}<option value="{{.ID}}" >{{.Name}}</option>{{end}}
         </select>
       </div>
     </div>
@@ -93,7 +84,7 @@
       the waitlist or leave. The bot's own role must sit above these in the
       server's role list.</div>
 
-    <p style="margin-top:22px"><button>{{if .Event}}Save{{else}}Create{{end}}</button>
+    <p style="margin-top:22px"><button>Create</button>
       <a class="btn" style="background:transparent;border:1px solid var(--line)" href="/">Cancel</a></p>
   </form>
 </div>

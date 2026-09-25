@@ -36,6 +36,7 @@ const (
 	ActionPromoted   = "promoted"   // moved off the waitlist into a freed place
 	ActionRejoined   = "rejoined"   // signed up again after withdrawing
 	ActionMaybe      = "maybe"      // put themselves down as Maybe
+	ActionAdded      = "added"      // put on a list by an organiser, who is the actor
 )
 
 var validActions = map[string]bool{
@@ -45,6 +46,7 @@ var validActions = map[string]bool{
 	ActionPromoted:   true,
 	ActionRejoined:   true,
 	ActionMaybe:      true,
+	ActionAdded:      true,
 }
 
 // Event lifecycle.
@@ -139,6 +141,13 @@ var validOrigins = map[string]bool{
 	OriginLocal:   true,
 	OriginDiscord: true,
 }
+
+// Invite deliveries: whether Discord took an invite's DM.
+const (
+	InviteDeliverySent      = "sent"
+	InviteDeliveryDMsClosed = "dms-closed"
+	InviteDeliveryFailed    = "failed"
+)
 
 // ValidOrigins returns the accepted origins, sorted.
 func ValidOrigins() []string { return sortedKeys(validOrigins) }

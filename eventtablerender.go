@@ -314,10 +314,10 @@ func eventTableButtons(ev *Event) []any {
 }
 
 // closeToggleSubject is what the Close/Reopen toggle opens or closes:
-// "waitlist" when the event is full, since a new signup can only be
-// waitlisted, and "signups" otherwise.
+// "waitlist" when the event is full and has one, since a new signup can only
+// be waitlisted, and "signups" otherwise.
 func closeToggleSubject(ev *Event) string {
-	if eventIsFull(ev) {
+	if eventIsFull(ev) && !ev.WaitlistDisabled {
 		return "waitlist"
 	}
 	return "signups"

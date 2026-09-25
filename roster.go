@@ -43,8 +43,9 @@ func (s *Store) Join(eventID int64, discordUserID, displayName, via string) (*Jo
 
 	var capacity int
 	var status string
-	err = tx.QueryRow(`SELECT capacity, status FROM events WHERE id = ? AND deleted_at = 0`, eventID).
-		Scan(&capacity, &status)
+	var waitlistDisabled bool
+	err = tx.QueryRow(`SELECT capacity, status, waitlist_disabled FROM events WHERE id = ? AND deleted_at = 0`, eventID).
+		Scan(&capacity, &status, &waitlistDisabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -93,6 +94,9 @@ func (s *Store) Join(eventID int64, discordUserID, displayName, via string) (*Jo
 	newState := StateAttending
 	action := ActionJoined
 	if capacity > 0 && attending >= capacity {
+		if waitlistDisabled {
+			return nil, ErrEventFull
+		}
 		newState = StateWaitlisted
 		action = ActionWaitlisted
 	}
@@ -308,9 +312,10 @@ func (s *Store) History(eventID int64, limit int) ([]SignupUpdate, error) {
 	// than one with an ugly name in it.
 	rows, err := s.db.Query(`
 		SELECT t.id, t.event_id, t.discord_user_id, t.action, t.from_state, t.to_state,
-		       t.actor, t.at, COALESCE(s.display_name, '')
+		       t.actor, t.at, COALESCE(s.display_name, ''), COALESCE(r.readable_name, '')
 		FROM signup_updates t
 		LEFT JOIN signups s ON s.event_id = t.event_id AND s.discord_user_id = t.discord_user_id
+		LEFT JOIN readable_names r ON r.discord_user_id = t.discord_user_id
 		WHERE t.event_id = ? ORDER BY t.at ASC, t.id ASC LIMIT ?`, eventID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("read history: %w", err)
@@ -321,7 +326,7 @@ func (s *Store) History(eventID int64, limit int) ([]SignupUpdate, error) {
 	for rows.Next() {
 		var t SignupUpdate
 		if err := rows.Scan(&t.ID, &t.EventID, &t.DiscordUserID, &t.Action, &t.FromState,
-			&t.ToState, &t.Actor, &t.At, &t.DisplayName); err != nil {
+			&t.ToState, &t.Actor, &t.At, &t.DisplayName, &t.ReadableName); err != nil {
 			return nil, fmt.Errorf("scan signup update: %w", err)
 		}
 		out = append(out, t)

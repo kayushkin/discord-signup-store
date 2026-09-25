@@ -31,8 +31,10 @@ Two numbers are **not** the roster and never feed a decision:
 
 ## 2. Every way onto and off the roster
 
-Seven, and they all go through the same two store methods (`Join`, `Leave`), so
-the capacity rule and the waitlist order cannot differ between them.
+Seven. Six go through the same two store methods (`Join`, `Leave`), so the
+capacity rule and the waitlist order cannot differ between them; the web page's
+**Add now** is the organiser deciding instead of the rule, and goes through
+`PlaceOnList`.
 
 | # | how | joins | leaves | `joined_via` |
 |---|---|---|---|---|
@@ -40,7 +42,7 @@ the capacity rule and the waitlist order cannot differ between them.
 | 3 | **Join / Leave** on your My events view | press Join | press Leave | `button` |
 | 4 | **✅ on the forum post** | add the reaction | remove it | `reaction` |
 | 5 | **Interested on Discord's own event** | press Interested | un-press it | `interested` |
-| 6 | **The web page**, by an organiser | Pick them by name (or paste a user id) | Remove | `operator` |
+| 6 | **The web page**, by an organiser | Pick them by name (or paste a user id), then **Add now** as going, maybe or waitlisted | Remove | `operator` |
 | 7 | **The machine API** | `POST /api/events/{id}/signups` | `DELETE …/{userID}` | `operator` |
 | 8 | **Creating the event** | automatic | — | `organiser` |
 
@@ -50,9 +52,21 @@ From Maybe, Join is an ordinary join (a place, or the waitlist); from going,
 Maybe gives your place up to whoever has waited longest, as Leave does.
 Discord's Interested and the forum ✅ mean going, never Maybe.
 
+**Add now is not an invite.** Add now puts someone on the list the organiser
+picks — going even past the limit, maybe, or the waitlist while the event is
+full — and DMs them to say so; the history records it as `added` by the
+organiser. **Send invite** puts nobody anywhere: it DMs the person the event
+with its own Join and Maybe buttons, and their answer goes through the rules
+like anyone's. Invites are kept in `event_invites`, with whether Discord
+delivered the DM; whether they came is read from the roster, never stored.
+
 Rules that hold for all eight:
 
-- **Full means waitlisted, never refused.** You are told your number.
+- **Full means waitlisted, never refused** — unless the organiser turned the
+  waitlist off for that event. Then a Join on a full event is refused and the
+  place goes to whoever presses Join after one opens. Anyone already waiting
+  when it was turned off stays and still moves up first. You are told your
+  number, or that it is full.
 - **Leaving promotes the longest-waiting person**, who is sent a DM. If their
   DMs are shut, they are pinged in the channel instead — the one deliberate ping
   this service makes.
@@ -129,8 +143,9 @@ because Discord has none to give.
 | **My events** | just you | The events *you* are on, with Join / Leave in place. |
 | **Discord's own event** | everyone | Discord's native event, linked to a roster here. Its title carries the count. |
 | **Web — list** | logged in | Every event, live from the database. |
-| **Web — detail** | logged in | One roster, its history, and the organiser's controls. |
-| **Web — form** | organisers | Create and edit, with the fields a Discord form has no room for. |
+| **Web — detail** | logged in | One event. For an organiser its fields are the edit form, with Open/Close signups, the waitlist switch, End and Cancel beside them; then the roster, **Add people** (Send invite, or Add now to a list), the invites and how each was answered, and one log of signups, edits and invites, newest first. People are shown by their short name, with their Discord name on hover or tap. |
+| **Web — form** | organisers | Create, with the fields a Discord form has no room for. Editing is on the detail page. |
+| **Web — names** | site admins, server owners | The short name each person is shown by, everywhere. A 404 for anyone else, and not linked for them. |
 
 ## 5. Who may do what
 
@@ -139,7 +154,8 @@ because Discord has none to give.
 | Join, leave | anyone who can see the message |
 | Create an event | Administrator, Manage Events, or Create Events |
 | **Edit an event** | **Administrator (which the server owner always has), Manage Events, or whoever created it** |
-| Add or remove someone else | the same as Edit |
+| Add or remove someone else, invite someone | the same as Edit |
+| Set short names | a site admin, or a server's owner for the people in it |
 | Rebuild the table | Administrator or Manage Events |
 
 Checked when the button is pressed, not when it is drawn: Discord cannot show a

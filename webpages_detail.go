@@ -43,8 +43,8 @@ func (s *Server) webEvent(w http.ResponseWriter, r *http.Request, session *WebSe
 	return ev, canManage
 }
 
-// handleWebEventDetail shows one roster: the event, who is on it, and its
-// history.
+// handleWebEventDetail shows one event: its fields — editable, for whoever
+// may edit it — its roster, the tools for adding people, and its log.
 func (s *Server) handleWebEventDetail(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {
@@ -54,60 +54,138 @@ func (s *Server) handleWebEventDetail(w http.ResponseWriter, r *http.Request) {
 	if ev == nil {
 		return
 	}
-	// Before reading either list, so both render names rather than snowflakes.
-	s.backfillDisplayNames(ev)
-
-	roster, err := s.store.Roster(ev.ID, false)
-	if err != nil {
-		log.Printf("[discord-signup] roster %d: %v", ev.ID, err)
-	}
-	history, err := s.store.History(ev.ID, 200)
-	if err != nil {
-		log.Printf("[discord-signup] history %d: %v", ev.ID, err)
-	}
-	actors := make([]string, 0, len(history))
-	for _, h := range history {
-		actors = append(actors, h.Actor)
-	}
-	s.render(w, "detail.html", pageData{
-		Title: ev.Name, Session: session, Event: ev, Roster: roster, History: history,
-		HistoryActorNames: s.historyActorNames(ev.GuildID, actors),
-		CanManage:         canManage,
-		EventUnderway:     eventIsUnderway(ev),
-		DiscordEventURL:   DiscordEventURL(ev.GuildID, ev.DiscordScheduledEventID),
-		Notice:            r.URL.Query().Get("notice"),
-	})
+	s.renderEventPage(w, session, ev, canManage, nil, r.URL.Query().Get("notice"), "")
 }
 
-// handleWebEditForm shows the edit form for an existing roster.
-func (s *Server) handleWebEditForm(w http.ResponseWriter, r *http.Request) {
-	session := s.requireSession(w, r)
-	if session == nil {
-		return
-	}
-	ev, canManage := s.webEvent(w, r, session)
-	if ev == nil {
-		return
-	}
-	if !canManage {
-		http.Error(w, "you cannot edit this event", http.StatusForbidden)
-		return
-	}
+// eventFormValues are the edit fields as the page shows them: text, because
+// a form that failed to save shows back what was typed, not what was stored.
+type eventFormValues struct {
+	Name, Description, StartsAt, EndsAt, Timezone, Capacity, Location string
+	RecurrenceRule, AttendingRoleID, WaitlistRoleID                   string
+	WaitlistDisabled                                                  bool
+}
+
+func eventFormFromEvent(ev *Event) eventFormValues {
 	zone := ev.Timezone
 	if zone == "" {
 		zone = "UTC"
 	}
-	s.render(w, "form.html", pageData{
-		Title: "Edit " + ev.Name, Session: session, Event: ev, CanManage: true,
-		StartsLocal:     FormatEventTime(ev.StartsAt, zone),
-		EndsLocal:       FormatEventTime(ev.EndsAt, zone),
-		TimezoneValue:   zone,
-		RecurrenceValue: ev.RecurrenceRule,
-		Roles:           s.assignableRolesIn(ev.GuildID),
-	})
+	return eventFormValues{
+		Name: ev.Name, Description: ev.Description,
+		StartsAt: FormatEventTime(ev.StartsAt, zone), EndsAt: FormatEventTime(ev.EndsAt, zone),
+		Timezone: zone, Capacity: strconv.Itoa(ev.Capacity), Location: ev.Location,
+		RecurrenceRule: ev.RecurrenceRule, AttendingRoleID: ev.AttendingRoleID,
+		WaitlistRoleID: ev.WaitlistRoleID, WaitlistDisabled: ev.WaitlistDisabled,
+	}
 }
 
-// handleWebUpdateEvent accepts the edit form.
+func eventFormFromRequest(r *http.Request, ev *Event) eventFormValues {
+	values := eventFormFromEvent(ev)
+	values.Name, values.Description = r.FormValue("name"), r.FormValue("description")
+	values.StartsAt, values.EndsAt = r.FormValue("starts_at"), r.FormValue("ends_at")
+	values.Timezone, values.Capacity = r.FormValue("timezone"), r.FormValue("capacity")
+	values.Location, values.RecurrenceRule = r.FormValue("location"), r.FormValue("recurrence_rule")
+	values.AttendingRoleID, values.WaitlistRoleID = r.FormValue("attending_role_id"), r.FormValue("waitlist_role_id")
+	if r.Form.Has("waitlist") {
+		values.WaitlistDisabled = r.FormValue("waitlist") == "off"
+	}
+	return values
+}
+
+// renderEventPage draws the event page. submitted is the edit form as typed
+// when saving it failed, nil otherwise.
+func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev *Event, canManage bool,
+	submitted *eventFormValues, notice, errorText string) {
+	// Before reading the lists, so they render names rather than snowflakes.
+	s.backfillDisplayNames(ev)
+	var problems []string
+	if errorText != "" {
+		problems = append(problems, errorText)
+	}
+	roster, err := s.store.Roster(ev.ID, false)
+	if err != nil {
+		log.Printf("[discord-signup] roster %d: %v", ev.ID, err)
+		problems = append(problems, "Could not read the roster: "+err.Error())
+	}
+	signupUpdates, err := s.store.History(ev.ID, 1000)
+	if err != nil {
+		log.Printf("[discord-signup] history %d: %v", ev.ID, err)
+		problems = append(problems, "Could not read the signup history: "+err.Error())
+	}
+	edits, err := s.store.EventUpdates(ev.ID)
+	if err != nil {
+		log.Printf("[discord-signup] event updates %d: %v", ev.ID, err)
+		problems = append(problems, "Could not read the edit history: "+err.Error())
+	}
+	invites, err := s.store.Invites(ev.ID)
+	if err != nil {
+		log.Printf("[discord-signup] invites %d: %v", ev.ID, err)
+		problems = append(problems, "Could not read the invites: "+err.Error())
+	}
+
+	actors := []string{}
+	editsNameRoles := false
+	for _, u := range signupUpdates {
+		actors = append(actors, u.Actor)
+	}
+	for _, u := range edits {
+		actors = append(actors, u.Actor)
+		switch u.Field {
+		case "created_by":
+			// A host is recorded as a bare id, which names like an actor.
+			actors = append(actors, u.FromValue, u.ToValue)
+		case "attending_role_id", "waitlist_role_id":
+			editsNameRoles = true
+		}
+	}
+	for _, inv := range invites {
+		actors = append(actors, inv.InvitedBy)
+	}
+	names := eventLogNames{actors: s.historyActorNames(ev.GuildID, actors), people: map[string]actorName{}, roles: map[string]string{}}
+	for actor, name := range names.actors {
+		if snowflake.MatchString(actor) {
+			names.people[actor] = name
+		}
+	}
+	if editsNameRoles && s.discord != nil {
+		// Every role, not only the ones the bot can grant: a role in the log
+		// may be one it could grant once.
+		if roles, err := s.discord.ListGuildRoles(ev.GuildID); err != nil {
+			log.Printf("[discord-signup] name roles in %s: %v", ev.GuildID, err)
+		} else {
+			for _, role := range roles {
+				names.roles[role.ID] = role.Name
+			}
+		}
+	}
+
+	data := pageData{
+		Title: ev.Name, Session: session, Event: ev, Roster: roster, Invites: invites,
+		EventLog:        buildEventLog(signupUpdates, edits, invites, names),
+		CanManage:       canManage,
+		EventUnderway:   eventIsUnderway(ev),
+		EventFull:       eventIsFull(ev),
+		DiscordEventURL: DiscordEventURL(ev.GuildID, ev.DiscordScheduledEventID),
+		Notice:          notice,
+		Error:           strings.Join(problems, " "),
+	}
+	if canManage {
+		data.Roles = s.assignableRolesIn(ev.GuildID)
+		data.Form = eventFormFromEvent(ev)
+		if submitted != nil {
+			data.Form = *submitted
+		}
+	}
+	s.render(w, "detail.html", data)
+}
+
+// handleWebEditForm is where the edit form used to be. The fields are on the
+// event page now; an old link or bookmark lands there.
+func (s *Server) handleWebEditForm(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/events/"+r.PathValue("id"), http.StatusMovedPermanently)
+}
+
+// handleWebUpdateEvent saves the event page's fields.
 func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {
@@ -125,27 +203,36 @@ func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "malformed form", http.StatusBadRequest)
 		return
 	}
+	submitted := eventFormFromRequest(r, ev)
+	failed := func(err error) {
+		s.renderEventPage(w, session, ev, true, &submitted, "", "Not saved: "+plainError(err))
+	}
 	zone := strings.TrimSpace(r.FormValue("timezone"))
 	starts, err := ParseEventTime(r.FormValue("starts_at"), zone)
 	if err != nil {
-		s.webFormError(w, session, ev, err)
+		failed(err)
 		return
 	}
 	ends, err := ParseEventTime(r.FormValue("ends_at"), zone)
 	if err != nil {
-		s.webFormError(w, session, ev, err)
+		failed(err)
 		return
 	}
 	if err := requireStartTime(starts); err != nil {
-		s.webFormError(w, session, ev, err)
+		failed(err)
 		return
 	}
-	capacity, _ := strconv.Atoi(r.FormValue("capacity"))
+	capacity := 0
+	if text := strings.TrimSpace(r.FormValue("capacity")); text != "" {
+		if capacity, err = strconv.Atoi(text); err != nil {
+			failed(fmt.Errorf("%w: the limit must be a whole number, or 0 for no limit", ErrInvalidEvent))
+			return
+		}
+	}
 	patch := EventPatch{
 		Name:            strPtr(r.FormValue("name")),
 		Description:     strPtr(r.FormValue("description")),
 		Capacity:        &capacity,
-		Status:          strPtr(r.FormValue("status")),
 		StartsAt:        &starts,
 		EndsAt:          &ends,
 		Location:        strPtr(r.FormValue("location")),
@@ -153,6 +240,14 @@ func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		Timezone:        strPtr(zone),
 		AttendingRoleID: strPtr(r.FormValue("attending_role_id")),
 		WaitlistRoleID:  strPtr(r.FormValue("waitlist_role_id")),
+	}
+	// Status has its own buttons on the page; a form that still sends it —
+	// an old tab — is honoured.
+	if r.Form.Has("status") {
+		patch.Status = strPtr(r.FormValue("status"))
+	}
+	if r.Form.Has("waitlist") {
+		patch.WaitlistDisabled = &submitted.WaitlistDisabled
 	}
 	// Raising the limit here does exactly what raising it from Discord does,
 	// because it is now the same function rather than a second copy of the
@@ -162,7 +257,7 @@ func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 	// signup happened to push it.
 	_, promoted, err := s.applyEventEdit(ev, patch, "web:"+session.DiscordUserID)
 	if err != nil {
-		s.webFormError(w, session, ev, err)
+		failed(err)
 		return
 	}
 	notice := "Saved."
@@ -173,20 +268,71 @@ func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 	s.redirectWithNotice(w, r, ev.ID, notice)
 }
 
-func (s *Server) webFormError(w http.ResponseWriter, session *WebSession, ev *Event, err error) {
-	zone := ev.Timezone
-	if zone == "" {
-		zone = "UTC"
+// handleWebToggleSignups is the page's Open signups / Close signups button,
+// the same toggle as the management row's.
+func (s *Server) handleWebToggleSignups(w http.ResponseWriter, r *http.Request) {
+	session := s.requireSession(w, r)
+	if session == nil {
+		return
 	}
-	s.render(w, "form.html", pageData{
-		Title: "Edit " + ev.Name, Session: session, Event: ev, CanManage: true,
-		Error:           err.Error(),
-		StartsLocal:     FormatEventTime(ev.StartsAt, zone),
-		EndsLocal:       FormatEventTime(ev.EndsAt, zone),
-		TimezoneValue:   zone,
-		RecurrenceValue: ev.RecurrenceRule,
-		Roles:           s.assignableRolesIn(ev.GuildID),
-	})
+	ev, canManage := s.webEvent(w, r, session)
+	if ev == nil {
+		return
+	}
+	if !canManage {
+		http.Error(w, "you cannot edit this event", http.StatusForbidden)
+		return
+	}
+	said, err := s.toggleSignups(ev, "web:"+session.DiscordUserID)
+	if errors.Is(err, errSignupsNotToggleable) {
+		s.redirectWithNotice(w, r, ev.ID, "It is "+ev.Status+", so there are no signups to open or close.")
+		return
+	}
+	if err != nil {
+		log.Printf("[discord-signup] web toggle signups for event %d: %v", ev.ID, err)
+		s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: "+err.Error())
+		return
+	}
+	s.redirectWithNotice(w, r, ev.ID, strings.ReplaceAll(said, "**", ""))
+}
+
+// handleWebCancelEvent cancels, as the management row's Cancel does: the
+// name typed back is the confirm, and the native Discord event is deleted.
+func (s *Server) handleWebCancelEvent(w http.ResponseWriter, r *http.Request) {
+	session := s.requireSession(w, r)
+	if session == nil {
+		return
+	}
+	ev, canManage := s.webEvent(w, r, session)
+	if ev == nil {
+		return
+	}
+	if !canManage {
+		http.Error(w, "you cannot edit this event", http.StatusForbidden)
+		return
+	}
+	if IsArchived(ev.Status) {
+		s.redirectWithNotice(w, r, ev.ID, "It is already "+ev.Status+".")
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(r.FormValue("confirm_name")), strings.TrimSpace(ev.Name)) {
+		s.redirectWithNotice(w, r, ev.ID, "That did not match the event's name — nothing was cancelled.")
+		return
+	}
+	actor := "web:" + session.DiscordUserID
+	if err := s.cancelEventEverywhere(ev, "cancelled by "+actor); err != nil {
+		log.Printf("[discord-signup] web cancel event %d: %v", ev.ID, err)
+		s.redirectWithNotice(w, r, ev.ID, "It is NOT cancelled: "+err.Error())
+		return
+	}
+	// cancelEventEverywhere writes the status straight to the store, as the
+	// Discord confirm notes, so the person who did it is logged here.
+	if after, err := s.store.GetEvent(ev.ID); err == nil {
+		if err := s.store.LogEventUpdates(ev, after, actor); err != nil {
+			log.Printf("[discord-signup] log cancel of event %d: %v", ev.ID, err)
+		}
+	}
+	s.redirectWithNotice(w, r, ev.ID, "Cancelled. Its Discord event is gone and nobody can join.")
 }
 
 // handleWebRosterPromote gives someone on the waitlist or the Maybe list a
@@ -272,6 +418,8 @@ const memberSearchLimit = 10
 // memberSuggestion is one line in the add box's list.
 type memberSuggestion struct {
 	MemberMatch
+	// ReadableName is the short name set for them, if any.
+	ReadableName string `json:"readable_name,omitempty"`
 	// OnRoster is their current state on this event — attending or
 	// waitlisted — or empty when adding them would be new.
 	OnRoster string `json:"on_roster,omitempty"`
@@ -318,16 +466,26 @@ func (s *Server) handleWebMemberSearch(w http.ResponseWriter, r *http.Request) {
 	for _, sg := range roster {
 		state[sg.DiscordUserID] = sg.State
 	}
+	named, err := s.store.ReadableNames()
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	readable := map[string]string{}
+	for _, n := range named {
+		readable[n.DiscordUserID] = n.ReadableName
+	}
 	out := make([]memberSuggestion, 0, len(matches))
 	for _, m := range matches {
-		out = append(out, memberSuggestion{MemberMatch: m, OnRoster: state[m.UserID]})
+		out = append(out, memberSuggestion{MemberMatch: m, OnRoster: state[m.UserID], ReadableName: readable[m.UserID]})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"members": out})
 }
 
-// handleWebRosterAdd puts someone on by their Discord user id, through the
-// same rules as a click. The id comes from the name picked in the add box,
-// or is pasted in directly.
+// handleWebRosterAdd puts someone on the list the organiser picks — going,
+// maybe or the waitlist — by their Discord user id, and tells them. Going
+// can take the event past its limit; that is the organiser's call. The id
+// comes from the name picked in the box, or is pasted in directly.
 //
 // The id is checked against the server before anyone is added: a typo in a
 // pasted id used to put a stranger's snowflake on the roster, where it sat as
@@ -360,27 +518,56 @@ func (s *Server) handleWebRosterAdd(w http.ResponseWriter, r *http.Request) {
 		}
 		displayName = name
 	}
-	result, err := s.store.Join(ev.ID, userID, displayName, JoinedViaOperator)
-	if err != nil {
+	result, err := s.store.PlaceOnList(ev.ID, userID, displayName, r.FormValue("list"), "web:"+session.DiscordUserID)
+	switch {
+	case errors.Is(err, ErrEventNotOpen):
+		s.redirectWithNotice(w, r, ev.ID, "Nobody was added: the event is "+ev.Status+".")
+		return
+	case errors.Is(err, ErrInvalidEvent):
+		s.redirectWithNotice(w, r, ev.ID, "Nobody was added: "+plainError(err))
+		return
+	case err != nil:
+		log.Printf("[discord-signup] web add %s to %d: %v", userID, ev.ID, err)
 		s.redirectWithNotice(w, r, ev.ID, "Could not add them: "+err.Error())
 		return
 	}
-	s.inBackground(func() { s.syncAfterChange(ev.ID, []stateChange{{UserID: userID, State: result.Signup.State}}) })
 	// Without a Discord client there is no name to say; only tests run so.
-	notice, who := "Added.", "they"
+	who := "They"
 	if displayName != "" {
-		notice, who = "Added "+displayName+".", displayName
+		who = displayName
 	}
-	switch {
-	case result.AlreadySignedUp && result.Signup.State == StateWaitlisted:
-		notice = fmt.Sprintf("%s is already on the waitlist, at number %d — no change.", who, result.Signup.WaitlistPlace)
-	case result.AlreadySignedUp:
-		notice = fmt.Sprintf("%s is already going — no change.", who)
-	case result.Signup.State == StateWaitlisted:
-		notice = fmt.Sprintf("Event is full, so %s went on the waitlist at number %d.",
-			who, result.Signup.WaitlistPlace)
+	if result.Unchanged {
+		s.redirectWithNotice(w, r, ev.ID, fmt.Sprintf("%s is already %s — no change.", who, stateWords(result.Signup)))
+		return
+	}
+	changes := []stateChange{{UserID: userID, State: result.Signup.State}}
+	if result.Promoted != nil {
+		changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
+	}
+	s.inBackground(func() { s.syncAfterChange(ev.ID, changes) })
+	s.inBackground(func() { s.notifyPlacedOnList(ev, &result.Signup) })
+	notice := fmt.Sprintf("%s is %s now, and was messaged.", who, stateWords(result.Signup))
+	if result.Promoted != nil {
+		s.inBackground(func() { s.notifyPromoted(ev, result.Promoted) })
+		notice += " Their place went to the next person on the waitlist, who was messaged too."
+	}
+	if after, err := s.store.GetEvent(ev.ID); err == nil && after.Capacity > 0 && after.AttendingCount > after.Capacity {
+		notice += fmt.Sprintf(" That takes it to %d/%d, over the limit.", after.AttendingCount, after.Capacity)
 	}
 	s.redirectWithNotice(w, r, ev.ID, notice)
+}
+
+// stateWords says where someone is, as the page says it.
+func stateWords(sg Signup) string {
+	switch sg.State {
+	case StateAttending:
+		return "going"
+	case StateWaitlisted:
+		return fmt.Sprintf("on the waitlist, at number %d", sg.WaitlistPlace)
+	case StateMaybe:
+		return "down as maybe"
+	}
+	return sg.State
 }
 
 // handleWebPublish creates a native Discord scheduled event for this roster.

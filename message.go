@@ -261,6 +261,35 @@ func (s *Server) notifyGivenAPlace(ev *Event, promoted *Signup) {
 		"An organiser gave you a place at **%s** — you're in.", ev.Name))
 }
 
+// notifyPlacedOnList tells someone an organiser put them on a list. Going is
+// news they must not miss, so it falls back to a channel mention as a
+// promotion does; the waitlist and Maybe go by DM alone.
+func (s *Server) notifyPlacedOnList(ev *Event, placed *Signup) {
+	var content string
+	switch placed.State {
+	case StateAttending:
+		s.tellTheyHaveAPlace(ev, placed, fmt.Sprintf("An organiser put you down as going to **%s** — you're in.", ev.Name))
+		return
+	case StateWaitlisted:
+		content = fmt.Sprintf("An organiser put you on the waitlist for **%s**, at number %d. "+
+			"If a place opens you move up automatically and I will message you.", ev.Name, placed.WaitlistPlace)
+	case StateMaybe:
+		content = fmt.Sprintf("An organiser put you down as Maybe for **%s**. It does not hold a place — "+
+			"press Join on the event if you decide to go.", ev.Name)
+	default:
+		return
+	}
+	if s.discord == nil {
+		return
+	}
+	if ev.StartsAt > 0 {
+		content += fmt.Sprintf("\n🗓️ <t:%d:F>", ev.StartsAt)
+	}
+	if err := s.discord.SendDirectMessage(placed.DiscordUserID, content); err != nil {
+		log.Printf("[discord-signup] dm placed user=%s event=%d: %v", placed.DiscordUserID, ev.ID, err)
+	}
+}
+
 // tellTheyHaveAPlace sends the news by DM, and by a channel mention when
 // their DMs are closed.
 func (s *Server) tellTheyHaveAPlace(ev *Event, promoted *Signup, content string) {

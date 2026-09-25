@@ -36,7 +36,7 @@ service's, and proxying any other route publishes roster editing to the world.
 | PUT | `/api/site-admins/{userID}` | Make someone a site admin: they may see every event in every server the bot is in, member or not, and edit, end, cancel, create and name anywhere, whatever their Discord roles. Only this route grants it. |
 | DELETE | `/api/site-admins/{userID}` | Take it away. 404 if they were not one. |
 | GET | `/api/readable-names` | Every short name set: `{"readable_names":[{"discord_user_id","readable_name","updated_at"}]}`. |
-| PUT | `/api/readable-names/{userID}` | Set the short name a person is shown by on Discord (`{"readable_name":"Matt"}`). Every Discord surface that lists names uses it — the tables, Details, the forum post, the Discord event description; the web page keeps display names. |
+| PUT | `/api/readable-names/{userID}` | Set the short name a person is shown by on Discord (`{"readable_name":"Matt"}`). Every surface that lists names uses it — the tables, Details, the forum post, the Discord event description, and the web pages, which show the Discord name behind it. |
 | DELETE | `/api/readable-names/{userID}` | Remove it, so their display name shows again. 404 if none was set. |
 | GET | `/api/events/{id}/history?limit=` | The append-only transition log. |
 | POST | `/api/sync` | Pull native events from **every** server the bot is in and post a card for any new one. What the scheduler job calls; names no guild, so adding a server needs no change. |
@@ -55,16 +55,21 @@ service's, and proxying any other route publishes roster editing to the world.
 | GET | `/` | Events in servers you belong to. |
 | GET | `/login` · `/auth/callback` · POST `/logout` | Discord OAuth2, scopes `identify guilds`. |
 | GET · POST | `/events/new` | Create, with a real date picker and an IANA timezone. |
-| GET | `/events/{id}` | Roster, history, and both counts labelled. |
-| GET | `/events/{id}/edit` · POST `/events/{id}` | Edit. |
-| POST | `/events/{id}/roster/remove` · `/roster/add` | Manage the roster; removal promotes the next in line. Add takes a `discord_user_id` and refuses one that is not a member of the event's server; the name shown comes from that lookup. |
+| GET | `/events/{id}` | The event, its roster, invites and log (signups, edits and invites, newest first). For an organiser the fields are the edit form. |
+| POST | `/events/{id}` | Save the fields. `waitlist` is `on` or `off`; `status` is honoured if sent but the page no longer sends it. A failed save shows the page again with what was typed. |
+| GET | `/events/{id}/edit` | 301 to `/events/{id}`, where the fields now are. |
+| POST | `/events/{id}/signups` | Open or close signups — the management row's toggle, through the same function. |
+| POST | `/events/{id}/cancel` | Cancel, as the management row's Cancel does: `confirm_name` must match the event's name (any case), and the native Discord event is deleted. |
+| POST | `/events/{id}/roster/remove` | Take someone off; removal promotes the next in line. |
+| POST | `/events/{id}/roster/add` | **Add now**: `discord_user_id` and `list` (`attending`, `maybe` or `waitlisted`). Going ignores the limit; the waitlist is refused unless the event is full, counting everyone else going, and has a waitlist. Logged as `added` by `web:<organiser id>`, and they are told by DM (a channel mention if going and DMs are closed). Refuses an id that is not a member of the event's server; the name shown comes from that lookup. |
+| POST | `/events/{id}/invite` | **Send invite**: DMs `discord_user_id` the event with its Join and Maybe buttons. Holds nothing. Refused while signups are not open, or if they are already going or waitlisted. Recorded in `event_invites` whether or not Discord delivered it; no channel mention when DMs are closed. |
 | POST | `/events/{id}/roster/promote` | Give someone on the waitlist or the Maybe list a place, on the organiser's say-so: not checked against the limit, logged as `promoted` by `web:<organiser id>`, and they are told by DM. Anyone else is a notice, not a change. |
-| GET | `/events/{id}/members?q=` | The add box's suggestions: up to 10 server members whose username, display name or nickname **starts with** `q`, bots left out, each with `on_roster` if already attending or waitlisted. Uses Discord's member search, because listing members needs the privileged GUILD_MEMBERS intent, which this application does not have. Manage Events only. |
+| GET | `/events/{id}/members?q=` | The add box's suggestions: up to 10 server members whose username, display name or nickname **starts with** `q`, bots left out, each with `on_roster` if already on the roster and `readable_name` if one is set. Uses Discord's member search, because listing members needs the privileged GUILD_MEMBERS intent, which this application does not have. Manage Events only. |
 | POST | `/events/{id}/publish` | Create a native Discord event linked to this roster. |
 | POST | `/events/{id}/end` | End an underway event now: the same finishing as its end time passing, and the native Discord event is ended too. A recurring event ends this date and moves to its next. Offered on the page only while the event is underway. |
-| GET · POST | `/names` | The names page: everyone going, maybe or waitlisted on any event in the servers where you may edit every event, each with a box for the short name they are shown by on Discord. POST `discord_user_id` and `readable_name` saves one; an empty name removes it. Anyone else's id is 403. |
+| GET · POST | `/names` | The names page, for site admins (every server the bot is in) and server owners (their own server): everyone going, maybe or waitlisted on any event there, each with a box for the short name they are shown by. POST `discord_user_id` and `readable_name` saves one; an empty name removes it. Anyone else's id is 403, and anyone who is neither gets a 404. |
 | POST | `/preferences/home-server` | Save which server the home page shows (`guild_id`, `""` for every server). Kept per Discord user in `user_preferences`, so it holds across logins. |
-| GET | `/names/members?guild_id=&q=` | The names page's search: members of one server where you may edit every event, each with the short name set for them. |
+| GET | `/names/members?guild_id=&q=` | The names page's search: members of one server where you may name people, each with the short name set for them. |
 
 **Authorization.** Reading an event needs guild membership. Editing needs `MANAGE_EVENTS` (or `ADMINISTRATOR`) in that guild, or having created the event — matched on `created_by`, the Discord user id, never on a name. Creating needs `CREATE_EVENTS`, `MANAGE_EVENTS` or `ADMINISTRATOR` (the web page used to want the last two only).
 

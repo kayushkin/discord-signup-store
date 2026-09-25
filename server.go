@@ -188,6 +188,9 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/roster/remove", s.handleWebRosterRemove)
 	mux.HandleFunc("POST /events/{id}/roster/promote", s.handleWebRosterPromote)
 	mux.HandleFunc("POST /events/{id}/roster/add", s.handleWebRosterAdd)
+	mux.HandleFunc("POST /events/{id}/invite", s.handleWebInvite)
+	mux.HandleFunc("POST /events/{id}/signups", s.handleWebToggleSignups)
+	mux.HandleFunc("POST /events/{id}/cancel", s.handleWebCancelEvent)
 	mux.HandleFunc("GET /events/{id}/members", s.handleWebMemberSearch)
 	mux.HandleFunc("POST /events/{id}/publish", s.handleWebPublish)
 	mux.HandleFunc("POST /events/{id}/end", s.handleWebEndEvent)
@@ -461,7 +464,7 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 	case errors.Is(err, ErrInvalidEvent):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-	case errors.Is(err, ErrEventNotOpen):
+	case errors.Is(err, ErrEventNotOpen), errors.Is(err, ErrEventFull):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 	default:
 		log.Printf("[discord-signup] %v", err)

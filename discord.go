@@ -312,6 +312,12 @@ func (c *DiscordClient) EditMessage(channelID, messageID string, payload any) er
 // off. Callers must treat that as expected and fall back to a channel mention;
 // a promotion nobody hears about is a place nobody takes.
 func (c *DiscordClient) SendDirectMessage(userID, content string) error {
+	return c.SendDirectMessagePayload(userID, map[string]any{"content": content})
+}
+
+// SendDirectMessagePayload is SendDirectMessage for a whole message body —
+// content, components, allowed mentions — rather than text alone.
+func (c *DiscordClient) SendDirectMessagePayload(userID string, payload map[string]any) error {
 	raw, err := c.do(http.MethodPost, "/users/@me/channels",
 		map[string]any{"recipient_id": userID})
 	if err != nil {
@@ -323,8 +329,7 @@ func (c *DiscordClient) SendDirectMessage(userID, content string) error {
 	if err := json.Unmarshal(raw, &channel); err != nil {
 		return fmt.Errorf("decode dm channel: %w", err)
 	}
-	_, err = c.do(http.MethodPost, "/channels/"+escapePathSegment(channel.ID)+"/messages",
-		map[string]any{"content": content})
+	_, err = c.do(http.MethodPost, "/channels/"+escapePathSegment(channel.ID)+"/messages", payload)
 	return err
 }
 

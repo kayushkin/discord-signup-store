@@ -63,6 +63,20 @@ th{color:var(--dim);font-weight:500;font-size:12px;text-transform:uppercase;lett
 .picker li{padding:6px 10px;cursor:pointer}
 .picker li:hover,.picker li[aria-selected="true"]{background:var(--line)}
 .picker li.note{cursor:default;color:var(--dim)}
+/* A short name with the Discord name behind it: a tooltip on hover, and a
+   tap opens it, since a phone has no hover. */
+details.aka{display:inline}
+details.aka summary{display:inline;cursor:pointer;list-style:none;
+  text-decoration:underline dotted var(--dim);text-underline-offset:3px}
+details.aka summary::-webkit-details-marker{display:none}
+details.aka[open] summary{margin-right:6px}
+.bad{color:var(--bad)}
+/* A wide table scrolls inside its card on a phone rather than pushing the
+   whole page sideways. */
+.table-scroll{overflow-x:auto}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.actions form{margin:0}
+.section-label{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin:18px 0 0}
 </style></head><body>
 <header>
   <h1><a href="/" style="color:inherit">Events</a></h1>
