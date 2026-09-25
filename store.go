@@ -282,7 +282,14 @@ func Open(dataDir string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db, dataDir: dataDir}, nil
+	store := &Store{db: db, dataDir: dataDir}
+	// Every boot, and a no-op after the first for each event: a host is
+	// pinned only if they never had a pin there, so an unpin stands.
+	if err := store.pinHostsOfRecurringEvents(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return store, nil
 }
 
 // addedColumn is one column that arrived after a table already existed on some
@@ -398,6 +405,9 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	{"event_invites", "hold_ended_at", "INTEGER NOT NULL DEFAULT 0"},
 	{"event_invites", "hold_outcome", "TEXT NOT NULL DEFAULT ''"},
 	{"event_invites", "hold_ended_by", "TEXT NOT NULL DEFAULT ''"},
+	// An invite that lets them in past the limit: no place is kept, but their
+	// Join is never turned away or waitlisted. See holds.go.
+	{"event_invites", "past_limit", "INTEGER NOT NULL DEFAULT 0"},
 
 	// How this person got onto the roster. Not cosmetic: it decides what
 	// un-marking Interested on Discord does to them. Someone who pressed Join

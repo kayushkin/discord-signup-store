@@ -210,6 +210,13 @@ func (s *Server) applyEventEdit(before *Event, patch EventPatch, actor string) (
 	if err := s.store.LogEventUpdates(before, after, actor); err != nil {
 		log.Printf("[discord-signup] log edits to event %d: %v", before.ID, err)
 	}
+	// Made repeating: the host is pinned, once — PinHost leaves anyone who
+	// was ever pinned or unpinned alone.
+	if after.RecurrenceRule != "" && before.RecurrenceRule == "" {
+		if err := s.store.PinHost(after.ID); err != nil {
+			log.Printf("[discord-signup] pin host of event %d: %v", after.ID, err)
+		}
+	}
 	log.Printf("[discord-signup] event %d edited by %s; %d promoted", before.ID, actor, len(promoted))
 
 	changes := make([]stateChange, 0, len(promoted))

@@ -29,7 +29,10 @@ type EventInvite struct {
 	// HoldsPlace is whether the invite keeps a place for them until they
 	// answer; HoldEndedAt, HoldOutcome and HoldEndedBy say when and how it
 	// stopped. A hold with HoldEndedAt 0 is live and counts against the limit.
-	HoldsPlace  bool   `json:"holds_place"`
+	HoldsPlace bool `json:"holds_place"`
+	// PastLimit is an invite that lets them in even when the event is full,
+	// without keeping a place.
+	PastLimit   bool   `json:"past_limit"`
 	HoldEndedAt int64  `json:"hold_ended_at"`
 	HoldOutcome string `json:"hold_outcome"`
 	HoldEndedBy string `json:"hold_ended_by"`
@@ -45,7 +48,7 @@ func (s *Store) Invites(eventID int64) ([]EventInvite, error) {
 	rows, err := s.db.Query(`
 		SELECT i.id, i.event_id, i.discord_user_id, i.display_name, COALESCE(r.readable_name, ''),
 		       i.invited_by, i.delivery, i.delivery_error, i.at, COALESCE(sg.state, ''),
-		       i.holds_place, i.hold_ended_at, i.hold_outcome, i.hold_ended_by
+		       i.holds_place, i.past_limit, i.hold_ended_at, i.hold_outcome, i.hold_ended_by
 		FROM event_invites i
 		LEFT JOIN readable_names r ON r.discord_user_id = i.discord_user_id
 		LEFT JOIN signups sg ON sg.event_id = i.event_id AND sg.discord_user_id = i.discord_user_id
@@ -59,7 +62,7 @@ func (s *Store) Invites(eventID int64) ([]EventInvite, error) {
 		var inv EventInvite
 		if err := rows.Scan(&inv.ID, &inv.EventID, &inv.DiscordUserID, &inv.DisplayName, &inv.ReadableName,
 			&inv.InvitedBy, &inv.Delivery, &inv.DeliveryError, &inv.At, &inv.CurrentState,
-			&inv.HoldsPlace, &inv.HoldEndedAt, &inv.HoldOutcome, &inv.HoldEndedBy); err != nil {
+			&inv.HoldsPlace, &inv.PastLimit, &inv.HoldEndedAt, &inv.HoldOutcome, &inv.HoldEndedBy); err != nil {
 			return nil, fmt.Errorf("scan invite: %w", err)
 		}
 		out = append(out, inv)
@@ -69,12 +72,16 @@ func (s *Store) Invites(eventID int64) ([]EventInvite, error) {
 
 // inviteMessage is the DM: who asked, what and when, how full it is, and the
 // event's own Join and Maybe buttons.
-func inviteMessage(ev *Event, organiserName string, holdsPlace bool) map[string]any {
+func inviteMessage(ev *Event, organiserName, reserve string) map[string]any {
 	var b strings.Builder
 	fmt.Fprintf(&b, "**%s** invited you to **%s**.", organiserName, ev.Name)
-	if holdsPlace {
+	switch reserve {
+	case reserveHold:
 		b.WriteString(" **A place is held for you.**")
+	case reservePastLimit:
+		b.WriteString(" **You can join even though it is full.**")
 	}
+	holdsPlace := reserve != ""
 	if ev.StartsAt > 0 {
 		fmt.Fprintf(&b, "\n🗓️ <t:%d:F>", ev.StartsAt)
 	}
@@ -82,8 +89,10 @@ func inviteMessage(ev *Event, organiserName string, holdsPlace bool) map[string]
 		fmt.Fprintf(&b, "\n📍 %s", ev.Location)
 	}
 	switch {
-	case holdsPlace:
+	case reserve == reserveHold:
 		b.WriteString("\n\nPress Join to take it. Can't go gives it back so someone else can have it.")
+	case reserve == reservePastLimit:
+		b.WriteString("\n\nPress Join and you are in. Can't go lets the organiser know.")
 	case ev.Capacity == 0:
 		fmt.Fprintf(&b, "\n%d going.", ev.AttendingCount)
 	case !eventIsFull(ev):
@@ -146,17 +155,22 @@ func (s *Server) handleWebInvite(w http.ResponseWriter, r *http.Request) {
 		s.redirectWithNotice(w, r, ev.ID, "No invite was sent: pick someone from the list under the box.")
 		return
 	}
-	holdPlace := r.FormValue("hold_place") == "on"
+	reserve := r.FormValue("reserve")
+	if reserve != "" && reserve != reserveHold && reserve != reservePastLimit {
+		http.Error(w, "reserve is hold, past_limit or nothing", http.StatusBadRequest)
+		return
+	}
 	lines := make([]string, 0, len(userIDs))
 	for _, userID := range userIDs {
-		lines = append(lines, s.invitePerson(ev, session, userID, holdPlace))
+		lines = append(lines, s.invitePerson(ev, session, userID, reserve))
 	}
 	s.redirectWithNotice(w, r, ev.ID, strings.Join(lines, " "))
 }
 
 // invitePerson sends one invite and records it, whether or not Discord
 // delivered it, and says what happened in a sentence.
-func (s *Server) invitePerson(ev *Event, session *WebSession, userID string, holdPlace bool) string {
+func (s *Server) invitePerson(ev *Event, session *WebSession, userID, reserve string) string {
+	holdPlace := reserve == reserveHold
 	displayName, err := s.discord.GuildMemberDisplayName(ev.GuildID, userID)
 	if err != nil {
 		return "No invite for " + userID + ": not a member of this server (" + err.Error() + ")."
@@ -173,7 +187,7 @@ func (s *Server) invitePerson(ev *Event, session *WebSession, userID string, hol
 	// is told about it; the delivery is written once Discord answers.
 	recorded, err := s.store.RecordInvite(EventInvite{EventID: ev.ID, DiscordUserID: userID,
 		DisplayName: displayName, InvitedBy: "web:" + session.DiscordUserID,
-		Delivery: InviteDeliverySent, HoldsPlace: holdPlace})
+		Delivery: InviteDeliverySent, HoldsPlace: holdPlace, PastLimit: reserve == reservePastLimit})
 	if errors.Is(err, ErrNoPlaceToHold) {
 		return "No invite for " + displayName + ": there is no free place left to hold. Send it without holding one, or raise the limit."
 	}
@@ -185,10 +199,13 @@ func (s *Server) invitePerson(ev *Event, session *WebSession, userID string, hol
 		// A held place can make the event read as full on Discord.
 		s.inBackground(func() { s.syncAfterChange(ev.ID, nil) })
 	}
-	sendErr := s.discord.SendDirectMessagePayload(userID, inviteMessage(ev, session.DisplayName, holdPlace))
+	sendErr := s.discord.SendDirectMessagePayload(userID, inviteMessage(ev, session.DisplayName, reserve))
 	said := "Invited " + displayName + "."
-	if holdPlace {
+	switch reserve {
+	case reserveHold:
 		said = "Invited " + displayName + " and held a place for them."
+	case reservePastLimit:
+		said = "Invited " + displayName + ", who can join even though it is full."
 	}
 	delivery, deliveryError := InviteDeliverySent, ""
 	switch {
@@ -259,6 +276,13 @@ func (s *Server) handleWebReleaseHold(w http.ResponseWriter, r *http.Request) {
 	}
 	s.redirectWithNotice(w, r, ev.ID, notice)
 }
+
+// What an invite keeps for the person asked, as the form sends it: a held
+// place, a pass past the limit, or "" for nothing.
+const (
+	reserveHold      = "hold"
+	reservePastLimit = "past_limit"
+)
 
 // pickedUserIDs is everyone the Add someone box sent, in the order picked,
 // each once. The box sends Discord user ids, never names.

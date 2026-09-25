@@ -124,6 +124,11 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		log.Printf("[discord-signup] event updates %d: %v", ev.ID, err)
 		problems = append(problems, "Could not read the edit history: "+err.Error())
 	}
+	pins, err := s.store.Pins(ev.ID)
+	if err != nil {
+		log.Printf("[discord-signup] pins %d: %v", ev.ID, err)
+		problems = append(problems, "Could not read the pins: "+err.Error())
+	}
 	invites, err := s.store.Invites(ev.ID)
 	if err != nil {
 		log.Printf("[discord-signup] invites %d: %v", ev.ID, err)
@@ -148,6 +153,9 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	for _, inv := range invites {
 		actors = append(actors, inv.InvitedBy, inv.HoldEndedBy)
 	}
+	for _, p := range pins {
+		actors = append(actors, p.PinnedBy, p.UnpinnedBy)
+	}
 	names := eventLogNames{actors: s.historyActorNames(ev.GuildID, actors), people: map[string]actorName{}, roles: map[string]string{}}
 	for actor, name := range names.actors {
 		if snowflake.MatchString(actor) {
@@ -168,7 +176,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 
 	data := pageData{
 		Title: ev.Name, Session: session, Event: ev, Roster: roster, Invites: invites,
-		EventLog:          buildEventLog(signupUpdates, edits, invites, names),
+		EventLog:          buildEventLog(signupUpdates, edits, invites, pins, names),
 		CanManage:         canManage,
 		EventUnderway:     eventIsUnderway(ev),
 		EventFull:         eventIsFull(ev),
@@ -178,6 +186,22 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		DiscordEventURL:   DiscordEventURL(ev.GuildID, ev.DiscordScheduledEventID),
 		Notice:            notice,
 		Error:             strings.Join(problems, " "),
+	}
+	data.PinnedIDs = map[string]bool{}
+	going := map[string]bool{}
+	for _, sg := range roster {
+		if sg.State == StateAttending {
+			going[sg.DiscordUserID] = true
+		}
+	}
+	for _, p := range pins {
+		if p.UnpinnedAt != 0 {
+			continue
+		}
+		data.PinnedIDs[p.DiscordUserID] = true
+		if !going[p.DiscordUserID] {
+			data.PinnedAway = append(data.PinnedAway, p)
+		}
 	}
 	for _, sg := range roster {
 		switch sg.State {
@@ -596,8 +620,18 @@ func (s *Server) handleWebRosterAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	list := r.FormValue("list")
+	// Pinning is going on every date, so it goes with Going alone.
+	pin := r.FormValue("pin") == "on"
+	if pin && (list != StateAttending || ev.RecurrenceRule == "") {
+		s.redirectWithNotice(w, r, ev.ID, "Nobody was added: pinning is for Going, on a repeating event.")
+		return
+	}
 	lines := make([]string, 0, len(userIDs)+1)
 	for _, userID := range userIDs {
+		if pin {
+			lines = append(lines, s.pinPerson(ev, session, userID))
+			continue
+		}
 		lines = append(lines, s.placePerson(ev, session, userID, list))
 	}
 	if after, err := s.store.GetEvent(ev.ID); err == nil && after.Capacity > 0 && after.AttendingCount > after.Capacity {

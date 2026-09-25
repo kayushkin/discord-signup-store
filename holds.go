@@ -14,6 +14,11 @@ import (
 // full; pressing Maybe or Can't go, an organiser releasing it, or the date
 // rolling over gives it back, and the next person waiting moves up into it.
 //
+// When no place is free, an invite can let them in past the limit instead
+// (past_limit): nothing is kept and nothing counts against the limit, but
+// their Join is never waitlisted or turned away. It ends the same ways a held
+// place does, and while it lasts it is "their pass" in the words below.
+//
 // The limit itself is never changed. The hold lives on the invite row
 // (event_invites.holds_place, hold_ended_at, hold_outcome), so the number the
 // organiser set stays the number they set, and a hold that ends cannot leave
@@ -50,7 +55,7 @@ func heldPlacesTx(tx *sql.Tx, eventID int64, exceptUserID string) (int, error) {
 // reports whether they did.
 func endHoldTx(tx *sql.Tx, eventID int64, userID, outcome, actor string, ts int64) (bool, error) {
 	res, err := tx.Exec(`UPDATE event_invites SET hold_ended_at = ?, hold_outcome = ?, hold_ended_by = ?
-		WHERE event_id = ? AND discord_user_id = ? AND holds_place = 1 AND hold_ended_at = 0`,
+		WHERE event_id = ? AND discord_user_id = ? AND (holds_place = 1 OR past_limit = 1) AND hold_ended_at = 0`,
 		ts, outcome, actor, eventID, userID)
 	if err != nil {
 		return false, fmt.Errorf("end held place: %w", err)
@@ -72,6 +77,14 @@ func (s *Store) RecordInvite(inv EventInvite) (*EventInvite, error) {
 	}
 	defer tx.Rollback()
 	inv.At = now()
+	if inv.HoldsPlace && inv.PastLimit {
+		return nil, fmt.Errorf("%w: an invite holds a place or lets them in past the limit, not both", ErrInvalidEvent)
+	}
+	if inv.PastLimit {
+		if _, err := endHoldTx(tx, inv.EventID, inv.DiscordUserID, HoldOutcomeReleased, inv.InvitedBy, inv.At); err != nil {
+			return nil, err
+		}
+	}
 	if inv.HoldsPlace {
 		var capacity int
 		if err := tx.QueryRow(`SELECT capacity FROM events WHERE id = ? AND deleted_at = 0`, inv.EventID).
@@ -98,10 +111,10 @@ func (s *Store) RecordInvite(inv EventInvite) (*EventInvite, error) {
 	}
 	res, err := tx.Exec(`
 		INSERT INTO event_invites (event_id, discord_user_id, display_name, invited_by,
-		                           delivery, delivery_error, at, holds_place)
-		VALUES (?,?,?,?,?,?,?,?)`,
+		                           delivery, delivery_error, at, holds_place, past_limit)
+		VALUES (?,?,?,?,?,?,?,?,?)`,
 		inv.EventID, inv.DiscordUserID, inv.DisplayName, inv.InvitedBy,
-		inv.Delivery, inv.DeliveryError, inv.At, boolToInt(inv.HoldsPlace))
+		inv.Delivery, inv.DeliveryError, inv.At, boolToInt(inv.HoldsPlace), boolToInt(inv.PastLimit))
 	if err != nil {
 		return nil, fmt.Errorf("record invite: %w", err)
 	}
@@ -126,7 +139,7 @@ func (s *Store) SetInviteDelivery(inviteID int64, delivery, deliveryError string
 	var userID string
 	var holds bool
 	var ended int64
-	if err := tx.QueryRow(`SELECT event_id, discord_user_id, holds_place, hold_ended_at FROM event_invites WHERE id = ?`,
+	if err := tx.QueryRow(`SELECT event_id, discord_user_id, holds_place OR past_limit, hold_ended_at FROM event_invites WHERE id = ?`,
 		inviteID).Scan(&eventID, &userID, &holds, &ended); err != nil {
 		return nil, fmt.Errorf("load invite: %w", err)
 	}

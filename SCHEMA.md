@@ -306,9 +306,21 @@ joined when the page is drawn.
 | `delivery_error` | TEXT | Discord's words when not `sent`. |
 | `at` | INTEGER | When. |
 | `holds_place` | INTEGER | `1` when the invite keeps a place until they answer. |
+| `past_limit` | INTEGER | `1` when it keeps no place but lets their Join past the limit; it ends the same ways a hold does, and never counts against the limit. |
 | `hold_ended_at` | INTEGER | When a held place stopped being held; `0` while it is. A live hold counts against the limit like someone going, in every query that decides whether the event is full. |
 | `hold_outcome` | TEXT | `joined`, `declined` (Maybe or Can't go), `released` (an organiser, or a second invite replacing the first), `undelivered` (the DM bounced) or `expired` (the date rolled over). |
 | `hold_ended_by` | TEXT | The actor that ended it, as elsewhere; `''` when the service did. |
+
+## `event_pins` — people on every date of a repeating event, new 2026-09-25
+
+| column | type | description |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `event_id` | INTEGER | → `events(id)` ON DELETE CASCADE. |
+| `discord_user_id` | TEXT | Who. At most one live pin per person per event. |
+| `display_name` | TEXT | Their name when pinned. Display only. |
+| `pinned_by` / `unpinned_by` | TEXT | Actors, as elsewhere; `pin` when the service pinned the host. |
+| `pinned_at` / `unpinned_at` | INTEGER | `unpinned_at` 0 is a live pin. At each rollover every live pin is seated as going (`joined_via = pinned`, logged `added` by `pin`). The host is pinned only if they never had a row, so an unpin stands. |
 
 ## `event_table_rows` — **dropped 2026-09-02**
 

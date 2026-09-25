@@ -129,13 +129,13 @@ func TestTheTableNamesEachList(t *testing.T) {
 		{DiscordUserID: "3", DisplayName: "Cy", State: StateWaitlisted, WaitlistPlace: 1},
 		{DiscordUserID: "4", DisplayName: "Di", State: StateMaybe},
 	}
-	text := buildEventTableBlock(ev, roster, true, eventTableButtons).text
+	text := buildEventTableBlock(ev, roster, true, eventTableButtons, nil).text
 	for _, want := range []string{"\n✅ **Going** (2/2): Al, Bo", "\n🤷 **Maybe**: Di", "\n❌ **Waitlist**: Cy"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("row = %q, want %q", text, want)
 		}
 	}
-	if strings.Contains(buildEventTableBlock(ev, roster[:2], true, eventTableButtons).text, "Maybe:") {
+	if strings.Contains(buildEventTableBlock(ev, roster[:2], true, eventTableButtons, nil).text, "Maybe:") {
 		t.Error("an empty Maybe list still has a line")
 	}
 }

@@ -206,10 +206,33 @@ ol.people{list-style:none;margin:4px 0 0;padding:0}
   text-decoration:line-through;text-decoration-color:#8a8d94;text-decoration-thickness:1.5px}
 .choice > button:disabled{border:1px solid var(--line)}
 .choice-note{margin:10px 0 0;font-size:12px;color:var(--dim)}
-label.check{display:flex;gap:9px;align-items:flex-start;margin:0;color:var(--ink);font-size:14px;cursor:pointer}
-label.check input{width:auto;margin:3px 0 0;accent-color:var(--accent)}
-label.check .hint{display:block;margin-top:1px}
-label.check.is-off{color:var(--dim);cursor:default}
+/* An option tile: the whole tile is the checkbox. On, it lights in its
+   panel's colour and the box fills with a tick. */
+label.tile{position:relative;display:flex;gap:10px;align-items:flex-start;margin:0;padding:10px 12px;
+  border:1px solid var(--line);border-radius:9px;background:#1b1c20;cursor:pointer;
+  color:var(--ink);font-size:14px;transition:border-color .12s,background .12s,box-shadow .12s}
+label.tile input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+label.tile:hover{border-color:#5865f288}
+.tile-box{flex:none;width:18px;height:18px;margin-top:1px;border:1.5px solid #6b6e76;border-radius:5px;
+  display:inline-flex;align-items:center;justify-content:center;transition:all .12s}
+.tile-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile-text > span{color:var(--dim);font-size:12.5px;line-height:1.45}
+.tile-warn{color:var(--warn)!important}
+label.tile:has(input:checked){border-color:var(--accent);background:#5865f21f;box-shadow:0 0 0 1px #5865f255 inset}
+label.tile:has(input:checked) .tile-box{background:var(--accent);border-color:var(--accent)}
+label.tile:has(input:checked) .tile-box::after{content:"";width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;
+  transform:rotate(45deg) translate(-1px,-1px)}
+label.tile:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+label.tile:has(input:disabled){opacity:.45;cursor:not-allowed}
+label.force-tile:hover{border-color:#e8a33d88}
+label.force-tile:has(input:checked){border-color:var(--warn);background:#e8a33d1a;box-shadow:0 0 0 1px #e8a33d44 inset}
+label.force-tile:has(input:checked) .tile-box{background:var(--warn);border-color:var(--warn)}
+.choice-what{flex:none!important}
+.choice-foot{margin-top:auto;padding-top:4px}
+.pin-mark{color:#9aa4ff;vertical-align:-1px}
+.btn-sm.pin-toggle{display:inline-flex;align-items:center;gap:4px}
+.btn-sm.pin-toggle.is-on{color:#9aa4ff;border-color:#5865f266;background:#5865f214}
+.pinned-away{font-size:13px;color:var(--ink);margin:10px 0 0;display:flex;gap:6px;flex-wrap:wrap;align-items:baseline}
 .pill.held{color:#9aa4ff;border-color:#5865f266}
 .control.is-off h4{opacity:.6}
 .map-link{display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:13px}
@@ -222,7 +245,7 @@ label.check.is-off{color:var(--dim);cursor:default}
 .choices{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:640px){.choices{grid-template-columns:1fr}}
 .choice{border:1px solid var(--line);border-radius:9px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:#1f2024}
-.choice p{margin:0;font-size:13px;color:var(--dim);flex:1}
+.choice p{margin:0;font-size:13px;color:var(--dim)}
 .choice p strong{color:var(--ink)}
 .choice-title{display:flex;align-items:center;flex-wrap:wrap;gap:4px 7px;font-weight:600}
 .choice.force{border-color:#e8a33d55;background:linear-gradient(180deg,#e8a33d0f,transparent 70%)}
@@ -526,8 +549,21 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     // Anyone already on the event is moved, not added, and the question
     // says so, with what happens to a place given up.
     var choice = submitter && submitter.getAttribute("data-choice");
-    var moving = form.getAttribute("data-moving");
-    if (ask && moving && choice && choice !== "invite") ask += " " + moving;
+    if (ask && choice && choice !== "invite" && form.hasAttribute("data-standings")) {
+      var standings = JSON.parse(form.getAttribute("data-standings"));
+      var pinBox = form.querySelector("input[data-pin]");
+      if (pinBox && pinBox.checked) {
+        ask = "Pin " + who + " to every date, and put them down as going now? They are not asked first; each gets a DM saying so.";
+      }
+      // Only someone on a different list is moved; someone already on the
+      // chosen one stays where they are.
+      var moved = standings.filter(function (p) { return p.standing && p.standing !== "withdrawn" && p.standing !== choice; });
+      if (moved.length) {
+        ask += " " + moved.map(function (p) { return p.name + " moves off " + listWord[p.standing]; }).join("; ") + "." +
+          (moved.some(function (p) { return p.standing === "attending"; }) && form.hasAttribute("data-place-frees")
+            ? " A place given up goes to whoever is next on the waitlist." : "");
+      }
+    }
     // The answer is marked on the button pressed, or on the form when Enter
     // sent it, and the submit is sent again once it is yes.
     var asked = submitter || form;
@@ -577,6 +613,7 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
   // Add someone: each pick joins a list under the search box, with a ✕ to
   // take it off again, and the actions appear once anyone is picked. What
   // an action would do to someone already on the event is said under it.
+  var listWord = { attending: "going", waitlisted: "the waitlist", maybe: "maybe" };
   var standing = { attending: "already going", waitlisted: "already on the waitlist",
                    maybe: "down as maybe", withdrawn: "left this event" };
   function joinNames(names) {
@@ -591,6 +628,8 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     var scratch = form.querySelector("[data-picker-id]");
     var people = [];
 
+    // Each panel says only what is about it, and only when it matters.
+    function setNote(el, text) { el.textContent = text; el.hidden = !text; }
     function refresh() {
       var n = people.length;
       actions.hidden = n === 0;
@@ -601,46 +640,53 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
       form.querySelectorAll("[data-them]").forEach(function (el) {
         el.textContent = n === 1 ? names[0] : n + " people";
       });
-      form.querySelector("[data-invites]").textContent = n > 1 ? n + " invites" : "invite";
 
-      var on = people.filter(function (p) { return p.standing && p.standing !== "withdrawn"; });
-      var notes = [];
-      form.querySelectorAll("[data-choice]").forEach(function (b) {
+      // Ask: an invite skips anyone already going or waiting — they have
+      // answered already.
+      var answered = people.filter(function (p) { return p.standing === "attending" || p.standing === "waitlisted"; });
+      var askable = n - answered.length;
+      form.querySelector("[data-invites]").textContent = askable > 1 ? askable + " invites" : "invite";
+      form.querySelector("[data-choice=invite]").disabled = n > 0 && askable === 0;
+      var reserve = form.querySelector("input[name=reserve]");
+      if (reserve) {
+        reserve.disabled = askable === 0;
+        if (reserve.disabled) reserve.checked = false;
+        var holdNote = form.querySelector("[data-hold-note]");
+        if (holdNote) {
+          var free = +reserve.getAttribute("data-free");
+          setNote(holdNote, reserve.checked && askable > free
+            ? "Only " + free + " place" + (free === 1 ? " is" : "s are") + " free: the first " + free +
+              " get a held place, and the rest are not sent."
+            : "");
+        }
+      }
+      setNote(form.querySelector("[data-ask-note]"), !answered.length ? "" :
+        joinNames(answered.map(function (p) { return p.name; })) + (answered.length === 1 ? " is" : " are") +
+        " already on the event" + (askable ? ", so the invite skips " + (answered.length === 1 ? "them." : "them.") : ": there is nobody to ask."));
+
+      // Add yourself: a list that would change nobody is off; pinning goes
+      // with Going only; someone already on the event is moved.
+      var pin = form.querySelector("input[data-pin]");
+      var pinning = !!(pin && pin.checked);
+      form.querySelectorAll(".seg[data-choice]").forEach(function (b) {
         var choice = b.getAttribute("data-choice");
-        // Unavailable when it would change nobody.
-        var nobody = people.every(function (p) {
-          return choice === "invite" ? (p.standing === "attending" || p.standing === "waitlisted") : p.standing === choice;
-        });
-        b.disabled = b.hasAttribute("data-never") || (n > 0 && nobody);
-        if (b.hasAttribute("data-never") && choice !== "invite") notes.push("Waitlist: " + b.getAttribute("title").toLowerCase() + ".");
+        var nobody = n > 0 && people.every(function (p) { return p.standing === choice; });
+        b.disabled = b.hasAttribute("data-never") || (nobody && !(pinning && choice === "attending")) ||
+          (pinning && choice !== "attending");
       });
+      var on = people.filter(function (p) { return p.standing && p.standing !== "withdrawn"; });
+      var forceNote = pinning ? "Pinning puts them on as going, so only Going applies." : "";
+      form.setAttribute("data-standings", JSON.stringify(people.map(function (p) { return { name: p.name, standing: p.standing }; })));
       if (on.length) {
-        notes.unshift(on.map(function (p) { return p.name + " is " + standing[p.standing]; }).join("; ") +
-          ". A list moves " + (on.length === 1 ? "them" : "them all") + " to it" +
-          (on.length < n ? ", and an invite skips anyone already going or waiting." : "."));
-        var fromGoing = on.filter(function (p) { return p.standing === "attending"; });
-        form.setAttribute("data-moving", joinNames(on.map(function (p) { return p.name; })) +
-          (on.length === 1 ? " is" : " are") + " already on the event and will be moved." +
-          (fromGoing.length && form.hasAttribute("data-place-frees") ? " A place given up goes to whoever is next on the waitlist." : ""));
-      } else {
-        form.removeAttribute("data-moving");
+        if (!pinning) {
+          forceNote = on.map(function (p) { return p.name + " is " + standing[p.standing]; }).join("; ") +
+            ". Picking another list moves them.";
+        }
       }
-      // Said beside the box it is about.
-      var hold = form.querySelector("input[name=hold_place]");
-      var holdNote = form.querySelector("[data-hold-note]");
-      if (hold && holdNote) {
-        var free = +hold.getAttribute("data-free");
-        holdNote.hidden = !(hold.checked && n > free);
-        holdNote.textContent = "Only " + free + " place" + (free === 1 ? " is" : "s are") +
-          " free to hold: invites past the first " + free + " are not sent.";
-      }
-      var note = form.querySelector("[data-choice-note]");
-      note.textContent = notes.join(" ");
-      note.hidden = notes.length === 0;
+      setNote(form.querySelector("[data-force-note]"), forceNote);
     }
 
-    var holdBox = form.querySelector("input[name=hold_place]");
-    if (holdBox) holdBox.addEventListener("change", refresh);
+    form.querySelectorAll("[data-tile] input").forEach(function (box) { box.addEventListener("change", refresh); });
     form.addEventListener("member-picked", function (e) {
       var m = e.detail;
       box.value = ""; scratch.value = "";

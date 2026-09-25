@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -153,9 +154,14 @@ type eventTableBlock struct {
 // because every row is about the same size; here a row carrying twenty names is
 // many times one carrying none, so a fixed count would either waste most of a
 // message or overflow it.
-func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*Event) []any) eventTableBlock {
+func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*Event) []any, footer func(*Event) string) eventTableBlock {
 	title, _, _ := eventHeadlineParts(ev)
 	text := eventTableText(ev, roster, title, eventTableCharBudget, textDisplayLimit)
+	if footer != nil {
+		if line := footer(ev); line != "" {
+			text += "\n" + line
+		}
+	}
 
 	// One text block, one action row, its buttons, and the separator that
 	// divides this block from the one above it.
@@ -212,7 +218,7 @@ func eventTableText(ev *Event, roster []Signup, title string, budget, limit int)
 //
 // Returns at least one page, so an empty guild still gets a message saying
 // there is nothing on rather than leaving whatever was there last week.
-func packEventTable(events []Event, rosters map[int64][]Signup, buttons func(*Event) []any, reserve int) [][]eventTableBlock {
+func packEventTable(events []Event, rosters map[int64][]Signup, buttons func(*Event) []any, footer func(*Event) string, reserve int) [][]eventTableBlock {
 	pages := [][]eventTableBlock{}
 	var page []eventTableBlock
 	// The container itself is a component.
@@ -220,7 +226,7 @@ func packEventTable(events []Event, rosters map[int64][]Signup, buttons func(*Ev
 
 	for i := range events {
 		ev := &events[i]
-		block := buildEventTableBlock(ev, rosters[ev.ID], len(page) == 0, buttons)
+		block := buildEventTableBlock(ev, rosters[ev.ID], len(page) == 0, buttons, footer)
 		// reserve holds room for a trailing action row on whichever page turns
 		// out to be last; nobody knows which that is while packing, so every
 		// page keeps it. It is three components on the management table and
@@ -233,7 +239,7 @@ func packEventTable(events []Event, rosters map[int64][]Signup, buttons func(*Ev
 			components, characters = 1, 0
 			// Re-measured as the first block on its new page, which is one
 			// component cheaper: no separator above it.
-			block = buildEventTableBlock(ev, rosters[ev.ID], true, buttons)
+			block = buildEventTableBlock(ev, rosters[ev.ID], true, buttons, footer)
 		}
 		page = append(page, block)
 		components += block.components
@@ -380,11 +386,13 @@ func managementTrailing() []any {
 type tableSurface struct {
 	channelID string
 	buttons   func(*Event) []any
-	leading   []any
-	trailing  []any
-	pages     func() ([]TablePage, error)
-	setPage   func(page int, messageID string) error
-	dropPage  func(page int) error
+	// footer is a last line under each event, or nil for none.
+	footer   func(*Event) string
+	leading  []any
+	trailing []any
+	pages    func() ([]TablePage, error)
+	setPage  func(page int, messageID string) error
+	dropPage func(page int) error
 }
 
 // RefreshEventTable rewrites the public table in place.
@@ -415,12 +423,39 @@ func (s *Server) RefreshManagementTable(guildID string) error {
 		return err
 	}
 	return s.publishPackedTable(guildID, tableSurface{
-		channelID: table.ManagementChannelID, buttons: managementButtons,
+		channelID: table.ManagementChannelID, buttons: managementButtons, footer: s.webRosterLink,
 		leading: managementLeading(), trailing: managementTrailing(),
 		pages:    func() ([]TablePage, error) { return s.store.ManagementPages(guildID) },
 		setPage:  func(p int, m string) error { return s.store.SetManagementPage(guildID, p, m) },
 		dropPage: func(p int) error { return s.store.DeleteManagementPage(guildID, p) },
 	})
+}
+
+// webRosterLink is the management table's last line under an event: a link
+// to its page on the web, where the roster, invites, holds and pins are. A
+// link in the text rather than a button, because the row already has the
+// five buttons an action row holds. None when the web pages are off.
+func (s *Server) webRosterLink(ev *Event) string {
+	origin := s.webOrigin()
+	if origin == "" {
+		return ""
+	}
+	return fmt.Sprintf("-# 🌐 [Manage the roster on the web](%s/events/%d)", origin, ev.ID)
+}
+
+// webOrigin is where the web pages are served, taken from the OAuth
+// callback URL — the one address of them this service is told. "" when the
+// web pages are off.
+func (s *Server) webOrigin() string {
+	if s.oauth == nil || s.oauth.RedirectURL == "" {
+		return ""
+	}
+	u, err := url.Parse(s.oauth.RedirectURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		log.Printf("[discord-signup] web origin from redirect URL %q: %v", s.oauth.RedirectURL, err)
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 // tableLock is the lock one guild's table redraws take in turn.
@@ -464,7 +499,7 @@ func (s *Server) publishPackedTable(guildID string, surface tableSurface) error 
 	if len(surface.leading) > 0 {
 		reserve += len(surface.leading) + 2
 	}
-	pages := packEventTable(events, rosters, surface.buttons, reserve)
+	pages := packEventTable(events, rosters, surface.buttons, surface.footer, reserve)
 
 	existing, err := surface.pages()
 	if err != nil {

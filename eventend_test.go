@@ -71,8 +71,8 @@ func TestTheManagementTableCountsTheEndButton(t *testing.T) {
 		ahead[i].StartsAt = time.Now().Add(time.Hour).Unix()
 	}
 	reserve := len(managementTrailing()) + 2
-	underwayPages := packEventTable(underway, nil, managementButtons, reserve)
-	aheadPages := packEventTable(ahead, nil, managementButtons, reserve)
+	underwayPages := packEventTable(underway, nil, managementButtons, nil, reserve)
+	aheadPages := packEventTable(ahead, nil, managementButtons, nil, reserve)
 	if len(underwayPages[0]) >= len(aheadPages[0]) {
 		t.Errorf("underway rows carry End but a page still holds %d of them, the same as %d without it",
 			len(underwayPages[0]), len(aheadPages[0]))
@@ -103,7 +103,7 @@ func TestARowRendersTheButtonsItWasMeasuredWith(t *testing.T) {
 		return buttons
 	}
 	events := rosterTableEvents(1)
-	page := packEventTable(events, nil, growing, 0)[0]
+	page := packEventTable(events, nil, growing, nil, 0)[0]
 	body := RenderEventTablePage(page, 0, 1, nil, nil)["components"].([]any)[0].(map[string]any)["components"].([]any)
 	row := body[1].(map[string]any)["components"].([]any)
 	if len(row) != len(page[0].buttons) || page[0].components != 2+len(row) {

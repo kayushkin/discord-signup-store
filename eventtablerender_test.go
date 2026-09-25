@@ -43,7 +43,7 @@ func TestEveryPageStaysInsideDiscordsBudgets(t *testing.T) {
 		rosters[events[i].ID] = rosterOf(names...)
 	}
 
-	pages := packEventTable(events, rosters, eventTableButtons, 1)
+	pages := packEventTable(events, rosters, eventTableButtons, nil, 1)
 	if len(pages) < 2 {
 		t.Fatalf("%d pages for twelve events with big rosters, want the packer to overflow", len(pages))
 	}
@@ -79,7 +79,7 @@ func TestSmallRostersPackMoreEventsPerMessage(t *testing.T) {
 	for i := range events {
 		rosters[events[i].ID] = rosterOf("Al", "Bo")
 	}
-	pages := packEventTable(events, rosters, eventTableButtons, 1)
+	pages := packEventTable(events, rosters, eventTableButtons, nil, 1)
 	if len(pages[0]) < 5 {
 		t.Errorf("first page holds %d events with tiny rosters, want at least 5", len(pages[0]))
 	}
@@ -92,7 +92,7 @@ func TestTheRosterTableNamesPeopleWithoutPingingThem(t *testing.T) {
 	events := rosterTableEvents(1)
 	rosters := map[int64][]Signup{events[0].ID: rosterOf("Domonation", "Twili Midna")}
 
-	payload := RenderEventTablePage(packEventTable(events, rosters, eventTableButtons, 1)[0], 0, 1, nil, nil)
+	payload := RenderEventTablePage(packEventTable(events, rosters, eventTableButtons, nil, 1)[0], 0, 1, nil, nil)
 	rendered := fmt.Sprint(payload)
 	if !strings.Contains(rendered, "Domonation") || !strings.Contains(rendered, "Twili Midna") {
 		t.Errorf("the roster table does not name who is going: %q", rendered)
@@ -112,7 +112,7 @@ func TestTheRosterTableNamesPeopleWithoutPingingThem(t *testing.T) {
 // TestAnEmptyGuildStillGetsAPage. Otherwise the last thing posted stays up
 // saying something that stopped being true.
 func TestAnEmptyGuildStillGetsAPage(t *testing.T) {
-	pages := packEventTable(nil, nil, eventTableButtons, 1)
+	pages := packEventTable(nil, nil, eventTableButtons, nil, 1)
 	if len(pages) != 1 {
 		t.Fatalf("%d pages for no events, want 1", len(pages))
 	}
@@ -129,7 +129,7 @@ func TestTheWaitlistIsNamedSeparately(t *testing.T) {
 	roster := rosterOf("Al", "Bo")
 	roster = append(roster, Signup{DiscordUserID: "u-cy", DisplayName: "Cy",
 		State: StateWaitlisted, WaitlistPlace: 1})
-	pages := packEventTable(events, map[int64][]Signup{events[0].ID: roster}, eventTableButtons, 1)
+	pages := packEventTable(events, map[int64][]Signup{events[0].ID: roster}, eventTableButtons, nil, 1)
 
 	text := pages[0][0].text
 	if !strings.Contains(text, "✅ **Going** (2/8): Al, Bo") {
@@ -150,7 +150,7 @@ func TestARowSaysWhatWhenAndWhereThenLinksItsPost(t *testing.T) {
 		Timezone: "America/Los_Angeles",
 		StartsAt: time.Date(2026, 9, 22, 19, 0, 0, 0, reno).Unix()}
 
-	block := buildEventTableBlock(ev, rosterOf("Al", "Bo", "Cy"), true, eventTableButtons)
+	block := buildEventTableBlock(ev, rosterOf("Al", "Bo", "Cy"), true, eventTableButtons, nil)
 	// The count is in the row on purpose. It used to be read off the thread
 	// title, and Discord rate-limits thread renames to about two per ten
 	// minutes, so under signups the number people read was two renames old. A
@@ -176,7 +176,7 @@ func TestATitleIsShownAsTyped(t *testing.T) {
 func TestAnEventWithNoThreadStillSaysWhatItIs(t *testing.T) {
 	ev := &Event{ID: 1, GuildID: "g1", Name: "Unlinked", Status: StatusOpen,
 		Capacity: 4, AttendingCount: 1, StartsAt: time.Now().Add(30 * time.Hour).Unix()}
-	block := buildEventTableBlock(ev, rosterOf("Al"), true, eventTableButtons)
+	block := buildEventTableBlock(ev, rosterOf("Al"), true, eventTableButtons, nil)
 	if !strings.Contains(block.text, "Unlinked") {
 		t.Errorf("row = %q, want the full line when there is no thread to link", block.text)
 	}
@@ -219,14 +219,14 @@ func TestTheRowReadsLikeTheExample(t *testing.T) {
 	ev := &Event{ID: 1, GuildID: "g1", Name: "Fall Celebration! <Hosted by Heidi>", Status: StatusOpen,
 		Capacity: 15, AttendingCount: 2, Location: "Heidi's House", ForumPostID: "post-9",
 		Timezone: "America/Los_Angeles", StartsAt: time.Date(2026, 9, 22, 19, 0, 0, 0, reno).Unix()}
-	block := buildEventTableBlock(ev, rosterOf("Pawadam", "Weidi 🫧"), true, eventTableButtons)
+	block := buildEventTableBlock(ev, rosterOf("Pawadam", "Weidi 🫧"), true, eventTableButtons, nil)
 	want := "**Fall Celebration! \\<Hosted by Heidi\\>**\n🗓️ Tue 9/22 7pm\n📍 Heidi's House\n<#post-9>\n✅ **Going** (2/15): Pawadam, Weidi 🫧"
 	if block.text != want {
 		t.Errorf("row =\n%q\nwant\n%q", block.text, want)
 	}
 	// With no limit the count stands alone in its parentheses.
 	ev.Capacity = 0
-	if got := buildEventTableBlock(ev, rosterOf("Pawadam", "Weidi 🫧"), true, eventTableButtons).text; !strings.Contains(got, "\n✅ **Going** (2): Pawadam") {
+	if got := buildEventTableBlock(ev, rosterOf("Pawadam", "Weidi 🫧"), true, eventTableButtons, nil).text; !strings.Contains(got, "\n✅ **Going** (2): Pawadam") {
 		t.Errorf("unlimited row = %q, want (2) before the names", got)
 	}
 }
@@ -235,7 +235,7 @@ func TestTheRowReadsLikeTheExample(t *testing.T) {
 func TestTheManagementTableHasEditAndCreateAndNothingAMemberDoes(t *testing.T) {
 	events := rosterTableEvents(2)
 	rosters := map[int64][]Signup{events[0].ID: rosterOf("Al"), events[1].ID: nil}
-	pages := packEventTable(events, rosters, managementButtons, len(managementTrailing())+1)
+	pages := packEventTable(events, rosters, managementButtons, nil, len(managementTrailing())+1)
 	payload := RenderEventTablePage(pages[0], 0, 1, managementLeading(), managementTrailing())
 	labels := []string{}
 	var walk func([]any)
@@ -275,7 +275,7 @@ func TestTheManagementTableHasEditAndCreateAndNothingAMemberDoes(t *testing.T) {
 // the management table only.
 func TestThePublicTableCarriesNoTrailingControls(t *testing.T) {
 	events := rosterTableEvents(1)
-	pages := packEventTable(events, nil, eventTableButtons, 1)
+	pages := packEventTable(events, nil, eventTableButtons, nil, 1)
 	rendered := fmt.Sprint(RenderEventTablePage(pages[0], 0, 1, nil, nil))
 	if strings.Contains(rendered, "Create an event") || strings.Contains(rendered, myEventsButtonID) {
 		t.Error("the public table carries management controls")
@@ -285,7 +285,7 @@ func TestThePublicTableCarriesNoTrailingControls(t *testing.T) {
 // TestCreateSitsUnderADividerNotOnTheLastRow.
 func TestCreateSitsUnderADividerNotOnTheLastRow(t *testing.T) {
 	events := rosterTableEvents(2)
-	pages := packEventTable(events, nil, managementButtons, len(managementTrailing())+2)
+	pages := packEventTable(events, nil, managementButtons, nil, len(managementTrailing())+2)
 	body := RenderEventTablePage(pages[0], 0, 1, managementLeading(), managementTrailing())["components"].([]any)[0].(map[string]any)["components"].([]any)
 	last := body[len(body)-1].(map[string]any)
 	beforeLast := body[len(body)-2].(map[string]any)
@@ -321,7 +321,7 @@ func TestTheHeadlineLeavesOutWhatItDoesNotHave(t *testing.T) {
 func TestCreateIsAtTheTopAndTheBottomOfTheManagementTable(t *testing.T) {
 	events := rosterTableEvents(3)
 	reserve := len(managementTrailing()) + 2 + len(managementLeading()) + 2
-	pages := packEventTable(events, nil, managementButtons, reserve)
+	pages := packEventTable(events, nil, managementButtons, nil, reserve)
 	payload := RenderEventTablePage(pages[0], 0, len(pages), managementLeading(), managementTrailing())
 	body := payload["components"].([]any)[0].(map[string]any)["components"].([]any)
 	first := body[0].(map[string]any)
@@ -363,7 +363,7 @@ func TestCreateIsAtTheTopAndTheBottomOfTheManagementTable(t *testing.T) {
 func TestAFullManagementPageStaysInsideTheCapWithBothCreateRows(t *testing.T) {
 	events := rosterTableEvents(40)
 	reserve := len(managementTrailing()) + 2 + len(managementLeading()) + 2
-	pages := packEventTable(events, nil, managementButtons, reserve)
+	pages := packEventTable(events, nil, managementButtons, nil, reserve)
 	for i, page := range pages {
 		payload := RenderEventTablePage(page, i, len(pages), managementLeading(), managementTrailing())
 		if n := countComponents(payload["components"].([]any)); n > eventTableComponentBudget {

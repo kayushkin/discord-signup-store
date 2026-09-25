@@ -190,9 +190,33 @@ var holdOutcomeWords = map[string]string{
 	HoldOutcomeExpired:     "held place ended with the date",
 }
 
+// holdOutcomeText is how an invite's held place or pass ended.
+func holdOutcomeText(inv EventInvite) string {
+	if inv.PastLimit {
+		switch inv.HoldOutcome {
+		case HoldOutcomeJoined:
+			return "joined past the limit"
+		case HoldOutcomeDeclined:
+			return "said they can't go"
+		}
+		return "pass past the limit ended (" + inv.HoldOutcome + ")"
+	}
+	return holdOutcomeWords[inv.HoldOutcome]
+}
+
 // buildEventLog merges an event's three histories, newest first.
-func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventInvite, names eventLogNames) []eventLogEntry {
-	out := make([]eventLogEntry, 0, len(signups)+len(edits)+len(invites))
+func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventInvite, pins []EventPin, names eventLogNames) []eventLogEntry {
+	out := make([]eventLogEntry, 0, len(signups)+len(edits)+len(invites)+len(pins))
+	base := len(signups) + len(edits) + 2*len(invites)
+	for i, p := range pins {
+		subject := personHTML(p.ReadableName, p.DisplayName, p.DiscordUserID)
+		out = append(out, eventLogEntry{At: p.PinnedAt, order: base + i, Subject: subject,
+			What: "pinned to every date", By: names.actor(p.PinnedBy)})
+		if p.UnpinnedAt > 0 {
+			out = append(out, eventLogEntry{At: p.UnpinnedAt, order: base + len(pins) + i, Subject: subject,
+				What: "unpinned", By: names.actor(p.UnpinnedBy)})
+		}
+	}
 	for i, u := range signups {
 		what := u.Action
 		switch {
@@ -236,16 +260,19 @@ func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventI
 		if inv.HoldsPlace {
 			what += " and held a place"
 		}
+		if inv.PastLimit {
+			what += ", able to join past the limit"
+		}
 		subject := personHTML(inv.ReadableName, inv.DisplayName, inv.DiscordUserID)
 		out = append(out, eventLogEntry{At: inv.At, order: len(signups) + len(edits) + i,
 			Subject: subject, What: what, By: names.actor(inv.InvitedBy)})
-		if inv.HoldsPlace && inv.HoldEndedAt > 0 {
+		if (inv.HoldsPlace || inv.PastLimit) && inv.HoldEndedAt > 0 {
 			by := names.actor(inv.HoldEndedBy)
 			if inv.HoldEndedBy == "" {
 				by = ""
 			}
 			out = append(out, eventLogEntry{At: inv.HoldEndedAt, order: len(signups) + len(edits) + len(invites) + i,
-				Subject: subject, What: template.HTML(holdOutcomeWords[inv.HoldOutcome]), By: by})
+				Subject: subject, What: template.HTML(holdOutcomeText(inv)), By: by})
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {

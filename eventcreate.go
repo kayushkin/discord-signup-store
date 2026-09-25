@@ -33,6 +33,10 @@ func (s *Server) createEventAndJoinOrganiser(ev Event, displayName string) (*Eve
 			created.CreatedBy, created.ID, err)
 		return created, nil
 	}
+	// A repeating event pins its host, so they are on every date.
+	if err := s.store.PinHost(created.ID); err != nil {
+		log.Printf("[discord-signup] pin host of new event %d: %v", created.ID, err)
+	}
 	// Re-read. AttendingCount is filled by the read path, so the struct
 	// CreateEvent handed back still says nobody is going — and the caller's
 	// very next move is to render a card from it.

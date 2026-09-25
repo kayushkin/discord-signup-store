@@ -73,6 +73,10 @@ type pageData struct {
 	Form eventFormValues
 	// HoldOutcomeWords say how a held place ended.
 	HoldOutcomeWords map[string]string
+	// PinnedIDs are the people pinned to a repeating event, and PinnedAway
+	// those of them not going on the current date.
+	PinnedIDs  map[string]bool
+	PinnedAway []EventPin
 	// FreePlaces is how many places are neither taken nor held, on an event
 	// with a limit: what an invite could hold.
 	FreePlaces int

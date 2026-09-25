@@ -62,6 +62,16 @@ next person waiting moves up into it. The limit itself never changes: an event
 of 8 with 5 going and 1 held has 2 free. A place is only held while one is free
 and the event has a limit.
 
+**When no place is free**, the same option reads *Let them in even though
+it's full*: nothing is kept and nothing counts against the limit, but their
+Join takes them past it instead of onto the waitlist.
+
+**Pinned people are on every date.** On a repeating event an organiser can
+pin someone — from their row in Going, or with *Pin to every date* when adding
+them. When the date rolls over and the roster clears, everyone pinned is put
+back on as going, past the limit if it comes to that. The host is pinned the
+first time the event repeats; an unpin stands, and they are not pinned again.
+
 **Add now is not an invite.** Add now puts someone on the list the organiser
 picks — going even past the limit, maybe, or the waitlist while the event is
 full — and DMs them to say so; the history records it as `added` by the

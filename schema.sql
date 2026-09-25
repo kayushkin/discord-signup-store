@@ -326,3 +326,21 @@ CREATE TABLE IF NOT EXISTS event_invites (
 );
 
 CREATE INDEX IF NOT EXISTS idx_event_invites_event ON event_invites(event_id, at);
+
+-- event_pins: people who get a place on every date of a recurring event. When
+-- a date rolls over and the roster clears, each person with a live pin is put
+-- back on as going. The host is pinned the first time the event repeats; an
+-- unpin is kept (unpinned_at), so it is never pinned back by that rule. A
+-- live pin is one with unpinned_at 0; at most one per person per event.
+CREATE TABLE IF NOT EXISTS event_pins (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    display_name    TEXT NOT NULL DEFAULT '',
+    pinned_by       TEXT NOT NULL,
+    pinned_at       INTEGER NOT NULL,
+    unpinned_at     INTEGER NOT NULL DEFAULT 0,
+    unpinned_by     TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_pins_event ON event_pins(event_id, unpinned_at);

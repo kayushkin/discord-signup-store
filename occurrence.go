@@ -66,17 +66,17 @@ func (s *Store) FinishedRecurringOccurrences() ([]Event, error) {
 //
 // Returns the people withdrawn, so the caller can settle their roles and
 // reactions through the same path a Leave uses.
-func (s *Store) RollOverOccurrence(eventID, nextStart, nextEnd int64) ([]Signup, error) {
+func (s *Store) RollOverOccurrence(eventID, nextStart, nextEnd int64) (withdrawnFromLastDate, seatedByPin []Signup, err error) {
 	if nextStart <= 0 {
-		return nil, fmt.Errorf("%w: next occurrence needs a start", ErrInvalidEvent)
+		return nil, nil, fmt.Errorf("%w: next occurrence needs a start", ErrInvalidEvent)
 	}
 	before, err := s.GetEvent(eventID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
-		return nil, fmt.Errorf("begin: %w", err)
+		return nil, nil, fmt.Errorf("begin: %w", err)
 	}
 	defer tx.Rollback()
 
@@ -85,7 +85,7 @@ func (s *Store) RollOverOccurrence(eventID, nextStart, nextEnd int64) ([]Signup,
 		UPDATE events SET starts_at = ?, ends_at = ?, status = ?,
 		       reminded_before_at = 0, reminded_start_at = 0, updated_at = ?
 		WHERE id = ?`, nextStart, nextEnd, StatusOpen, ts, eventID); err != nil {
-		return nil, fmt.Errorf("move event to next occurrence: %w", err)
+		return nil, nil, fmt.Errorf("move event to next occurrence: %w", err)
 	}
 
 	rows, err := tx.Query(`
@@ -94,7 +94,7 @@ func (s *Store) RollOverOccurrence(eventID, nextStart, nextEnd int64) ([]Signup,
 		FROM signups WHERE event_id = ? AND state != ?
 		ORDER BY signed_up_at ASC, id ASC`, eventID, StateWithdrawn)
 	if err != nil {
-		return nil, fmt.Errorf("read roster: %w", err)
+		return nil, nil, fmt.Errorf("read roster: %w", err)
 	}
 	var withdrawn []Signup
 	for rows.Next() {
@@ -102,32 +102,41 @@ func (s *Store) RollOverOccurrence(eventID, nextStart, nextEnd int64) ([]Signup,
 		if err := rows.Scan(&sg.ID, &sg.EventID, &sg.DiscordUserID, &sg.DisplayName, &sg.State,
 			&sg.SignedUpAt, &sg.StateChangedAt, &sg.JoinedVia, &sg.DiscordInterested); err != nil {
 			rows.Close()
-			return nil, fmt.Errorf("scan signup: %w", err)
+			return nil, nil, fmt.Errorf("scan signup: %w", err)
 		}
 		withdrawn = append(withdrawn, sg)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate roster: %w", err)
+		return nil, nil, fmt.Errorf("iterate roster: %w", err)
 	}
 	// Places held by invites were held for the date that ran.
 	if _, err := tx.Exec(`UPDATE event_invites SET hold_ended_at = ?, hold_outcome = ?, hold_ended_by = ?
-		WHERE event_id = ? AND holds_place = 1 AND hold_ended_at = 0`,
+		WHERE event_id = ? AND (holds_place = 1 OR past_limit = 1) AND hold_ended_at = 0`,
 		ts, HoldOutcomeExpired, ActorRecurrence, eventID); err != nil {
-		return nil, fmt.Errorf("expire held places: %w", err)
+		return nil, nil, fmt.Errorf("expire held places: %w", err)
 	}
 	for i := range withdrawn {
 		sg := &withdrawn[i]
 		if _, err := tx.Exec(`UPDATE signups SET state = ?, state_changed_at = ? WHERE id = ?`,
 			StateWithdrawn, ts, sg.ID); err != nil {
-			return nil, fmt.Errorf("withdraw %s: %w", sg.DiscordUserID, err)
+			return nil, nil, fmt.Errorf("withdraw %s: %w", sg.DiscordUserID, err)
 		}
 		if err := logSignupUpdate(tx, eventID, sg.DiscordUserID, ActionWithdrew, sg.State,
 			StateWithdrawn, ActorRecurrence, ts); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		sg.State = StateWithdrawn
 		sg.StateChangedAt = ts
+	}
+
+	// Then the pinned are put back on for the new date, the host first time.
+	if err := pinHostTx(tx, eventID, ts); err != nil {
+		return nil, nil, err
+	}
+	seated, err := seatPinnedTx(tx, eventID, ts)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// The date moving is an edit to the event and is logged as one, under an
@@ -143,13 +152,13 @@ func (s *Store) RollOverOccurrence(eventID, nextStart, nextEnd int64) ([]Signup,
 		if _, err := tx.Exec(`
 			INSERT INTO event_updates (event_id, field, from_value, to_value, actor, at)
 			VALUES (?,?,?,?,?,?)`, eventID, f.field, f.from, f.to, ActorRecurrence, ts); err != nil {
-			return nil, fmt.Errorf("log %s: %w", f.field, err)
+			return nil, nil, fmt.Errorf("log %s: %w", f.field, err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
+		return nil, nil, fmt.Errorf("commit: %w", err)
 	}
-	return withdrawn, nil
+	return withdrawn, seated, nil
 }
 
 // nextOccurrenceOf is the occurrence after the current one, keeping the
@@ -176,17 +185,25 @@ func (s *Server) rollOverOccurrence(ev *Event, nextStart, nextEnd int64) {
 	if err := s.postOccurrencePastLine(ev); err != nil {
 		log.Printf("[discord-signup] past-events line for occurrence of event %d: %v", ev.ID, err)
 	}
-	withdrawn, err := s.store.RollOverOccurrence(ev.ID, nextStart, nextEnd)
+	withdrawn, seated, err := s.store.RollOverOccurrence(ev.ID, nextStart, nextEnd)
 	if err != nil {
 		log.Printf("[discord-signup] roll event %d to its next occurrence: %v", ev.ID, err)
 		return
 	}
-	changes := make([]stateChange, 0, len(withdrawn))
+	// Roles follow where each person ends up: the pinned are going again.
+	final := map[string]string{}
 	for _, sg := range withdrawn {
-		changes = append(changes, stateChange{UserID: sg.DiscordUserID, State: StateWithdrawn})
+		final[sg.DiscordUserID] = StateWithdrawn
 	}
-	log.Printf("[discord-signup] event %d (%q) rolled to its next occurrence at %d; %d withdrawn",
-		ev.ID, ev.Name, nextStart, len(withdrawn))
+	for _, sg := range seated {
+		final[sg.DiscordUserID] = StateAttending
+	}
+	changes := make([]stateChange, 0, len(final))
+	for userID, state := range final {
+		changes = append(changes, stateChange{UserID: userID, State: state})
+	}
+	log.Printf("[discord-signup] event %d (%q) rolled to its next occurrence at %d; %d withdrawn, %d pinned back on",
+		ev.ID, ev.Name, nextStart, len(withdrawn), len(seated))
 	if s.discord != nil {
 		s.syncAfterChange(ev.ID, changes)
 	}

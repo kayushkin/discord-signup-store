@@ -159,9 +159,16 @@
       {{range $i, $s := .Going}}
       <li class="person">
         <span class="place">{{add $i 1}}</span>
-        <span class="who">{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}</span>
+        <span class="who">{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}{{if index $.PinnedIDs $s.DiscordUserID}} <span class="pin-mark" title="Pinned: a place on every date">{{template "pin"}}</span>{{end}}</span>
         <span class="when">joined {{localTime $s.SignedUpAt}}</span>
         {{if $canManage}}<span class="row-actions">
+          {{if $ev.RecurrenceRule}}{{$pinned := index $.PinnedIDs $s.DiscordUserID}}
+          <form method="post" action="/events/{{$ev.ID}}/pins" data-async>
+            <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
+            <input type="hidden" name="pinned" value="{{if $pinned}}false{{else}}true{{end}}">
+            <button class="btn-sm pin-toggle{{if $pinned}} is-on{{end}}" aria-pressed="{{$pinned}}"
+                    title="{{if $pinned}}Pinned: a place on every date. Press to unpin.{{else}}Pin: give them a place on every date{{end}}">{{template "pin"}} {{if $pinned}}Pinned{{else}}Pin{{end}}</button></form>
+          {{end}}
           <form method="post" action="/events/{{$ev.ID}}/roster/remove" data-async
                 data-confirm="Take {{or $s.ReadableName $s.DisplayName}} off?{{if $.PlaceFreesOnLeave}} Their place goes to whoever is next on the waitlist, who will be messaged.{{else if and $ev.Capacity (gt $ev.AttendingCount $ev.Capacity)}} The event is over its limit, so nobody moves up.{{end}}">
             <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
@@ -171,12 +178,18 @@
       {{end}}
     </ol>
 
+    {{if .PinnedAway}}
+    <p class="pinned-away">{{template "pin"}} Pinned but not going this date:
+      {{range $i, $p := .PinnedAway}}{{if $i}}, {{end}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}.
+      <span class="muted">They are put back on when the next date comes round.</span></p>
+    {{end}}
+
     {{if or .Waiting (not $ev.WaitlistDisabled)}}
     <div class="card-head sub-head">
       <h3>Waitlist</h3><span class="badge">{{len .Waiting}}</span>
       {{if $ev.WaitlistDisabled}}<span class="muted small">turned off — these people were waiting before</span>{{end}}
     </div>
-    {{if not .Waiting}}<p class="empty">Nobody waiting.{{if $canManage}} If it fills up, new signups line up here and you can reorder them.{{end}}</p>{{end}}
+    {{if not .Waiting}}<p class="empty">Nobody waiting.{{if $canManage}}{{if .EventFull}} It is full, so new signups line up here and you can reorder them.{{else}} If it fills up, new signups line up here and you can reorder them.{{end}}{{end}}</p>{{end}}
     <ol class="people">
       {{$last := len .Waiting}}
       {{range .Waiting}}
@@ -258,35 +271,61 @@
       <ul class="picked-list" data-picked-list aria-label="Picked"></ul>
 
       <div data-actions hidden>
+        {{/* Two panels, built the same way: what it is, one option to
+             switch on, and the buttons along the bottom — so they line up
+             whatever either one says. */}}
         <div class="choices">
           <div class="choice">
             <div class="choice-title"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M3 5.5h14v9H3zM3.5 6l6.5 5 6.5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg> Ask <span data-them>them</span></div>
-            <p>A DM with the event and its Join and Maybe buttons. <strong>They decide.</strong></p>
-            <label class="check{{if not .FreePlaces}} is-off{{end}}">
-              <input type="checkbox" name="hold_place" data-free="{{.FreePlaces}}" {{if not .FreePlaces}}disabled{{end}}>
-              <span>Hold a place until they answer
-                <span class="hint">{{if not $ev.Capacity}}No limit, so there is nothing to hold.
-                  {{else if not .FreePlaces}}No place is free to hold.
-                  {{else}}The place counts as taken; if they say no, it goes to the waitlist. {{.FreePlaces}} free.{{end}}</span>
-                <span class="hint bad" data-hold-note hidden></span></span>
+            <p class="choice-what">A DM with the event and its Join and Maybe buttons. <strong>They decide.</strong></p>
+            {{if $ev.Capacity}}
+            {{if .FreePlaces}}
+            <label class="tile" data-tile>
+              <input type="checkbox" name="reserve" value="hold" data-free="{{.FreePlaces}}">
+              <span class="tile-box" aria-hidden="true"></span>
+              <span class="tile-text"><strong>Hold a place until they answer</strong>
+                <span>It counts as taken. If they say no, it goes to the next person waiting.</span>
+                <span class="tile-warn" data-hold-note hidden></span></span>
             </label>
-            <button formaction="/events/{{$ev.ID}}/invite" data-choice="invite">Send <span data-invites>invite</span></button>
+            {{else}}
+            <label class="tile" data-tile>
+              <input type="checkbox" name="reserve" value="past_limit">
+              <span class="tile-box" aria-hidden="true"></span>
+              <span class="tile-text"><strong>Let them in even though it's full</strong>
+                <span>No place is free to hold. With this, their Join takes them past the limit instead of onto the waitlist.</span></span>
+            </label>
+            {{end}}
+            {{end}}
+            <p class="choice-note" data-ask-note hidden></p>
+            <div class="choice-foot">
+              <button formaction="/events/{{$ev.ID}}/invite" data-choice="invite">Send <span data-invites>invite</span></button>
+            </div>
           </div>
           <div class="choice force">
             <div class="choice-title"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M11 2 4 11h5l-1 7 7-9h-5z" fill="currentColor"/></svg> Add <span data-them>them</span> yourself <span class="tag">without asking</span></div>
-            <p><strong>You decide.</strong> They go straight onto a list and get a DM saying so. Going ignores the limit.</p>
-            <div class="segmented" role="group" aria-label="Add them to">
-              <button class="seg" name="list" value="attending" formaction="/events/{{$ev.ID}}/roster/add" data-choice="attending"
-                      data-confirm="Add {name} as going{{if .EventFull}}, past the limit{{end}}? They are not asked first; each gets a DM saying so.">Going</button>
-              <button class="seg" name="list" value="maybe" formaction="/events/{{$ev.ID}}/roster/add" data-choice="maybe"
-                      data-confirm="Add {name} as maybe? They are not asked first; each gets a DM saying so.">Maybe</button>
-              <button class="seg" name="list" value="waitlisted" formaction="/events/{{$ev.ID}}/roster/add" data-choice="waitlisted"
-                      data-confirm="Add {name} to the end of the waitlist? They are not asked first; each gets a DM saying so."
-                      {{if or (not .EventFull) $ev.WaitlistDisabled}}data-never title="{{if $ev.WaitlistDisabled}}The event turns people away when full{{else}}Only while the event is full{{end}}"{{end}}>Waitlist</button>
+            <p class="choice-what"><strong>You decide.</strong> They go straight onto a list and get a DM saying so. Going ignores the limit.</p>
+            {{if $ev.RecurrenceRule}}
+            <label class="tile force-tile" data-tile>
+              <input type="checkbox" name="pin" value="on" data-pin>
+              <span class="tile-box" aria-hidden="true"></span>
+              <span class="tile-text"><strong>Pin to every date</strong>
+                <span>Going now, and put back on each time the event repeats.</span></span>
+            </label>
+            {{end}}
+            <p class="choice-note" data-force-note hidden></p>
+            <div class="choice-foot">
+              <div class="segmented" role="group" aria-label="Add them to">
+                <button class="seg" name="list" value="attending" formaction="/events/{{$ev.ID}}/roster/add" data-choice="attending"
+                        data-confirm="Add {name} as going{{if .EventFull}}, past the limit{{end}}? They are not asked first; each gets a DM saying so.">Going</button>
+                <button class="seg" name="list" value="maybe" formaction="/events/{{$ev.ID}}/roster/add" data-choice="maybe"
+                        data-confirm="Add {name} as maybe? They are not asked first; each gets a DM saying so.">Maybe</button>
+                <button class="seg" name="list" value="waitlisted" formaction="/events/{{$ev.ID}}/roster/add" data-choice="waitlisted"
+                        data-confirm="Add {name} to the end of the waitlist? They are not asked first; each gets a DM saying so."
+                        {{if or (not .EventFull) $ev.WaitlistDisabled}}data-never title="{{if $ev.WaitlistDisabled}}The event turns people away when full{{else}}Only while the event is full{{end}}"{{end}}>Waitlist{{if $ev.WaitlistDisabled}} <small>off</small>{{else if not .EventFull}} <small>when full</small>{{end}}</button>
+              </div>
             </div>
           </div>
         </div>
-        <p class="choice-note" data-choice-note hidden></p>
       </div>
     </form>
 
