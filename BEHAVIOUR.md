@@ -52,6 +52,16 @@ From Maybe, Join is an ordinary join (a place, or the waitlist); from going,
 Maybe gives your place up to whoever has waited longest, as Leave does.
 Discord's Interested and the forum ✅ mean going, never Maybe.
 
+**An invite can hold a place.** Ticking *Hold a place until they answer*
+keeps one place for that person: it counts as taken for everyone else — nobody
+joins into it and the waitlist does not move up into it — and the person takes
+it by pressing Join, even when the event is otherwise full. Their DM then has
+a **Can't go** button. Maybe, Can't go, an organiser's **Release**, an invite
+Discord did not deliver, or the date rolling over gives the place back, and the
+next person waiting moves up into it. The limit itself never changes: an event
+of 8 with 5 going and 1 held has 2 free. A place is only held while one is free
+and the event has a limit.
+
 **Add now is not an invite.** Add now puts someone on the list the organiser
 picks — going even past the limit, maybe, or the waitlist while the event is
 full — and DMs them to say so; the history records it as `added` by the

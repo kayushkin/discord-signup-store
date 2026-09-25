@@ -331,6 +331,19 @@ func (s *Server) handleJoin(w http.ResponseWriter, in *Interaction, eventID int6
 func (s *Server) handleLeave(w http.ResponseWriter, in *Interaction, eventID int64, userID string) {
 	result, err := s.store.Leave(eventID, userID, ActorUser)
 	if errors.Is(err, ErrNotFound) {
+		// Not on the list, but maybe an invite held a place for them: this
+		// is its Can't go button, and the place goes back.
+		promoted, holdErr := s.store.GiveBackHeldPlace(eventID, userID, HoldOutcomeDeclined, userID)
+		if holdErr == nil {
+			if ev, err := s.store.GetEvent(eventID); err == nil {
+				s.afterHeldPlaceFreed(ev, promoted)
+			}
+			s.replyEphemeral(w, "Thanks for saying — the place held for you is given back.")
+			return
+		}
+		if !errors.Is(holdErr, ErrNotFound) {
+			log.Printf("[discord-signup] give back held place event=%d user=%s: %v", eventID, userID, holdErr)
+		}
 		s.replyEphemeral(w, "You were not signed up for this one.")
 		return
 	}

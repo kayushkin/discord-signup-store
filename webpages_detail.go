@@ -146,7 +146,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		}
 	}
 	for _, inv := range invites {
-		actors = append(actors, inv.InvitedBy)
+		actors = append(actors, inv.InvitedBy, inv.HoldEndedBy)
 	}
 	names := eventLogNames{actors: s.historyActorNames(ev.GuildID, actors), people: map[string]actorName{}, roles: map[string]string{}}
 	for actor, name := range names.actors {
@@ -172,7 +172,9 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		CanManage:         canManage,
 		EventUnderway:     eventIsUnderway(ev),
 		EventFull:         eventIsFull(ev),
-		PlaceFreesOnLeave: ev.Capacity > 0 && ev.WaitlistCount > 0 && ev.AttendingCount <= ev.Capacity,
+		PlaceFreesOnLeave: ev.Capacity > 0 && ev.WaitlistCount > 0 && ev.AttendingCount+ev.HeldCount <= ev.Capacity,
+		FreePlaces:        max(0, ev.Capacity-ev.AttendingCount-ev.HeldCount),
+		HoldOutcomeWords:  holdOutcomeWords,
 		DiscordEventURL:   DiscordEventURL(ev.GuildID, ev.DiscordScheduledEventID),
 		Notice:            notice,
 		Error:             strings.Join(problems, " "),

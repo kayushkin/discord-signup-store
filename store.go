@@ -115,6 +115,9 @@ type Event struct {
 	// never stored, so they can never disagree with the signups table.
 	AttendingCount int `json:"attending_count"`
 	WaitlistCount  int `json:"waitlist_count"`
+	// HeldCount is places kept for invited people who have not answered.
+	// They count against the limit like people going.
+	HeldCount int `json:"held_count"`
 }
 
 // Signup is one person's place on one roster.
@@ -389,6 +392,12 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// waitlist. Off by default, so every event made before the switch keeps
 	// its waitlist.
 	{"events", "waitlist_disabled", "INTEGER NOT NULL DEFAULT 0"},
+
+	// An invite that keeps a place until the person answers. See holds.go.
+	{"event_invites", "holds_place", "INTEGER NOT NULL DEFAULT 0"},
+	{"event_invites", "hold_ended_at", "INTEGER NOT NULL DEFAULT 0"},
+	{"event_invites", "hold_outcome", "TEXT NOT NULL DEFAULT ''"},
+	{"event_invites", "hold_ended_by", "TEXT NOT NULL DEFAULT ''"},
 
 	// How this person got onto the roster. Not cosmetic: it decides what
 	// un-marking Interested on Discord does to them. Someone who pressed Join
@@ -765,10 +774,12 @@ func (s *Store) fillCounts(e *Event) error {
 	err := s.db.QueryRow(`
 		SELECT
 			COUNT(*) FILTER (WHERE state = ?),
-			COUNT(*) FILTER (WHERE state = ?)
+			COUNT(*) FILTER (WHERE state = ?),
+			(SELECT COUNT(*) FROM event_invites
+			 WHERE event_id = ? AND holds_place = 1 AND hold_ended_at = 0)
 		FROM signups WHERE event_id = ?`,
-		StateAttending, StateWaitlisted, e.ID,
-	).Scan(&e.AttendingCount, &e.WaitlistCount)
+		StateAttending, StateWaitlisted, e.ID, e.ID,
+	).Scan(&e.AttendingCount, &e.WaitlistCount, &e.HeldCount)
 	if err != nil {
 		return fmt.Errorf("count signups: %w", err)
 	}

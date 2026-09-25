@@ -26,28 +26,17 @@ type EventInvite struct {
 	Delivery      string `json:"delivery"`
 	DeliveryError string `json:"delivery_error"`
 	At            int64  `json:"at"`
+	// HoldsPlace is whether the invite keeps a place for them until they
+	// answer; HoldEndedAt, HoldOutcome and HoldEndedBy say when and how it
+	// stopped. A hold with HoldEndedAt 0 is live and counts against the limit.
+	HoldsPlace  bool   `json:"holds_place"`
+	HoldEndedAt int64  `json:"hold_ended_at"`
+	HoldOutcome string `json:"hold_outcome"`
+	HoldEndedBy string `json:"hold_ended_by"`
 	// CurrentState is their row on the roster now — attending, waitlisted,
 	// maybe or withdrawn — or "" when they have never had one. Read when the
 	// page is drawn, never stored, so it cannot disagree with the roster.
 	CurrentState string `json:"current_state"`
-}
-
-// RecordInvite stores one invite.
-func (s *Store) RecordInvite(inv EventInvite) (*EventInvite, error) {
-	inv.At = now()
-	res, err := s.db.Exec(`
-		INSERT INTO event_invites (event_id, discord_user_id, display_name, invited_by,
-		                           delivery, delivery_error, at)
-		VALUES (?,?,?,?,?,?,?)`,
-		inv.EventID, inv.DiscordUserID, inv.DisplayName, inv.InvitedBy,
-		inv.Delivery, inv.DeliveryError, inv.At)
-	if err != nil {
-		return nil, fmt.Errorf("record invite: %w", err)
-	}
-	if inv.ID, err = res.LastInsertId(); err != nil {
-		return nil, fmt.Errorf("read invite id: %w", err)
-	}
-	return &inv, nil
 }
 
 // Invites lists an event's invites, oldest first, each with where the person
@@ -55,7 +44,8 @@ func (s *Store) RecordInvite(inv EventInvite) (*EventInvite, error) {
 func (s *Store) Invites(eventID int64) ([]EventInvite, error) {
 	rows, err := s.db.Query(`
 		SELECT i.id, i.event_id, i.discord_user_id, i.display_name, COALESCE(r.readable_name, ''),
-		       i.invited_by, i.delivery, i.delivery_error, i.at, COALESCE(sg.state, '')
+		       i.invited_by, i.delivery, i.delivery_error, i.at, COALESCE(sg.state, ''),
+		       i.holds_place, i.hold_ended_at, i.hold_outcome, i.hold_ended_by
 		FROM event_invites i
 		LEFT JOIN readable_names r ON r.discord_user_id = i.discord_user_id
 		LEFT JOIN signups sg ON sg.event_id = i.event_id AND sg.discord_user_id = i.discord_user_id
@@ -68,7 +58,8 @@ func (s *Store) Invites(eventID int64) ([]EventInvite, error) {
 	for rows.Next() {
 		var inv EventInvite
 		if err := rows.Scan(&inv.ID, &inv.EventID, &inv.DiscordUserID, &inv.DisplayName, &inv.ReadableName,
-			&inv.InvitedBy, &inv.Delivery, &inv.DeliveryError, &inv.At, &inv.CurrentState); err != nil {
+			&inv.InvitedBy, &inv.Delivery, &inv.DeliveryError, &inv.At, &inv.CurrentState,
+			&inv.HoldsPlace, &inv.HoldEndedAt, &inv.HoldOutcome, &inv.HoldEndedBy); err != nil {
 			return nil, fmt.Errorf("scan invite: %w", err)
 		}
 		out = append(out, inv)
@@ -78,9 +69,12 @@ func (s *Store) Invites(eventID int64) ([]EventInvite, error) {
 
 // inviteMessage is the DM: who asked, what and when, how full it is, and the
 // event's own Join and Maybe buttons.
-func inviteMessage(ev *Event, organiserName string) map[string]any {
+func inviteMessage(ev *Event, organiserName string, holdsPlace bool) map[string]any {
 	var b strings.Builder
 	fmt.Fprintf(&b, "**%s** invited you to **%s**.", organiserName, ev.Name)
+	if holdsPlace {
+		b.WriteString(" **A place is held for you.**")
+	}
 	if ev.StartsAt > 0 {
 		fmt.Fprintf(&b, "\n🗓️ <t:%d:F>", ev.StartsAt)
 	}
@@ -88,6 +82,8 @@ func inviteMessage(ev *Event, organiserName string) map[string]any {
 		fmt.Fprintf(&b, "\n📍 %s", ev.Location)
 	}
 	switch {
+	case holdsPlace:
+		b.WriteString("\n\nPress Join to take it. Can't go gives it back so someone else can have it.")
 	case ev.Capacity == 0:
 		fmt.Fprintf(&b, "\n%d going.", ev.AttendingCount)
 	case !eventIsFull(ev):
@@ -97,15 +93,23 @@ func inviteMessage(ev *Event, organiserName string) map[string]any {
 	default:
 		fmt.Fprintf(&b, "\nIt is full (%d/%d) and has no waitlist; Join works once a place opens.", ev.AttendingCount, ev.Capacity)
 	}
-	b.WriteString("\n\nNothing is held for you until you press Join.")
+	buttons := []any{
+		map[string]any{"type": componentTypeButton, "style": buttonStylePrimary,
+			"label": "Join", "custom_id": JoinCustomID(ev.ID)},
+		map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+			"label": "Maybe", "custom_id": MaybeCustomID(ev.ID)},
+	}
+	if holdsPlace {
+		// Leave, pressed by someone not on the list who holds a place, gives
+		// the place back; see handleLeave.
+		buttons = append(buttons, map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+			"label": "Can't go", "custom_id": LeaveCustomID(ev.ID)})
+	} else {
+		b.WriteString("\n\nNothing is held for you until you press Join.")
+	}
 	return map[string]any{
-		"content": b.String(),
-		"components": []any{map[string]any{"type": componentTypeActionRow, "components": []any{
-			map[string]any{"type": componentTypeButton, "style": buttonStylePrimary,
-				"label": "Join", "custom_id": JoinCustomID(ev.ID)},
-			map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
-				"label": "Maybe", "custom_id": MaybeCustomID(ev.ID)},
-		}}},
+		"content":          b.String(),
+		"components":       []any{map[string]any{"type": componentTypeActionRow, "components": buttons}},
 		"allowed_mentions": map[string]any{"parse": []string{}},
 	}
 }
@@ -142,16 +146,17 @@ func (s *Server) handleWebInvite(w http.ResponseWriter, r *http.Request) {
 		s.redirectWithNotice(w, r, ev.ID, "No invite was sent: pick someone from the list under the box.")
 		return
 	}
+	holdPlace := r.FormValue("hold_place") == "on"
 	lines := make([]string, 0, len(userIDs))
 	for _, userID := range userIDs {
-		lines = append(lines, s.invitePerson(ev, session, userID))
+		lines = append(lines, s.invitePerson(ev, session, userID, holdPlace))
 	}
 	s.redirectWithNotice(w, r, ev.ID, strings.Join(lines, " "))
 }
 
 // invitePerson sends one invite and records it, whether or not Discord
 // delivered it, and says what happened in a sentence.
-func (s *Server) invitePerson(ev *Event, session *WebSession, userID string) string {
+func (s *Server) invitePerson(ev *Event, session *WebSession, userID string, holdPlace bool) string {
 	displayName, err := s.discord.GuildMemberDisplayName(ev.GuildID, userID)
 	if err != nil {
 		return "No invite for " + userID + ": not a member of this server (" + err.Error() + ")."
@@ -164,26 +169,95 @@ func (s *Server) invitePerson(ev *Event, session *WebSession, userID string) str
 		return fmt.Sprintf("No invite for %s: already %s.", displayName, state)
 	}
 
-	inv := EventInvite{EventID: ev.ID, DiscordUserID: userID, DisplayName: displayName,
-		InvitedBy: "web:" + session.DiscordUserID, Delivery: InviteDeliverySent}
-	sendErr := s.discord.SendDirectMessagePayload(userID, inviteMessage(ev, session.DisplayName))
-	var said string
+	// Recorded before the DM goes, so a held place is taken before anyone
+	// is told about it; the delivery is written once Discord answers.
+	recorded, err := s.store.RecordInvite(EventInvite{EventID: ev.ID, DiscordUserID: userID,
+		DisplayName: displayName, InvitedBy: "web:" + session.DiscordUserID,
+		Delivery: InviteDeliverySent, HoldsPlace: holdPlace})
+	if errors.Is(err, ErrNoPlaceToHold) {
+		return "No invite for " + displayName + ": there is no free place left to hold. Send it without holding one, or raise the limit."
+	}
+	if err != nil {
+		log.Printf("[discord-signup] record invite user=%s event=%d: %v", userID, ev.ID, err)
+		return "No invite for " + displayName + ": could not record it (" + err.Error() + ")."
+	}
+	if holdPlace {
+		// A held place can make the event read as full on Discord.
+		s.inBackground(func() { s.syncAfterChange(ev.ID, nil) })
+	}
+	sendErr := s.discord.SendDirectMessagePayload(userID, inviteMessage(ev, session.DisplayName, holdPlace))
+	said := "Invited " + displayName + "."
+	if holdPlace {
+		said = "Invited " + displayName + " and held a place for them."
+	}
+	delivery, deliveryError := InviteDeliverySent, ""
 	switch {
 	case sendErr == nil:
-		said = "Invited " + displayName + "."
+		return said
 	case errors.Is(sendErr, ErrCannotMessageUser):
-		inv.Delivery, inv.DeliveryError = InviteDeliveryDMsClosed, sendErr.Error()
+		delivery, deliveryError = InviteDeliveryDMsClosed, sendErr.Error()
 		said = displayName + " has DMs from server members turned off, so their invite was not delivered."
 	default:
-		inv.Delivery, inv.DeliveryError = InviteDeliveryFailed, sendErr.Error()
+		delivery, deliveryError = InviteDeliveryFailed, sendErr.Error()
 		log.Printf("[discord-signup] invite user=%s event=%d: %v", userID, ev.ID, sendErr)
 		said = "Discord did not deliver the invite to " + displayName + ": " + sendErr.Error() + "."
 	}
-	if _, err := s.store.RecordInvite(inv); err != nil {
-		log.Printf("[discord-signup] record invite user=%s event=%d: %v", userID, ev.ID, err)
-		said += " (It could not be saved to the log: " + err.Error() + ".)"
+	promoted, err := s.store.SetInviteDelivery(recorded.ID, delivery, deliveryError)
+	if err != nil {
+		log.Printf("[discord-signup] record invite delivery user=%s event=%d: %v", userID, ev.ID, err)
+		return said + " (Could not record that: " + err.Error() + ".)"
 	}
+	if holdPlace {
+		said += " The place held for them is free again."
+	}
+	s.afterHeldPlaceFreed(ev, promoted)
 	return said
+}
+
+// afterHeldPlaceFreed redraws the Discord copies once a held place is given
+// back, and tells whoever moved up into it.
+func (s *Server) afterHeldPlaceFreed(ev *Event, promoted *Signup) {
+	var changes []stateChange
+	if promoted != nil {
+		changes = append(changes, stateChange{UserID: promoted.DiscordUserID, State: StateAttending})
+		s.inBackground(func() { s.notifyPromoted(ev, promoted) })
+	}
+	s.inBackground(func() { s.syncAfterChange(ev.ID, changes) })
+}
+
+// handleWebReleaseHold gives back a place an invite held, on the organiser's
+// say-so; the next person waiting takes it. The invite itself stands: they
+// can still press Join, as anyone can.
+func (s *Server) handleWebReleaseHold(w http.ResponseWriter, r *http.Request) {
+	session := s.requireSession(w, r)
+	if session == nil {
+		return
+	}
+	ev, canManage := s.webEvent(w, r, session)
+	if ev == nil {
+		return
+	}
+	if !canManage {
+		http.Error(w, "you cannot edit this event", http.StatusForbidden)
+		return
+	}
+	userID := strings.TrimSpace(r.FormValue("discord_user_id"))
+	promoted, err := s.store.GiveBackHeldPlace(ev.ID, userID, HoldOutcomeReleased, "web:"+session.DiscordUserID)
+	if errors.Is(err, ErrNotFound) {
+		s.redirectWithNotice(w, r, ev.ID, "No place is held for them any more.")
+		return
+	}
+	if err != nil {
+		log.Printf("[discord-signup] release held place of %s on %d: %v", userID, ev.ID, err)
+		http.Error(w, "could not release it: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.afterHeldPlaceFreed(ev, promoted)
+	notice := "The held place is free again."
+	if promoted != nil {
+		notice += " " + promoted.NameOnDiscord() + " moved up from the waitlist into it and was messaged."
+	}
+	s.redirectWithNotice(w, r, ev.ID, notice)
 }
 
 // pickedUserIDs is everyone the Add someone box sent, in the order picked,

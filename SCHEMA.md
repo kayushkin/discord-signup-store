@@ -305,6 +305,10 @@ joined when the page is drawn.
 | `delivery` | TEXT | `sent`, `dms-closed` (Discord's 50007) or `failed`. |
 | `delivery_error` | TEXT | Discord's words when not `sent`. |
 | `at` | INTEGER | When. |
+| `holds_place` | INTEGER | `1` when the invite keeps a place until they answer. |
+| `hold_ended_at` | INTEGER | When a held place stopped being held; `0` while it is. A live hold counts against the limit like someone going, in every query that decides whether the event is full. |
+| `hold_outcome` | TEXT | `joined`, `declined` (Maybe or Can't go), `released` (an organiser, or a second invite replacing the first), `undelivered` (the DM bounced) or `expired` (the date rolled over). |
+| `hold_ended_by` | TEXT | The actor that ended it, as elsewhere; `''` when the service did. |
 
 ## `event_table_rows` — **dropped 2026-09-02**
 

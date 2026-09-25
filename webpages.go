@@ -71,6 +71,11 @@ type pageData struct {
 	EventLog []eventLogEntry
 	// Form is the event page's edit fields.
 	Form eventFormValues
+	// HoldOutcomeWords say how a held place ended.
+	HoldOutcomeWords map[string]string
+	// FreePlaces is how many places are neither taken nor held, on an event
+	// with a limit: what an invite could hold.
+	FreePlaces int
 	// PlaceFreesOnLeave is whether someone going leaving would bring in the
 	// next person waiting: somebody is waiting, and the event is not over
 	// its limit. The page words its questions by it.
@@ -123,6 +128,18 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 	// out loud. A time shown without its zone is the bug being fixed here, so
 	// the degraded path must not reintroduce it.
 	"localTime": localTimeHTML,
+	"dateBox":   dateBox,
+	"clockTime": clockTime,
+	// percent is part of whole as a width, capped at 100 so a list taken
+	// over its limit fills the bar rather than spilling out of it.
+	"percent": func(part, whole int) int {
+		if whole <= 0 {
+			return 0
+		}
+		return min(100, part*100/whole)
+	},
+	// mapsURL opens a place in Google Maps.
+	"mapsURL": mapsURL,
 	// person shows someone by their short name with their Discord name
 	// behind it.
 	"person": personHTML,

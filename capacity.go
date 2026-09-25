@@ -55,7 +55,11 @@ func (s *Store) PromoteToFillCapacity(eventID int64) ([]Signup, error) {
 	// unbounded, and the LIMIT below is what expresses it.
 	free := -1 // unlimited
 	if capacity > 0 {
-		free = capacity - attending
+		held, err := heldPlacesTx(tx, eventID, "")
+		if err != nil {
+			return nil, err
+		}
+		free = capacity - attending - held
 		if free <= 0 {
 			return nil, tx.Commit()
 		}

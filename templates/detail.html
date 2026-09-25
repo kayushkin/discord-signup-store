@@ -1,5 +1,18 @@
 {{define "pencil"}}<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M13.9 2.9a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L7.3 16H4v-3.3z"/></svg>{{end}}
 
+{{define "pin"}}<svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true"><path d="M10 18s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="10" cy="8" r="2.2" fill="currentColor"/></svg>{{end}}
+
+{{define "locationinput"}}
+<div class="location-input" data-location>
+  <div class="location-row">
+    <input name="location" value="{{.}}" placeholder="An address, a place name, or a Google Maps link" autocomplete="off">
+    <a class="btn-sm map-search" href="https://www.google.com/maps" target="_blank" rel="noopener" data-map-search>{{template "pin"}} Find on Google Maps</a>
+  </div>
+  <iframe class="map-preview" data-map-preview title="Map of the location" loading="lazy" referrerpolicy="no-referrer-when-downgrade" hidden></iframe>
+  <div class="hint">The map shows what the words find. To drop a pin instead: in Google Maps, press and hold on the spot, then Share → Copy link, and paste the link here.</div>
+</div>
+{{end}}
+
 {{define "editbar"}}
 <div class="editbar">
   <button class="icon-btn ok" aria-label="Save" title="Save (Enter)"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M4 10.5 8 14.5 16 5.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -64,13 +77,14 @@
       <div class="field" data-field>
         <dt>Where</dt>
         <dd class="field-view">
-          <span>{{if $ev.Location}}{{$ev.Location}}{{else}}<span class="muted">not set</span>{{end}}</span>
+          <span>{{if $ev.Location}}{{$ev.Location}}
+            <a class="map-link" href="{{mapsURL $ev.Location}}" target="_blank" rel="noopener">{{template "pin"}} Map</a>{{else}}<span class="muted">not set</span>{{end}}</span>
           {{if $canManage}}<button type="button" class="icon-btn edit" data-edit aria-label="Edit where">{{template "pencil"}}</button>{{end}}
         </dd>
         {{if $canManage}}
         <dd>
         <form class="field-edit" hidden method="post" action="/events/{{$ev.ID}}" data-async>
-          <input name="location" value="{{.Form.Location}}" placeholder="Where it happens">
+          {{template "locationinput" .Form.Location}}
           {{template "editbar"}}
         </form>
         </dd>
@@ -80,7 +94,7 @@
       <div class="field" data-field>
         <dt>Places</dt>
         <dd class="field-view">
-          <span>{{if $ev.Capacity}}{{$ev.Capacity}} places{{else}}No limit{{end}}</span>
+          <span>{{if $ev.Capacity}}{{$ev.Capacity}} places <span class="muted">{{if $ev.HeldCount}}· {{$ev.HeldCount}} held for invites {{end}}· {{if .FreePlaces}}{{.FreePlaces}} free{{else}}none free{{end}}</span>{{else}}No limit{{end}}</span>
           {{if $canManage}}<button type="button" class="icon-btn edit" data-edit aria-label="Edit the limit">{{template "pencil"}}</button>{{end}}
         </dd>
         {{if $canManage}}
@@ -137,6 +151,7 @@
     <div class="card-head">
       <h3>Going</h3>
       <span class="badge">{{$ev.AttendingCount}}{{if $ev.Capacity}} / {{$ev.Capacity}}{{end}}</span>
+      {{if $ev.HeldCount}}<span class="pill held">{{$ev.HeldCount}} held</span>{{end}}
       {{if and $ev.Capacity (gt $ev.AttendingCount $ev.Capacity)}}<span class="pill closed">over the limit</span>{{end}}
     </div>
     {{if not .Going}}<p class="empty">Nobody yet.</p>{{end}}
@@ -246,7 +261,15 @@
         <div class="choices">
           <div class="choice">
             <div class="choice-title"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M3 5.5h14v9H3zM3.5 6l6.5 5 6.5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg> Ask <span data-them>them</span></div>
-            <p>A DM with the event and its Join and Maybe buttons. <strong>They decide</strong>; nothing is held for them.</p>
+            <p>A DM with the event and its Join and Maybe buttons. <strong>They decide.</strong></p>
+            <label class="check{{if not .FreePlaces}} is-off{{end}}">
+              <input type="checkbox" name="hold_place" data-free="{{.FreePlaces}}" {{if not .FreePlaces}}disabled{{end}}>
+              <span>Hold a place until they answer
+                <span class="hint">{{if not $ev.Capacity}}No limit, so there is nothing to hold.
+                  {{else if not .FreePlaces}}No place is free to hold.
+                  {{else}}The place counts as taken; if they say no, it goes to the waitlist. {{.FreePlaces}} free.{{end}}</span>
+                <span class="hint bad" data-hold-note hidden></span></span>
+            </label>
             <button formaction="/events/{{$ev.ID}}/invite" data-choice="invite">Send <span data-invites>invite</span></button>
           </div>
           <div class="choice force">
@@ -275,6 +298,13 @@
         <span class="who">{{person .ReadableName .DisplayName .DiscordUserID}}</span>
         <span class="when">invited {{localTime .At}}</span>
         <span class="row-actions">
+          {{if and .HoldsPlace (not .HoldEndedAt)}}
+          <span class="pill held">place held</span>
+          <form method="post" action="/events/{{$ev.ID}}/holds/release" data-async
+                data-confirm="Release the place held for {{or .ReadableName .DisplayName}}? It goes to whoever is next on the waitlist. Their invite still stands, so they can join if there is room.">
+            <input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
+            <button class="btn-sm">Release</button></form>
+          {{else if and .HoldsPlace (ne .HoldOutcome "joined")}}<span class="pill" title="{{index $.HoldOutcomeWords .HoldOutcome}}">hold ended</span>{{end}}
           {{if eq .Delivery "dms-closed"}}<span class="pill bad-pill">not delivered · DMs closed</span>
           {{else if eq .Delivery "failed"}}<span class="pill bad-pill" title="{{.DeliveryError}}">not delivered</span>
           {{else if eq .CurrentState "attending"}}<span class="pill open">going</span>
@@ -325,8 +355,11 @@
       </div>
       <p class="hint">{{if $open}}People can join{{if eq (toggleSubject $ev) "waitlist"}}; it is full, so they join the waitlist{{end}}.{{else}}Nobody new can join. Everyone already on it stays.{{end}}</p>
     </div>
-    <div class="control">
+    {{/* Closed signups let nobody in, the waitlist included, so the choice
+         of what a full event does has nothing to act on until they open. */}}
+    <div class="control{{if not $open}} is-off{{end}}">
       <h4 id="full-label">When it is full</h4>
+      {{if not $open}}<p class="hint">Signups are closed, so nobody joins the waitlist either. Open signups to choose.</p>{{else}}
       <div class="seg-control" role="radiogroup" aria-labelledby="full-label">
         <form method="post" action="/events/{{$ev.ID}}" data-async>
           <input type="hidden" name="waitlist" value="on">
@@ -336,6 +369,7 @@
           <button role="radio" data-tone="warn" aria-checked="{{$ev.WaitlistDisabled}}" {{if $ev.WaitlistDisabled}}tabindex="-1"{{end}}>Turn away</button></form>
       </div>
       <p class="hint">{{if $ev.WaitlistDisabled}}New signups are refused. A place that opens goes to the next person to press Join.{{else}}New signups line up and move up in order when a place opens.{{end}}</p>
+      {{end}}
     </div>
     <div class="side-actions">
       {{if .EventUnderway}}

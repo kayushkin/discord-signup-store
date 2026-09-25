@@ -23,6 +23,8 @@ const (
 	OutcomeRespectedWithdrawal InterestOutcome = "respected_withdrawal"
 	// OutcomeEventClosed means the event is not taking signups.
 	OutcomeEventClosed InterestOutcome = "event_closed"
+	// OutcomeEventFull means the event is full and its waitlist is off.
+	OutcomeEventFull InterestOutcome = "event_full"
 	// OutcomeLeft means un-marking Interested took them off the roster,
 	// because Interested is how they got on in the first place.
 	OutcomeLeft InterestOutcome = "left"
@@ -76,8 +78,9 @@ func (s *Store) MarkInterested(eventID int64, discordUserID, displayName string)
 
 	var capacity int
 	var status string
-	err = tx.QueryRow(`SELECT capacity, status FROM events WHERE id = ? AND deleted_at = 0`, eventID).
-		Scan(&capacity, &status)
+	var waitlistDisabled bool
+	err = tx.QueryRow(`SELECT capacity, status, waitlist_disabled FROM events WHERE id = ? AND deleted_at = 0`, eventID).
+		Scan(&capacity, &status, &waitlistDisabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -133,12 +136,30 @@ func (s *Store) MarkInterested(eventID int64, discordUserID, displayName string)
 		eventID, StateAttending).Scan(&attending); err != nil {
 		return nil, fmt.Errorf("count attending: %w", err)
 	}
+	// Held places work as they do for Join: theirs is theirs, anyone else's
+	// is taken.
+	ts := now()
+	tookHeldPlace, err := endHoldTx(tx, eventID, discordUserID, HoldOutcomeJoined, ActorInterested, ts)
+	if err != nil {
+		return nil, err
+	}
+	held, err := heldPlacesTx(tx, eventID, "")
+	if err != nil {
+		return nil, err
+	}
 	newState, action := StateAttending, ActionJoined
-	if capacity > 0 && attending >= capacity {
+	if !tookHeldPlace && capacity > 0 && attending+held >= capacity {
+		// Full with the waitlist off: as Join refuses, Interested puts nobody
+		// on. The organiser turned the line off.
+		if waitlistDisabled {
+			if err := tx.Commit(); err != nil {
+				return nil, fmt.Errorf("commit: %w", err)
+			}
+			return &InterestResult{Outcome: OutcomeEventFull}, nil
+		}
 		newState, action = StateWaitlisted, ActionWaitlisted
 	}
 
-	ts := now()
 	var signupID int64
 	fromState := ""
 	if found {

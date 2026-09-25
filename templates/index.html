@@ -1,21 +1,24 @@
 {{define "eventcard"}}
-  <div class="card{{if isArchived .Status}} faded{{end}}">
-    <div class="row">
-      <h3><a href="/events/{{.ID}}">{{.Name}}</a></h3>
-      <span class="pill {{.Status}}">{{.Status}}</span>
-      {{if eq .Origin "discord"}}<span class="pill discord">from Discord</span>{{end}}
-    </div>
-    <div class="meta">
-      {{if .StartsAt}}{{localTime .StartsAt}}{{else}}no date set{{end}}
-      {{if .Location}} · {{.Location}}{{end}}
-      {{if .RecurrenceRule}} · 🔁 repeats {{repeats .RecurrenceRule}}{{end}}
-    </div>
-    <div class="meta count" style="margin-top:7px">
-      {{if .Capacity}}<strong>{{.AttendingCount}}/{{.Capacity}}</strong> places{{else}}<strong>{{.AttendingCount}}</strong> signed up · no limit{{end}}
-      {{if .WaitlistCount}} · {{.WaitlistCount}} waiting{{end}}
-      {{if .DiscordScheduledEventID}} · <span class="muted">{{.DiscordInterestedCount}} interested on Discord</span>{{end}}
-    </div>
-  </div>
+  {{/* The whole card is the link. The date sits in a block of its own, the
+       reader's own zone once the page script has run. */}}
+  <a class="event-card{{if isArchived .Status}} faded{{end}}" href="/events/{{.ID}}">
+    {{if .StartsAt}}{{dateBox .StartsAt}}{{else}}<span class="datebox none">no date</span>{{end}}
+    <span class="ec-body">
+      <span class="ec-title">{{.Name}}</span>
+      <span class="ec-meta">{{if .StartsAt}}{{clockTime .StartsAt}}{{end}}{{if .Location}}<span class="dot">·</span>{{.Location}}{{end}}</span>
+      <span class="ec-tags">
+        {{if ne .Status "open"}}<span class="pill {{.Status}}">{{if eq .Status "closed"}}signups closed{{else}}{{.Status}}{{end}}</span>{{end}}
+        {{if .RecurrenceRule}}<span class="pill">🔁 {{repeats .RecurrenceRule}}</span>{{end}}
+        {{if .WaitlistDisabled}}<span class="pill">no waitlist</span>{{end}}
+      </span>
+    </span>
+    <span class="ec-count">
+      <span class="ec-num"><strong>{{.AttendingCount}}</strong>{{if .Capacity}}<span class="muted">/{{.Capacity}}</span>{{end}}</span>
+      {{if .Capacity}}<span class="bar" aria-hidden="true"><span class="bar-going" style="width:{{percent .AttendingCount .Capacity}}%"></span><span class="bar-held" style="width:{{percent .HeldCount .Capacity}}%"></span></span>{{end}}
+      <span class="ec-sub">going{{if .WaitlistCount}} · {{.WaitlistCount}} waiting{{end}}{{if .HeldCount}} · {{.HeldCount}} held{{end}}</span>
+    </span>
+    <svg class="chev" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M7.5 4.5 13 10l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </a>
 {{end}}
 
 {{define "content"}}

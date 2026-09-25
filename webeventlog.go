@@ -3,10 +3,24 @@ package discordsignup
 import (
 	"fmt"
 	"html/template"
+	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
+
+// mapsURL opens a location in Google Maps: a Google Maps link pasted as the
+// location — a dropped pin, shared — is opened as it is, and anything else
+// is searched for.
+func mapsURL(location string) string {
+	location = strings.TrimSpace(location)
+	if strings.HasPrefix(location, "https://") &&
+		(strings.Contains(location, "google.") || strings.Contains(location, "goo.gl")) {
+		return location
+	}
+	return "https://www.google.com/maps/search/?" + url.Values{"api": {"1"}, "query": {location}}.Encode()
+}
 
 // The event page's log: signups, edits and invites in one list, newest
 // first. Three tables, because they are three kinds of fact, and one list,
@@ -47,6 +61,23 @@ func localTimeHTML(unix int64) template.HTML {
 	t := time.Unix(unix, 0).UTC()
 	return template.HTML(fmt.Sprintf(`<time class="ts" datetime="%s">%s</time>`,
 		t.Format(time.RFC3339), t.Format("Mon 2 Jan 2006, 15:04")+" UTC"))
+}
+
+// dateBox is an event's date as a block — weekday, day, month — for the
+// home page's cards. The page script rewrites it into the reader's zone; the
+// server's text is the UTC fallback and says so.
+func dateBox(unix int64) template.HTML {
+	t := time.Unix(unix, 0).UTC()
+	return template.HTML(fmt.Sprintf(`<time class="datebox" datetime="%s" title="%s UTC">`+
+		`<span class="db-dow">%s</span><span class="db-day">%d</span><span class="db-mon">%s</span></time>`,
+		t.Format(time.RFC3339), t.Format("Mon 2 Jan 2006, 15:04"), t.Format("Mon"), t.Day(), t.Format("Jan")))
+}
+
+// clockTime is the time of day alone, rewritten into the reader's zone.
+func clockTime(unix int64) template.HTML {
+	t := time.Unix(unix, 0).UTC()
+	return template.HTML(fmt.Sprintf(`<time class="clock" datetime="%s">%s UTC</time>`,
+		t.Format(time.RFC3339), t.Format("15:04")))
 }
 
 // eventLogEntry is one line of the log.
@@ -150,6 +181,15 @@ func (n eventLogNames) eventUpdateValue(field, value string) template.HTML {
 	return template.HTML(template.HTMLEscapeString(value))
 }
 
+// holdOutcomeWords say how a held place ended, in the log and the invite list.
+var holdOutcomeWords = map[string]string{
+	HoldOutcomeJoined:      "took the place held for them",
+	HoldOutcomeDeclined:    "gave back the place held for them",
+	HoldOutcomeReleased:    "held place released",
+	HoldOutcomeUndelivered: "held place freed: the invite was not delivered",
+	HoldOutcomeExpired:     "held place ended with the date",
+}
+
 // buildEventLog merges an event's three histories, newest first.
 func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventInvite, names eventLogNames) []eventLogEntry {
 	out := make([]eventLogEntry, 0, len(signups)+len(edits)+len(invites))
@@ -193,9 +233,20 @@ func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventI
 		case InviteDeliveryFailed:
 			what += template.HTML(` <span class="bad">— not delivered: ` + template.HTMLEscapeString(inv.DeliveryError) + `</span>`)
 		}
+		if inv.HoldsPlace {
+			what += " and held a place"
+		}
+		subject := personHTML(inv.ReadableName, inv.DisplayName, inv.DiscordUserID)
 		out = append(out, eventLogEntry{At: inv.At, order: len(signups) + len(edits) + i,
-			Subject: personHTML(inv.ReadableName, inv.DisplayName, inv.DiscordUserID),
-			What:    what, By: names.actor(inv.InvitedBy)})
+			Subject: subject, What: what, By: names.actor(inv.InvitedBy)})
+		if inv.HoldsPlace && inv.HoldEndedAt > 0 {
+			by := names.actor(inv.HoldEndedBy)
+			if inv.HoldEndedBy == "" {
+				by = ""
+			}
+			out = append(out, eventLogEntry{At: inv.HoldEndedAt, order: len(signups) + len(edits) + len(invites) + i,
+				Subject: subject, What: template.HTML(holdOutcomeWords[inv.HoldOutcome]), By: by})
+		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].At != out[j].At {

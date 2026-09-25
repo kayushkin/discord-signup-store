@@ -25,10 +25,41 @@ main{max-width:900px;margin:0 auto;padding:26px 20px 70px}
 .pill.closed{color:var(--warn);border-color:#e8a33d55}
 .pill.cancelled{color:var(--bad);border-color:#e0526055}
 .pill.completed{color:var(--dim)}
+/* Home page cards: one link each, date block, what and where, and how full. */
+a.event-card{display:flex;align-items:center;gap:16px;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:14px 16px;margin-bottom:10px;color:var(--ink);text-decoration:none;
+  transition:border-color .12s,background .12s,transform .12s}
+a.event-card:hover{border-color:#5865f288;background:#292a30;text-decoration:none}
+a.event-card:hover .chev{color:var(--ink);transform:translateX(2px)}
+a.event-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.datebox{flex:none;width:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:#1b1c20;border:1px solid var(--line);border-radius:10px;padding:6px 0;line-height:1.1}
+.datebox.none{font-size:11px;color:var(--dim);height:62px}
+.db-dow,.db-mon{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim)}
+.db-day{font-size:22px;font-weight:700;margin:1px 0}
+.ec-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.ec-title{font-weight:600;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ec-meta{color:var(--dim);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ec-meta .dot{margin:0 6px}
+.ec-tags{display:flex;gap:6px;flex-wrap:wrap}
+.ec-tags:empty{display:none}
+.ec-count{flex:none;width:112px;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.ec-num{font-size:18px;font-variant-numeric:tabular-nums}
+.ec-sub{font-size:12px;color:var(--dim);text-align:right}
+.bar{display:flex;width:100%;height:5px;background:#1b1c20;border-radius:99px;overflow:hidden}
+.bar-going{background:var(--ok)}
+.bar-held{background:#5865f2aa}
+.chev{flex:none;color:var(--dim);transition:transform .12s}
+@media (max-width:560px){
+  a.event-card{flex-wrap:wrap;gap:12px}
+  .ec-count{width:auto;flex-direction:row;align-items:center;gap:10px;order:3;flex-basis:100%;padding-left:70px}
+  .ec-count .bar{flex:1}
+  .chev{display:none}
+}
 /* Archived cards stay legible but visibly done — dimmed, not hidden, because
    the roster of a past event is exactly what gets looked up later. */
-.card.faded{opacity:.62}
-.card.faded:hover{opacity:1}
+.card.faded,a.event-card.faded{opacity:.62}
+.card.faded:hover,a.event-card.faded:hover{opacity:1}
 details.archive{margin-top:26px;border-top:1px solid var(--line);padding-top:18px}
 details.archive summary{cursor:pointer;color:var(--dim);font-size:14px;
   list-style:none;user-select:none;padding:6px 0}
@@ -175,6 +206,18 @@ ol.people{list-style:none;margin:4px 0 0;padding:0}
   text-decoration:line-through;text-decoration-color:#8a8d94;text-decoration-thickness:1.5px}
 .choice > button:disabled{border:1px solid var(--line)}
 .choice-note{margin:10px 0 0;font-size:12px;color:var(--dim)}
+label.check{display:flex;gap:9px;align-items:flex-start;margin:0;color:var(--ink);font-size:14px;cursor:pointer}
+label.check input{width:auto;margin:3px 0 0;accent-color:var(--accent)}
+label.check .hint{display:block;margin-top:1px}
+label.check.is-off{color:var(--dim);cursor:default}
+.pill.held{color:#9aa4ff;border-color:#5865f266}
+.control.is-off h4{opacity:.6}
+.map-link{display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:13px}
+.location-row{display:flex;gap:8px;align-items:center}
+.location-row input{flex:1}
+.map-search{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;text-decoration:none!important;padding:8px 11px}
+.map-preview{display:block;width:100%;height:220px;border:1px solid var(--line);border-radius:8px;margin-top:8px;background:#1b1c20}
+@media (max-width:600px){.location-row{flex-direction:column;align-items:stretch}.map-search{justify-content:center}}
 .ask-text{margin:0;font-size:15px;line-height:1.5}
 .choices{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:640px){.choices{grid-template-columns:1fr}}
@@ -257,6 +300,22 @@ dialog.dialog label{margin:14px 0 0}
   var fmt = new Intl.DateTimeFormat(undefined, {
     weekday: "short", day: "numeric", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit", timeZoneName: "short"
+  });
+  var dow = new Intl.DateTimeFormat(undefined, { weekday: "short" });
+  var day = new Intl.DateTimeFormat(undefined, { day: "numeric" });
+  var mon = new Intl.DateTimeFormat(undefined, { month: "short" });
+  var clock = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+  document.querySelectorAll("time.datebox").forEach(function (el) {
+    var when = new Date(el.getAttribute("datetime"));
+    if (isNaN(when.getTime())) return;
+    el.querySelector(".db-dow").textContent = dow.format(when);
+    el.querySelector(".db-day").textContent = day.format(when);
+    el.querySelector(".db-mon").textContent = mon.format(when);
+    el.title = fmt.format(when);
+  });
+  document.querySelectorAll("time.clock").forEach(function (el) {
+    var when = new Date(el.getAttribute("datetime"));
+    if (!isNaN(when.getTime())) el.textContent = clock.format(when);
   });
   document.querySelectorAll("time.ts").forEach(function (el) {
     var when = new Date(el.getAttribute("datetime"));
@@ -566,11 +625,22 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
       } else {
         form.removeAttribute("data-moving");
       }
+      // Said beside the box it is about.
+      var hold = form.querySelector("input[name=hold_place]");
+      var holdNote = form.querySelector("[data-hold-note]");
+      if (hold && holdNote) {
+        var free = +hold.getAttribute("data-free");
+        holdNote.hidden = !(hold.checked && n > free);
+        holdNote.textContent = "Only " + free + " place" + (free === 1 ? " is" : "s are") +
+          " free to hold: invites past the first " + free + " are not sent.";
+      }
       var note = form.querySelector("[data-choice-note]");
       note.textContent = notes.join(" ");
       note.hidden = notes.length === 0;
     }
 
+    var holdBox = form.querySelector("input[name=hold_place]");
+    if (holdBox) holdBox.addEventListener("change", refresh);
     form.addEventListener("member-picked", function (e) {
       var m = e.detail;
       box.value = ""; scratch.value = "";
@@ -615,6 +685,38 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
       refresh();
       box.focus();
     });
+  });
+
+  // A location box: Find on Google Maps searches what is typed, and the
+  // map under it shows what those words find, as they are typed. A pasted
+  // Google Maps link is a pin already; the embed cannot show a short link,
+  // so the preview hides and the link is kept as the location.
+  document.querySelectorAll("[data-location]").forEach(function (wrap) {
+    var input = wrap.querySelector("input[name=location]");
+    var search = wrap.querySelector("[data-map-search]");
+    var preview = wrap.querySelector("[data-map-preview]");
+    var timer = null;
+    function isLink(v) { return /^https:\/\/(\S*google\.\S*\/maps|maps\.app\.goo\.gl|goo\.gl\/maps)/.test(v); }
+    function update() {
+      var v = input.value.trim();
+      search.href = isLink(v) ? v : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(v);
+      search.lastChild.textContent = isLink(v) ? " Open the pin" : (v ? " Find on Google Maps" : " Open Google Maps");
+      clearTimeout(timer);
+      if (!v || isLink(v)) { preview.hidden = true; return; }
+      timer = setTimeout(function () {
+        preview.src = "https://maps.google.com/maps?output=embed&z=15&q=" + encodeURIComponent(v);
+        preview.hidden = false;
+      }, 600);
+    }
+    input.addEventListener("input", update);
+    // Drawn when the field opens, not on page load: a map per page view
+    // would load Google for people who never touch the place.
+    var field = wrap.closest("[data-field]");
+    if (field) {
+      field.querySelector("[data-edit]").addEventListener("click", update);
+    } else {
+      update();
+    }
   });
 
   document.querySelectorAll("[data-open-dialog]").forEach(function (btn) {

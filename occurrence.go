@@ -110,6 +110,12 @@ func (s *Store) RollOverOccurrence(eventID, nextStart, nextEnd int64) ([]Signup,
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate roster: %w", err)
 	}
+	// Places held by invites were held for the date that ran.
+	if _, err := tx.Exec(`UPDATE event_invites SET hold_ended_at = ?, hold_outcome = ?, hold_ended_by = ?
+		WHERE event_id = ? AND holds_place = 1 AND hold_ended_at = 0`,
+		ts, HoldOutcomeExpired, ActorRecurrence, eventID); err != nil {
+		return nil, fmt.Errorf("expire held places: %w", err)
+	}
 	for i := range withdrawn {
 		sg := &withdrawn[i]
 		if _, err := tx.Exec(`UPDATE signups SET state = ?, state_changed_at = ? WHERE id = ?`,

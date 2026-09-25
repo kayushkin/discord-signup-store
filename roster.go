@@ -90,10 +90,22 @@ func (s *Store) Join(eventID int64, discordUserID, displayName, via string) (*Jo
 		return nil, fmt.Errorf("count attending: %w", err)
 	}
 
+	// A place held for this person is theirs: they take it whatever the count
+	// says. Places held for anyone else count as taken.
+	ts := now()
+	tookHeldPlace, err := endHoldTx(tx, eventID, discordUserID, HoldOutcomeJoined, ActorUser, ts)
+	if err != nil {
+		return nil, err
+	}
+	held, err := heldPlacesTx(tx, eventID, "")
+	if err != nil {
+		return nil, err
+	}
+
 	// capacity 0 means unlimited, matching Discord's own convention.
 	newState := StateAttending
 	action := ActionJoined
-	if capacity > 0 && attending >= capacity {
+	if !tookHeldPlace && capacity > 0 && attending+held >= capacity {
 		if waitlistDisabled {
 			return nil, ErrEventFull
 		}
@@ -101,7 +113,6 @@ func (s *Store) Join(eventID int64, discordUserID, displayName, via string) (*Jo
 		action = ActionWaitlisted
 	}
 
-	ts := now()
 	var signupID int64
 
 	if hasExisting {
@@ -238,7 +249,7 @@ func (s *Store) Leave(eventID int64, discordUserID, actor string) (*LeaveResult,
 	// Only an attending person leaving can free a place. Someone abandoning
 	// the waitlist, or the Maybe list, promotes nobody.
 	if wasAttending {
-		promoted, err := promoteIfPlaceFreeTx(tx, eventID, capacity, ts)
+		promoted, err := promoteIfPlaceFreeTx(tx, eventID, ts)
 		if err != nil {
 			return nil, err
 		}
@@ -483,11 +494,16 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-// promoteIfPlaceFreeTx promotes the next in line when someone going has just
-// gone and that left a place free. An event an organiser took over its limit
-// — 16/15 — is not freed by one person leaving: 15/15 is still full, and
-// promoting would put it back to 16. Nil when nobody moved.
-func promoteIfPlaceFreeTx(tx *sql.Tx, eventID int64, capacity int, ts int64) (*Signup, error) {
+// promoteIfPlaceFreeTx promotes the next in line when a place has just come
+// free — someone going left, or a held place was given back. An event an
+// organiser took over its limit — 16/15 — is not freed by one person leaving:
+// 15/15 is still full, and promoting would put it back to 16. Held places
+// count as taken. Nil when nobody moved.
+func promoteIfPlaceFreeTx(tx *sql.Tx, eventID int64, ts int64) (*Signup, error) {
+	var capacity int
+	if err := tx.QueryRow(`SELECT capacity FROM events WHERE id = ?`, eventID).Scan(&capacity); err != nil {
+		return nil, fmt.Errorf("load event: %w", err)
+	}
 	if capacity <= 0 {
 		return nil, nil
 	}
@@ -496,7 +512,11 @@ func promoteIfPlaceFreeTx(tx *sql.Tx, eventID int64, capacity int, ts int64) (*S
 		eventID, StateAttending).Scan(&going); err != nil {
 		return nil, fmt.Errorf("count attending: %w", err)
 	}
-	if going >= capacity {
+	held, err := heldPlacesTx(tx, eventID, "")
+	if err != nil {
+		return nil, err
+	}
+	if going+held >= capacity {
 		return nil, nil
 	}
 	return promoteNextInLineTx(tx, eventID, ts)
@@ -590,6 +610,17 @@ func (s *Store) MarkMaybe(eventID int64, discordUserID, displayName, via string)
 	}
 	ts := now()
 	result := &MaybeResult{}
+	// Maybe from an invite that held a place gives the place back, and the
+	// next person waiting takes it.
+	gaveBack, err := endHoldTx(tx, eventID, discordUserID, HoldOutcomeDeclined, ActorUser, ts)
+	if err != nil {
+		return nil, err
+	}
+	if gaveBack {
+		if result.Promoted, err = promoteIfPlaceFreeTx(tx, eventID, ts); err != nil {
+			return nil, err
+		}
+	}
 	if found {
 		result.FromState = existing.State
 	}
@@ -610,7 +641,7 @@ func (s *Store) MarkMaybe(eventID int64, discordUserID, displayName, via string)
 			return nil, fmt.Errorf("move signup to maybe: %w", err)
 		}
 		if existing.State == StateAttending {
-			if result.Promoted, err = promoteIfPlaceFreeTx(tx, eventID, capacity, ts); err != nil {
+			if result.Promoted, err = promoteIfPlaceFreeTx(tx, eventID, ts); err != nil {
 				return nil, err
 			}
 		}

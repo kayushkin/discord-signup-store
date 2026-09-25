@@ -304,6 +304,11 @@ func eventPublishSignature(ev *Event, roster []Signup) string {
 	if ev.WaitlistDisabled {
 		b.WriteString("\x00no-waitlist")
 	}
+	// Held places decide whether it reads as full. Written only when there are
+	// any, for the same reason.
+	if ev.HeldCount > 0 {
+		fmt.Fprintf(&b, "\x00held=%d", ev.HeldCount)
+	}
 	for _, sg := range roster {
 		fmt.Fprintf(&b, "\x01%s\x00%s\x00%s\x00%s", sg.DiscordUserID, sg.DisplayName, sg.ReadableName, sg.State)
 	}

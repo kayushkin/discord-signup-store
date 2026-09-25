@@ -693,8 +693,10 @@ const discordEventNameLimit = 100
 
 // eventIsFull reports whether a capped event has no room left, so a new
 // signup would go on the waitlist. An uncapped event is never full.
+// eventIsFull is whether a capped event has no place free, counting the
+// places held for invited people as taken.
 func eventIsFull(ev *Event) bool {
-	return ev.Capacity > 0 && ev.AttendingCount >= ev.Capacity
+	return ev.Capacity > 0 && ev.AttendingCount+ev.HeldCount >= ev.Capacity
 }
 
 // titlePrefix is "[Full] " for a capped event with no room, else empty.

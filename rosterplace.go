@@ -99,12 +99,26 @@ func (s *Store) PlaceOnList(eventID int64, discordUserID, displayName, state, ac
 			eventID, StateAttending, discordUserID).Scan(&othersGoing); err != nil {
 			return nil, fmt.Errorf("count attending: %w", err)
 		}
-		if capacity == 0 || othersGoing < capacity {
+		othersHeld, err := heldPlacesTx(tx, eventID, discordUserID)
+		if err != nil {
+			return nil, err
+		}
+		if capacity == 0 || othersGoing+othersHeld < capacity {
 			return nil, fmt.Errorf("%w: the event is not full, so nobody waits — put them down as going", ErrInvalidEvent)
 		}
 	}
 
 	ts := now()
+	// A place held for them ends here: taken if they are put down as going,
+	// given back otherwise — and then the next person waiting moves up.
+	holdOutcome := HoldOutcomeReleased
+	if state == StateAttending {
+		holdOutcome = HoldOutcomeJoined
+	}
+	heldEnded, err := endHoldTx(tx, eventID, discordUserID, holdOutcome, actor, ts)
+	if err != nil {
+		return nil, err
+	}
 	// Kept in place: going or Maybe from a list they are already on. The row's
 	// arrival stays theirs, as it does when GiveAPlace or MarkMaybe moves it.
 	keepRow := found && existing.State != StateWithdrawn && state != StateWaitlisted
@@ -151,8 +165,8 @@ func (s *Store) PlaceOnList(eventID int64, discordUserID, displayName, state, ac
 
 	// Moved off going: the place they held is free unless the event was
 	// over its limit, and the longest-waiting person takes it.
-	if result.FromState == StateAttending {
-		if result.Promoted, err = promoteIfPlaceFreeTx(tx, eventID, capacity, ts); err != nil {
+	if result.FromState == StateAttending || (heldEnded && state != StateAttending) {
+		if result.Promoted, err = promoteIfPlaceFreeTx(tx, eventID, ts); err != nil {
 			return nil, err
 		}
 	}
