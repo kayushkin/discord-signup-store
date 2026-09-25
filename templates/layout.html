@@ -156,7 +156,24 @@ ol.people{list-style:none;margin:4px 0 0;padding:0}
 .btn-sm.danger:hover{background:#e0526018}
 
 /* Add someone: one person, two clearly different ways in. */
-.picker-wrap{position:relative;margin:8px 0 12px}
+.picker-wrap{position:relative;margin:8px 0 6px}
+.picker-wrap.search .member-name{padding-left:34px}
+.search-icon{position:absolute;left:11px;top:12px;color:var(--dim);pointer-events:none}
+.picked-person{display:flex;align-items:center;gap:12px;margin:8px 0 14px;padding:10px 12px;
+  border:1px solid #5865f266;background:#5865f214;border-radius:10px}
+.picked-text{flex:1;min-width:0}
+.picked-name{font-weight:600;font-size:16px;overflow:hidden;text-overflow:ellipsis}
+.picked-sub{color:var(--dim);font-size:13px}
+.avatar{flex:none;width:40px;height:40px;border-radius:50%;background:#5865f2;color:#fff;display:inline-flex;
+  align-items:center;justify-content:center;font-weight:600;overflow:hidden}
+.avatar img{width:100%;height:100%;object-fit:cover}
+/* Unavailable reads as unavailable, the same on both panels. */
+.choice > button:disabled,.seg:disabled{background:repeating-linear-gradient(135deg,transparent 0 6px,#ffffff08 6px 12px);
+  color:#6b6e76;border-color:var(--line);opacity:1;cursor:not-allowed;filter:none;
+  text-decoration:line-through;text-decoration-color:#8a8d94;text-decoration-thickness:1.5px}
+.choice > button:disabled{border:1px solid var(--line)}
+.choice-note{margin:0;font-size:12px;color:var(--dim)}
+.ask-text{margin:0;font-size:15px;line-height:1.5}
 .choices{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:640px){.choices{grid-template-columns:1fr}}
 .choice{border:1px solid var(--line);border-radius:9px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:#1f2024}
@@ -176,14 +193,17 @@ ol.people{list-style:none;margin:4px 0 0;padding:0}
 /* The side column. */
 .side-card h4{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);font-weight:600}
 .side-card p{margin:6px 0}
-.switch-row{display:flex;gap:12px;align-items:flex-start;margin:0 0 14px}
-.switch{flex:none;width:40px;height:22px;border-radius:999px;background:#44464d;border:0;padding:0;position:relative;margin-top:1px}
-.switch .knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
-.switch[aria-checked="true"]{background:var(--ok)}
-.switch[aria-checked="true"] .knob{left:21px}
-.switch:hover{filter:brightness(1.1)}
-.switch-label{font-weight:600;font-size:14px}
-.switch-row .hint{margin-top:2px}
+.control{margin:0 0 16px}
+.control h4{margin:0 0 7px}
+.control .hint{margin-top:6px}
+.seg-control{display:flex;gap:3px;padding:3px;background:#1b1c20;border:1px solid var(--line);border-radius:9px}
+.seg-control form{flex:1;margin:0}
+.seg-control button{width:100%;background:transparent;color:var(--dim);border:1px solid transparent;
+  border-radius:7px;padding:6px 8px;font-size:14px;font-weight:500}
+.seg-control button:hover{color:var(--ink);background:#2a2c31;filter:none}
+.seg-control button[aria-checked="true"]{cursor:default;color:var(--ink);background:#2f3136;box-shadow:0 1px 2px #0006}
+.seg-control button[aria-checked="true"][data-tone="ok"]{color:var(--ok);border-color:#2eb87255;background:#2eb8721a}
+.seg-control button[aria-checked="true"][data-tone="warn"]{color:var(--warn);border-color:#e8a33d55;background:#e8a33d1a}
 .side-actions{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:12px}
 .side-actions form{margin:0}
 .btn-block{width:100%;text-align:center}
@@ -259,7 +279,11 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
   var shown = [], active = -1, timer = null, asked = 0;
 
   function close() { list.hidden = true; box.setAttribute("aria-expanded", "false"); active = -1; }
-  function pick(m) { box.value = m.display_name; hidden.value = m.user_id; close(); }
+  // A pick is announced on the form, so a page can show who was picked.
+  function pick(m) {
+    box.value = m.display_name; hidden.value = m.user_id; close();
+    form.dispatchEvent(new CustomEvent("member-picked", { detail: m }));
+  }
   function mark() {
     Array.prototype.forEach.call(list.children, function (li, i) {
       li.setAttribute("aria-selected", i === active ? "true" : "false");
@@ -314,7 +338,12 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     // A pasted snowflake is an id already; there is nothing to look up.
     hidden.value = /^\d{15,21}$/.test(q) ? q : "";
     clearTimeout(timer);
-    if (!q || hidden.value) { close(); return; }
+    if (hidden.value) {
+      close();
+      form.dispatchEvent(new CustomEvent("member-picked", { detail: { user_id: q, pasted: true } }));
+      return;
+    }
+    if (!q) { close(); return; }
     timer = setTimeout(function () { search(q); }, 200);
   });
   box.addEventListener("keydown", function (e) {
@@ -390,16 +419,64 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     });
   });
 
+  var listWords = { attending: "going", waitlisted: "the waitlist", maybe: "maybe", withdrawn: "left" };
+
+  // askFirst is confirm() in the page's own look: a dialog with the question,
+  // Cancel, and a button that says what it does.
+  var asker = document.createElement("dialog");
+  asker.className = "dialog";
+  asker.innerHTML = '<p class="ask-text"></p><div class="dialog-actions">' +
+    '<button type="button" class="ghost" value="no">Cancel</button>' +
+    '<button type="button" value="yes">Go ahead</button></div>';
+  document.body.appendChild(asker);
+  function askFirst(text, dangerous) {
+    asker.querySelector(".ask-text").textContent = text;
+    var yes = asker.querySelector('[value=yes]');
+    yes.className = dangerous ? "danger-solid" : "";
+    return new Promise(function (resolve) {
+      function done(answer) {
+        asker.querySelectorAll("button").forEach(function (b) { b.onclick = null; });
+        asker.onclose = null;
+        if (asker.open) asker.close();
+        resolve(answer);
+      }
+      asker.querySelector('[value=no]').onclick = function () { done(false); };
+      yes.onclick = function () { done(true); };
+      asker.onclose = function () { done(false); };
+      asker.showModal();
+      yes.focus();
+    });
+  }
+
   document.addEventListener("submit", function (e) {
     var form = e.target;
     if (!form.hasAttribute("data-async") || e.defaultPrevented) return;
     e.preventDefault();
     var submitter = e.submitter;
     var ask = (submitter && submitter.getAttribute("data-confirm")) || form.getAttribute("data-confirm");
-    if (ask) {
-      var box = form.querySelector(".member-name");
-      if (!confirm(ask.replace("{name}", box && box.value ? box.value : "them"))) return;
+    var box = form.querySelector(".member-name");
+    var who = form.getAttribute("data-person-name") || (box && box.value) || "them";
+    // Someone already on the event is moved, not added, and the question
+    // says so — with what happens to the place they give up.
+    var standingNow = form.getAttribute("data-person-standing");
+    var choice = submitter && submitter.getAttribute("data-choice");
+    if (standingNow && choice && choice !== "invite") {
+      ask = "Move " + who + " from " + listWords[standingNow] + " to " + listWords[choice] + "?" +
+        (standingNow === "attending" && form.hasAttribute("data-place-frees") ? " Their place goes to whoever is next on the waitlist." : "") +
+        " They will be messaged.";
     }
+    // The answer is marked on the button pressed, or on the form when Enter
+    // sent it, and the submit is sent again once it is yes.
+    var asked = submitter || form;
+    if (ask && !asked.hasAttribute("data-confirmed")) {
+      askFirst(ask.replace(/\{name\}/g, who), !!submitter && submitter.classList.contains("danger")).then(function (yes) {
+        if (!yes) return;
+        asked.setAttribute("data-confirmed", "");
+        form.requestSubmit(submitter || undefined);
+      });
+      return;
+    }
+    asked.removeAttribute("data-confirmed");
     var action = (submitter && submitter.hasAttribute("formaction")) ? submitter.formAction : form.action;
     var body = new URLSearchParams(new FormData(form, submitter));
     var busy = form.querySelectorAll("button");
@@ -432,6 +509,71 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
         busy.forEach(function (b) { b.disabled = false; });
         say("Could not reach the server: " + err.message, true);
       });
+  });
+
+  // Add someone: once a person is picked, the search box becomes them, and
+  // only what can be done with them is offered.
+  var standing = { attending: "already going", waitlisted: "already on the waitlist",
+                   maybe: "down as maybe", withdrawn: "left this event" };
+  document.querySelectorAll("form.add-form").forEach(function (form) {
+    var pickStep = form.querySelector("[data-pick-step]");
+    var picked = form.querySelector("[data-picked]");
+    var box = form.querySelector(".member-name");
+    var hidden = form.querySelector("input[name=discord_user_id]");
+    form.addEventListener("member-picked", function (e) {
+      var m = e.detail;
+      var name = m.pasted ? "User " + m.user_id : (m.readable_name || m.display_name);
+      form.setAttribute("data-person-name", name);
+      if (m.on_roster && m.on_roster !== "withdrawn") form.setAttribute("data-person-standing", m.on_roster);
+      else form.removeAttribute("data-person-standing");
+      var nameEl = picked.querySelector("[data-picked-name]");
+      nameEl.textContent = name;
+      if (m.readable_name && m.readable_name !== m.display_name) {
+        var aka = document.createElement("span");
+        aka.className = "muted";
+        aka.textContent = "  " + m.display_name;
+        nameEl.appendChild(aka);
+      }
+      picked.querySelector("[data-picked-sub]").textContent = m.pasted
+        ? "Pasted id · checked against the server when you go ahead"
+        : "@" + m.username + " · " + (standing[m.on_roster] || "not on this event yet");
+      var avatar = picked.querySelector("[data-avatar]");
+      avatar.textContent = "";
+      if (m.avatar_url) {
+        var img = document.createElement("img");
+        img.src = m.avatar_url; img.alt = "";
+        avatar.appendChild(img);
+      } else {
+        avatar.textContent = (name || "?").trim().charAt(0).toUpperCase();
+      }
+      var notes = [];
+      picked.querySelectorAll("[data-choice]").forEach(function (b) {
+        var choice = b.getAttribute("data-choice");
+        var already = choice === m.on_roster ||
+          (choice === "invite" && (m.on_roster === "attending" || m.on_roster === "waitlisted"));
+        b.disabled = b.hasAttribute("data-never") || already;
+        if (b.hasAttribute("data-never") && choice !== "invite") notes.push(b.getAttribute("title") + ".");
+      });
+      var onIt = m.on_roster && m.on_roster !== "withdrawn";
+      if (onIt) {
+        notes.unshift(name + " is " + standing[m.on_roster] + ". Picking another list moves them" +
+          (m.on_roster === "attending" && form.hasAttribute("data-place-frees") ? ", and their place goes to whoever is next." : "."));
+      }
+      var note = picked.querySelector("[data-choice-note]");
+      note.textContent = notes.join(" ");
+      note.hidden = notes.length === 0;
+      pickStep.hidden = true;
+      picked.hidden = false;
+      var first = picked.querySelector("[data-choice]:not(:disabled)");
+      if (first) first.focus();
+    });
+    form.querySelector("[data-unpick]").addEventListener("click", function () {
+      hidden.value = ""; box.value = "";
+      form.removeAttribute("data-person-name");
+      form.removeAttribute("data-person-standing");
+      picked.hidden = true; pickStep.hidden = false;
+      box.focus();
+    });
   });
 
   document.querySelectorAll("[data-open-dialog]").forEach(function (btn) {

@@ -151,16 +151,9 @@ func (s *Store) PlaceOnList(eventID int64, discordUserID, displayName, state, ac
 
 	// Moved off going: the place they held is free unless the event was
 	// over its limit, and the longest-waiting person takes it.
-	if result.FromState == StateAttending && capacity > 0 {
-		var going int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM signups WHERE event_id = ? AND state = ?`,
-			eventID, StateAttending).Scan(&going); err != nil {
-			return nil, fmt.Errorf("count attending: %w", err)
-		}
-		if going < capacity {
-			if result.Promoted, err = promoteNextInLineTx(tx, eventID, ts); err != nil {
-				return nil, err
-			}
+	if result.FromState == StateAttending {
+		if result.Promoted, err = promoteIfPlaceFreeTx(tx, eventID, capacity, ts); err != nil {
+			return nil, err
 		}
 	}
 	if err := tx.Commit(); err != nil {

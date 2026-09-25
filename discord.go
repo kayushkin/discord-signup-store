@@ -452,12 +452,27 @@ func (c *DiscordClient) CurrentUserID() (string, error) {
 // cannot name the same person differently.
 type guildMember struct {
 	Nick string `json:"nick"`
-	User struct {
+	// Avatar is a server-specific picture's hash, if they set one.
+	Avatar string `json:"avatar"`
+	User   struct {
 		ID         string `json:"id"`
 		Username   string `json:"username"`
 		GlobalName string `json:"global_name"`
+		Avatar     string `json:"avatar"`
 		Bot        bool   `json:"bot"`
 	} `json:"user"`
+}
+
+// avatarURL is the picture Discord shows for this member in guildID: their
+// server picture, else their own, else "" — the page then draws an initial.
+func (m guildMember) avatarURL(guildID string) string {
+	switch {
+	case m.Avatar != "":
+		return "https://cdn.discordapp.com/guilds/" + guildID + "/users/" + m.User.ID + "/avatars/" + m.Avatar + ".png?size=64"
+	case m.User.Avatar != "":
+		return "https://cdn.discordapp.com/avatars/" + m.User.ID + "/" + m.User.Avatar + ".png?size=64"
+	}
+	return ""
 }
 
 // displayName is how someone appears in a server: their nickname if they set
@@ -494,6 +509,7 @@ type MemberMatch struct {
 	UserID      string `json:"user_id"`
 	DisplayName string `json:"display_name"`
 	Username    string `json:"username"`
+	AvatarURL   string `json:"avatar_url,omitempty"`
 }
 
 // SearchGuildMembers finds up to limit members whose username, global display
@@ -521,7 +537,8 @@ func (c *DiscordClient) SearchGuildMembers(guildID, query string, limit int) ([]
 		if m.User.Bot {
 			continue
 		}
-		matches = append(matches, MemberMatch{UserID: m.User.ID, DisplayName: m.displayName(), Username: m.User.Username})
+		matches = append(matches, MemberMatch{UserID: m.User.ID, DisplayName: m.displayName(),
+			Username: m.User.Username, AvatarURL: m.avatarURL(guildID)})
 	}
 	return matches, nil
 }

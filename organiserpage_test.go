@@ -85,7 +85,7 @@ func TestTheEventPageIsTheEditForm(t *testing.T) {
 
 	page := getPage(t, mux, token, eventPath(ev)).Body.String()
 	for _, want := range []string{`name="name" required maxlength="100" value="Games"`, `name="waitlist"`,
-		`action="` + eventPath(ev) + `/signups"`, "Signups open", "Send invite", "Force add", `data-edit`} {
+		`action="` + eventPath(ev) + `/signups"`, `data-tone="ok" aria-checked="true"`, "Send invite", "Add them yourself", `data-edit`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("event page lacks %s", want)
 		}
@@ -243,5 +243,25 @@ func TestSavingOneFieldLeavesTheOthersAlone(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "whole number") {
 		t.Errorf("bad limit = %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestLeavingAnEventOverItsLimitPromotesNobody: 3/2 with someone waiting,
+// one leaves, 2/2 is still full.
+func TestLeavingAnEventOverItsLimitPromotesNobody(t *testing.T) {
+	store := testStore(t)
+	ev := publishedEvent(t, store, 2, "alice", "bob", "waiting")
+	if _, err := store.PlaceOnList(ev.ID, "cy", "Cy", StateAttending, "web:org"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := store.Leave(ev.ID, "alice", ActorUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Promoted != nil {
+		t.Errorf("promoted %s while the event was still at its limit", result.Promoted.DiscordUserID)
+	}
+	if after, _ := store.GetEvent(ev.ID); after.AttendingCount != 2 || after.WaitlistCount != 1 {
+		t.Errorf("after = %d going, %d waiting; want 2 and 1", after.AttendingCount, after.WaitlistCount)
 	}
 }

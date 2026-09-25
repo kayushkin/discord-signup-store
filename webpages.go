@@ -71,6 +71,10 @@ type pageData struct {
 	EventLog []eventLogEntry
 	// Form is the event page's edit fields.
 	Form eventFormValues
+	// PlaceFreesOnLeave is whether someone going leaving would bring in the
+	// next person waiting: somebody is waiting, and the event is not over
+	// its limit. The page words its questions by it.
+	PlaceFreesOnLeave bool
 	// EventFull is whether a capped event has no free place, which is when
 	// the waitlist can be added to.
 	EventFull bool
@@ -82,7 +86,6 @@ type pageData struct {
 	EventUnderway        bool
 	DiscordEventURL      string
 	GuildsWhereMayCreate []Guild
-	Roles                []Role
 	// HomeGuildChoices are the servers the home page can be narrowed to, and
 	// HomeGuildID the one chosen ("" for all).
 	HomeGuildChoices []Guild
@@ -274,9 +277,6 @@ func (s *Server) handleWebNewEventForm(w http.ResponseWriter, r *http.Request) {
 	if len(guilds) == 0 && data.Error == "" {
 		data.Error = "You may not create events in any server this bot is in."
 	}
-	if len(guilds) > 0 {
-		data.Roles = s.assignableRolesIn(guilds[0].ID)
-	}
 	s.render(w, "form.html", data)
 }
 
@@ -320,25 +320,6 @@ func (s *Server) guildsWhereMayCreate(session *WebSession) ([]Guild, error) {
 // standing needed to pull a server's events in from Discord.
 func (s *Server) guildsWhereMayEditAll(session *WebSession) ([]Guild, error) {
 	return s.guildsWhere(session, s.mayEditAllEventsIn)
-}
-
-// assignableRolesIn returns only roles the bot can actually grant. Offering one
-// it cannot would produce a 403 at the first signup, long after the choice.
-func (s *Server) assignableRolesIn(guildID string) []Role {
-	if s.discord == nil {
-		return nil
-	}
-	roles, err := s.discord.ListGuildRoles(guildID)
-	if err != nil {
-		log.Printf("[discord-signup] list roles for %s: %v", guildID, err)
-		return nil
-	}
-	botRoles, err := s.discord.GuildMemberRoleIDs(guildID, s.applicationUserID())
-	if err != nil {
-		log.Printf("[discord-signup] read bot roles in %s: %v", guildID, err)
-		return nil
-	}
-	return AssignableRoles(roles, botRoles)
 }
 
 // applicationUserID is the bot's own user id, cached after the first successful

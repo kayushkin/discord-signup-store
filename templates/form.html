@@ -64,25 +64,6 @@
     <div class="hint">Stored as an RFC 5545 rule, the same grammar Discord accepts
       on its own scheduled events, so one rule drives both.</div>
 
-    <div class="grid2">
-      <div>
-        <label>Attending role (optional)</label>
-        <select name="attending_role_id">
-          <option value="">none</option>
-          {{range .Roles}}<option value="{{.ID}}" >{{.Name}}</option>{{end}}
-        </select>
-      </div>
-      <div>
-        <label>Waitlist role (optional)</label>
-        <select name="waitlist_role_id">
-          <option value="">none</option>
-          {{range .Roles}}<option value="{{.ID}}" >{{.Name}}</option>{{end}}
-        </select>
-      </div>
-    </div>
-    <div class="hint">Granted and revoked automatically as people join, move up
-      the waitlist or leave. The bot's own role must sit above these in the
-      server's role list.</div>
 
     <p style="margin-top:22px"><button>Create</button>
       <a class="btn" style="background:transparent;border:1px solid var(--line)" href="/">Cancel</a></p>

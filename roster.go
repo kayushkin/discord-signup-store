@@ -235,10 +235,10 @@ func (s *Store) Leave(eventID int64, discordUserID, actor string) (*LeaveResult,
 
 	result := &LeaveResult{Signup: leaver, FromState: fromState}
 
-	// Only an attending person leaving frees a place. Someone abandoning the
-	// waitlist, or the Maybe list, promotes nobody.
-	if wasAttending && capacity > 0 {
-		promoted, err := promoteNextInLineTx(tx, eventID, ts)
+	// Only an attending person leaving can free a place. Someone abandoning
+	// the waitlist, or the Maybe list, promotes nobody.
+	if wasAttending {
+		promoted, err := promoteIfPlaceFreeTx(tx, eventID, capacity, ts)
 		if err != nil {
 			return nil, err
 		}
@@ -483,6 +483,25 @@ func boolToInt(b bool) int {
 	return 0
 }
 
+// promoteIfPlaceFreeTx promotes the next in line when someone going has just
+// gone and that left a place free. An event an organiser took over its limit
+// — 16/15 — is not freed by one person leaving: 15/15 is still full, and
+// promoting would put it back to 16. Nil when nobody moved.
+func promoteIfPlaceFreeTx(tx *sql.Tx, eventID int64, capacity int, ts int64) (*Signup, error) {
+	if capacity <= 0 {
+		return nil, nil
+	}
+	var going int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM signups WHERE event_id = ? AND state = ?`,
+		eventID, StateAttending).Scan(&going); err != nil {
+		return nil, fmt.Errorf("count attending: %w", err)
+	}
+	if going >= capacity {
+		return nil, nil
+	}
+	return promoteNextInLineTx(tx, eventID, ts)
+}
+
 // promoteNextInLineTx moves the person who has waited longest into a place
 // that has just been freed, inside the caller's transaction. Nil when nobody
 // is waiting. Shared by Leave and by going to Maybe, which both free a place.
@@ -590,8 +609,8 @@ func (s *Store) MarkMaybe(eventID int64, discordUserID, displayName, via string)
 			StateMaybe, ts, existing.ID); err != nil {
 			return nil, fmt.Errorf("move signup to maybe: %w", err)
 		}
-		if existing.State == StateAttending && capacity > 0 {
-			if result.Promoted, err = promoteNextInLineTx(tx, eventID, ts); err != nil {
+		if existing.State == StateAttending {
+			if result.Promoted, err = promoteIfPlaceFreeTx(tx, eventID, capacity, ts); err != nil {
 				return nil, err
 			}
 		}

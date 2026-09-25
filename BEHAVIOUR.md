@@ -67,7 +67,9 @@ Rules that hold for all eight:
   place goes to whoever presses Join after one opens. Anyone already waiting
   when it was turned off stays and still moves up first. You are told your
   number, or that it is full.
-- **Leaving promotes the longest-waiting person**, who is sent a DM. If their
+- **Leaving promotes the longest-waiting person**, who is sent a DM — unless
+  an organiser had taken the event over its limit and it is still full
+  without them: 16/15 losing one is 15/15, and nobody moves up. If their
   DMs are shut, they are pinged in the channel instead — the one deliberate ping
   this service makes.
 - **Lowering a limit never removes anyone.** Raising it promotes in arrival

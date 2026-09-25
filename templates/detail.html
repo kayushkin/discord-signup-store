@@ -130,30 +130,6 @@
         {{end}}
       </div>
 
-      {{if $canManage}}
-      <div class="field" data-field>
-        <dt>Roles</dt>
-        <dd class="field-view">
-          <span>{{$aid := $ev.AttendingRoleID}}{{$wid := $ev.WaitlistRoleID}}
-            {{if or $aid $wid}}
-              {{if $aid}}going get {{range .Roles}}{{if eq .ID $aid}}<strong>@{{.Name}}</strong>{{end}}{{end}}{{end}}{{if and $aid $wid}} · {{end}}{{if $wid}}waiting get {{range .Roles}}{{if eq .ID $wid}}<strong>@{{.Name}}</strong>{{end}}{{end}}{{end}}
-            {{else}}<span class="muted">none</span>{{end}}</span>
-          <button type="button" class="icon-btn edit" data-edit aria-label="Edit the roles">{{template "pencil"}}</button>
-        </dd>
-        <dd>
-        <form class="field-edit" hidden method="post" action="/events/{{$ev.ID}}" data-async>
-          <div class="grid2">
-            <label>Going get<select name="attending_role_id"><option value="">no role</option>
-              {{range .Roles}}<option value="{{.ID}}" {{if eq $.Form.AttendingRoleID .ID}}selected{{end}}>@{{.Name}}</option>{{end}}</select></label>
-            <label>Waiting get<select name="waitlist_role_id"><option value="">no role</option>
-              {{range .Roles}}<option value="{{.ID}}" {{if eq $.Form.WaitlistRoleID .ID}}selected{{end}}>@{{.Name}}</option>{{end}}</select></label>
-          </div>
-          <div class="hint">Given and taken away as people join, move up or leave. The bot's own role must sit above these.</div>
-          {{template "editbar"}}
-        </form>
-        </dd>
-      </div>
-      {{end}}
     </dl>
   </section>
 
@@ -172,7 +148,7 @@
         <span class="when">joined {{localTime $s.SignedUpAt}}</span>
         {{if $canManage}}<span class="row-actions">
           <form method="post" action="/events/{{$ev.ID}}/roster/remove" data-async
-                data-confirm="Take {{or $s.ReadableName $s.DisplayName}} off? Their place goes to whoever is next on the waitlist, who will be messaged.">
+                data-confirm="Take {{or $s.ReadableName $s.DisplayName}} off?{{if $.PlaceFreesOnLeave}} Their place goes to whoever is next on the waitlist, who will be messaged.{{else if and $ev.Capacity (gt $ev.AttendingCount $ev.Capacity)}} The event is over its limit, so nobody moves up.{{end}}">
             <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
             <button class="btn-sm danger">Remove</button></form>
         </span>{{end}}
@@ -247,36 +223,51 @@
   {{if $canManage}}
   <section class="card" id="add">
     <h3>Add someone</h3>
-    {{/* The box searches the server's members by name as you type; picking one
-         puts their user id in the hidden field, and the id is what is sent. A
-         name is never sent on its own: two members can share one. The two
-         panels send the same person somewhere different. */}}
-    <form method="post" action="/events/{{$ev.ID}}/invite" data-async data-member-search="/events/{{$ev.ID}}/members">
-      <div class="picker-wrap">
-        <input class="member-name" autocomplete="off" role="combobox" aria-autocomplete="list"
-               aria-expanded="false" aria-label="Who" placeholder="Search the server by name, or paste a Discord user id">
-        <input type="hidden" name="discord_user_id">
-        <ul class="picker" role="listbox" hidden></ul>
-      </div>
-      <div class="choices">
-        <div class="choice">
-          <div class="choice-title"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M3 5.5h14v9H3zM3.5 6l6.5 5 6.5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg> Invite</div>
-          <p>Sends them a DM with the event and its Join and Maybe buttons.
-            <strong>They decide.</strong> Nothing is held for them; the limit and waitlist apply when they answer.</p>
-          <button formaction="/events/{{$ev.ID}}/invite">Send invite</button>
+    {{/* Two steps. First pick a person: the box searches the server's members
+         as you type, and picking one puts their user id in the hidden field —
+         a name is never sent, since two members can share one. Then the box
+         becomes that person, and what can be done with them appears under
+         their name. */}}
+    <form method="post" action="/events/{{$ev.ID}}/invite" data-async data-member-search="/events/{{$ev.ID}}/members" class="add-form"{{if .PlaceFreesOnLeave}} data-place-frees{{end}}>
+      <input type="hidden" name="discord_user_id">
+      <div data-pick-step>
+        <div class="picker-wrap search">
+          <svg class="search-icon" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m13 13 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <input class="member-name" autocomplete="off" role="combobox" aria-autocomplete="list"
+                 aria-expanded="false" aria-label="Find a member" placeholder="Find someone by name">
+          <ul class="picker" role="listbox" hidden></ul>
         </div>
-        <div class="choice force">
-          <div class="choice-title"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M11 2 4 11h5l-1 7 7-9h-5z" fill="currentColor"/></svg> Force add <span class="tag">without asking</span></div>
-          <p><strong>You decide.</strong> They go straight onto the list you pick, and get a DM telling them so.
-            Going ignores the limit.</p>
-          <div class="segmented" role="group" aria-label="Force add to">
-            <button class="seg" name="list" value="attending" formaction="/events/{{$ev.ID}}/roster/add"
-                    data-confirm="Force-add {name} as going{{if .EventFull}}, past the limit{{end}}? They will not be asked.">Going</button>
-            <button class="seg" name="list" value="maybe" formaction="/events/{{$ev.ID}}/roster/add"
-                    data-confirm="Force-add {name} as maybe? They will not be asked.">Maybe</button>
-            <button class="seg" name="list" value="waitlisted" formaction="/events/{{$ev.ID}}/roster/add"
-                    data-confirm="Force-add {name} to the waitlist, at number {{add $ev.WaitlistCount 1}}? They will not be asked."
-                    {{if or (not .EventFull) $ev.WaitlistDisabled}}disabled title="{{if $ev.WaitlistDisabled}}The waitlist is turned off{{else}}Only while the event is full{{end}}"{{end}}>Waitlist{{if and .EventFull (not $ev.WaitlistDisabled)}} #{{add $ev.WaitlistCount 1}}{{end}}</button>
+        <p class="hint">Pick a person first. You can then invite them, or put them on a list yourself. A Discord user id works too.</p>
+      </div>
+
+      <div data-picked hidden>
+        <div class="picked-person">
+          <span class="avatar" data-avatar aria-hidden="true"></span>
+          <div class="picked-text">
+            <div class="picked-name" data-picked-name></div>
+            <div class="picked-sub" data-picked-sub></div>
+          </div>
+          <button type="button" class="btn-sm" data-unpick>Pick someone else</button>
+        </div>
+        <div class="choices">
+          <div class="choice">
+            <div class="choice-title"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M3 5.5h14v9H3zM3.5 6l6.5 5 6.5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg> Ask them</div>
+            <p>A DM with the event and its Join and Maybe buttons. <strong>They decide</strong>; nothing is held for them.</p>
+            <button formaction="/events/{{$ev.ID}}/invite" data-choice="invite">Send invite</button>
+          </div>
+          <div class="choice force">
+            <div class="choice-title"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M11 2 4 11h5l-1 7 7-9h-5z" fill="currentColor"/></svg> Add them yourself <span class="tag">without asking</span></div>
+            <p><strong>You decide.</strong> They go straight onto a list and get a DM saying so. Going ignores the limit.</p>
+            <div class="segmented" role="group" aria-label="Add them to">
+              <button class="seg" name="list" value="attending" formaction="/events/{{$ev.ID}}/roster/add" data-choice="attending"
+                      data-confirm="Add {name} as going{{if .EventFull}}, past the limit{{end}}? They will not be asked.">Going</button>
+              <button class="seg" name="list" value="maybe" formaction="/events/{{$ev.ID}}/roster/add" data-choice="maybe"
+                      data-confirm="Add {name} as maybe? They will not be asked.">Maybe</button>
+              <button class="seg" name="list" value="waitlisted" formaction="/events/{{$ev.ID}}/roster/add" data-choice="waitlisted"
+                      data-confirm="Add {name} to the waitlist, at number {{add $ev.WaitlistCount 1}}? They will not be asked."
+                      {{if or (not .EventFull) $ev.WaitlistDisabled}}data-never title="{{if $ev.WaitlistDisabled}}The event turns people away when full{{else}}Only while the event is full{{end}}"{{end}}>Waitlist{{if and .EventFull (not $ev.WaitlistDisabled)}} #{{add $ev.WaitlistCount 1}}{{end}}</button>
+            </div>
+            <p class="choice-note" data-choice-note hidden></p>
           </div>
         </div>
       </div>
@@ -324,24 +315,34 @@
 <aside class="event-side">
   {{if and $canManage (or (eq $ev.Status "open") (eq $ev.Status "closed"))}}
   <section class="card side-card">
-    <h4>Controls</h4>
     {{$open := eq $ev.Status "open"}}
-    <form method="post" action="/events/{{$ev.ID}}/signups" data-async class="switch-row">
-      <input type="hidden" name="open" value="{{if $open}}false{{else}}true{{end}}">
-      <button class="switch" role="switch" aria-checked="{{$open}}" aria-label="Signups {{if $open}}open — press to close{{else}}closed — press to open{{end}}"><span class="knob"></span></button>
-      <div>
-        <div class="switch-label">Signups {{if $open}}open{{else}}closed{{end}}</div>
-        <div class="hint">{{if $open}}Anyone can join{{if eq (toggleSubject $ev) "waitlist"}} the waitlist{{end}}.{{else}}Nobody new can join. Everyone on it stays.{{end}}</div>
+    {{/* Two fixed choices each, the current one lit. The labels never change;
+         only which one is lit does, so what a press will do is always the
+         button's own word. */}}
+    <div class="control">
+      <h4 id="signups-label">Signups</h4>
+      <div class="seg-control" role="radiogroup" aria-labelledby="signups-label">
+        <form method="post" action="/events/{{$ev.ID}}/signups" data-async>
+          <input type="hidden" name="open" value="true">
+          <button role="radio" data-tone="ok" aria-checked="{{$open}}" {{if $open}}tabindex="-1"{{end}}>Open</button></form>
+        <form method="post" action="/events/{{$ev.ID}}/signups" data-async>
+          <input type="hidden" name="open" value="false">
+          <button role="radio" data-tone="warn" aria-checked="{{not $open}}" {{if not $open}}tabindex="-1"{{end}}>Closed</button></form>
       </div>
-    </form>
-    <form method="post" action="/events/{{$ev.ID}}" data-async class="switch-row">
-      <input type="hidden" name="waitlist" value="{{if $ev.WaitlistDisabled}}on{{else}}off{{end}}">
-      <button class="switch" role="switch" aria-checked="{{not $ev.WaitlistDisabled}}" aria-label="Waitlist {{if $ev.WaitlistDisabled}}off — press to turn on{{else}}on — press to turn off{{end}}"><span class="knob"></span></button>
-      <div>
-        <div class="switch-label">Waitlist {{if $ev.WaitlistDisabled}}off{{else}}on{{end}}</div>
-        <div class="hint">{{if $ev.WaitlistDisabled}}When full, new signups are refused. A place that opens goes to the next person to press Join.{{else}}When full, new signups line up and move up in order.{{end}}</div>
+      <p class="hint">{{if $open}}People can join{{if eq (toggleSubject $ev) "waitlist"}}; it is full, so they join the waitlist{{end}}.{{else}}Nobody new can join. Everyone already on it stays.{{end}}</p>
+    </div>
+    <div class="control">
+      <h4 id="full-label">When it is full</h4>
+      <div class="seg-control" role="radiogroup" aria-labelledby="full-label">
+        <form method="post" action="/events/{{$ev.ID}}" data-async>
+          <input type="hidden" name="waitlist" value="on">
+          <button role="radio" data-tone="ok" aria-checked="{{not $ev.WaitlistDisabled}}" {{if not $ev.WaitlistDisabled}}tabindex="-1"{{end}}>Waitlist</button></form>
+        <form method="post" action="/events/{{$ev.ID}}" data-async>
+          <input type="hidden" name="waitlist" value="off">
+          <button role="radio" data-tone="warn" aria-checked="{{$ev.WaitlistDisabled}}" {{if $ev.WaitlistDisabled}}tabindex="-1"{{end}}>Turn away</button></form>
       </div>
-    </form>
+      <p class="hint">{{if $ev.WaitlistDisabled}}New signups are refused. A place that opens goes to the next person to press Join.{{else}}New signups line up and move up in order when a place opens.{{end}}</p>
+    </div>
     <div class="side-actions">
       {{if .EventUnderway}}
       <form method="post" action="/events/{{$ev.ID}}/end" data-async

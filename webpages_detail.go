@@ -161,13 +161,14 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 
 	data := pageData{
 		Title: ev.Name, Session: session, Event: ev, Roster: roster, Invites: invites,
-		EventLog:        buildEventLog(signupUpdates, edits, invites, names),
-		CanManage:       canManage,
-		EventUnderway:   eventIsUnderway(ev),
-		EventFull:       eventIsFull(ev),
-		DiscordEventURL: DiscordEventURL(ev.GuildID, ev.DiscordScheduledEventID),
-		Notice:          notice,
-		Error:           strings.Join(problems, " "),
+		EventLog:          buildEventLog(signupUpdates, edits, invites, names),
+		CanManage:         canManage,
+		EventUnderway:     eventIsUnderway(ev),
+		EventFull:         eventIsFull(ev),
+		PlaceFreesOnLeave: ev.Capacity > 0 && ev.WaitlistCount > 0 && ev.AttendingCount <= ev.Capacity,
+		DiscordEventURL:   DiscordEventURL(ev.GuildID, ev.DiscordScheduledEventID),
+		Notice:            notice,
+		Error:             strings.Join(problems, " "),
 	}
 	for _, sg := range roster {
 		switch sg.State {
@@ -180,7 +181,6 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		}
 	}
 	if canManage {
-		data.Roles = s.assignableRolesIn(ev.GuildID)
 		data.Form = eventFormFromEvent(ev)
 		if submitted != nil {
 			data.Form = *submitted
