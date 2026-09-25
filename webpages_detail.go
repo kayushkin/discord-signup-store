@@ -169,6 +169,16 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		Notice:          notice,
 		Error:           strings.Join(problems, " "),
 	}
+	for _, sg := range roster {
+		switch sg.State {
+		case StateAttending:
+			data.Going = append(data.Going, sg)
+		case StateWaitlisted:
+			data.Waiting = append(data.Waiting, sg)
+		case StateMaybe:
+			data.Maybes = append(data.Maybes, sg)
+		}
+	}
 	if canManage {
 		data.Roles = s.assignableRolesIn(ev.GuildID)
 		data.Form = eventFormFromEvent(ev)
@@ -205,46 +215,67 @@ func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	submitted := eventFormFromRequest(r, ev)
 	failed := func(err error) {
-		s.renderEventPage(w, session, ev, true, &submitted, "", "Not saved: "+plainError(err))
-	}
-	zone := strings.TrimSpace(r.FormValue("timezone"))
-	starts, err := ParseEventTime(r.FormValue("starts_at"), zone)
-	if err != nil {
-		failed(err)
-		return
-	}
-	ends, err := ParseEventTime(r.FormValue("ends_at"), zone)
-	if err != nil {
-		failed(err)
-		return
-	}
-	if err := requireStartTime(starts); err != nil {
-		failed(err)
-		return
-	}
-	capacity := 0
-	if text := strings.TrimSpace(r.FormValue("capacity")); text != "" {
-		if capacity, err = strconv.Atoi(text); err != nil {
-			failed(fmt.Errorf("%w: the limit must be a whole number, or 0 for no limit", ErrInvalidEvent))
+		if wantsJSON(r) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": plainError(err)})
 			return
 		}
+		s.renderEventPage(w, session, ev, true, &submitted, "", "Not saved: "+plainError(err))
 	}
-	patch := EventPatch{
-		Name:            strPtr(r.FormValue("name")),
-		Description:     strPtr(r.FormValue("description")),
-		Capacity:        &capacity,
-		StartsAt:        &starts,
-		EndsAt:          &ends,
-		Location:        strPtr(r.FormValue("location")),
-		RecurrenceRule:  strPtr(r.FormValue("recurrence_rule")),
-		Timezone:        strPtr(zone),
-		AttendingRoleID: strPtr(r.FormValue("attending_role_id")),
-		WaitlistRoleID:  strPtr(r.FormValue("waitlist_role_id")),
+	// The page edits one field, or one group of fields, at a time, so only
+	// what the request carries is changed. A field it leaves out is left
+	// alone, never cleared.
+	var patch EventPatch
+	for field, target := range map[string]**string{
+		"name": &patch.Name, "description": &patch.Description, "location": &patch.Location,
+		"recurrence_rule": &patch.RecurrenceRule, "attending_role_id": &patch.AttendingRoleID,
+		"waitlist_role_id": &patch.WaitlistRoleID,
+		// Status has its own switch on the page; an old tab's form still sends it.
+		"status": &patch.Status,
+	} {
+		if r.Form.Has(field) {
+			*target = strPtr(r.FormValue(field))
+		}
 	}
-	// Status has its own buttons on the page; a form that still sends it —
-	// an old tab — is honoured.
-	if r.Form.Has("status") {
-		patch.Status = strPtr(r.FormValue("status"))
+	// The times are read in the zone, so the three travel together: a new
+	// zone re-reads the times sent with it, and a time sent alone is read in
+	// the event's own zone.
+	if r.Form.Has("starts_at") || r.Form.Has("ends_at") || r.Form.Has("timezone") {
+		zone := submitted.Timezone
+		if r.Form.Has("timezone") {
+			zone = strings.TrimSpace(r.FormValue("timezone"))
+			patch.Timezone = &zone
+		}
+		if r.Form.Has("starts_at") {
+			starts, err := ParseEventTime(r.FormValue("starts_at"), zone)
+			if err != nil {
+				failed(err)
+				return
+			}
+			if err := requireStartTime(starts); err != nil {
+				failed(err)
+				return
+			}
+			patch.StartsAt = &starts
+		}
+		if r.Form.Has("ends_at") {
+			ends, err := ParseEventTime(r.FormValue("ends_at"), zone)
+			if err != nil {
+				failed(err)
+				return
+			}
+			patch.EndsAt = &ends
+		}
+	}
+	if r.Form.Has("capacity") {
+		capacity := 0
+		if text := strings.TrimSpace(r.FormValue("capacity")); text != "" {
+			var err error
+			if capacity, err = strconv.Atoi(text); err != nil {
+				failed(fmt.Errorf("%w: the limit must be a whole number, or 0 for no limit", ErrInvalidEvent))
+				return
+			}
+		}
+		patch.Capacity = &capacity
 	}
 	if r.Form.Has("waitlist") {
 		patch.WaitlistDisabled = &submitted.WaitlistDisabled
@@ -268,6 +299,42 @@ func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 	s.redirectWithNotice(w, r, ev.ID, notice)
 }
 
+// handleWebWaitlistMove moves someone to a place in the waitlist, 1 at the
+// front, on the organiser's say-so.
+func (s *Server) handleWebWaitlistMove(w http.ResponseWriter, r *http.Request) {
+	session := s.requireSession(w, r)
+	if session == nil {
+		return
+	}
+	ev, canManage := s.webEvent(w, r, session)
+	if ev == nil {
+		return
+	}
+	if !canManage {
+		http.Error(w, "you cannot edit this event", http.StatusForbidden)
+		return
+	}
+	toPlace, err := strconv.Atoi(r.FormValue("to"))
+	if err != nil {
+		http.Error(w, "to must be a place in the waitlist, 1 at the front", http.StatusBadRequest)
+		return
+	}
+	userID := r.FormValue("discord_user_id")
+	place, err := s.store.MoveInWaitlist(ev.ID, userID, toPlace, "web:"+session.DiscordUserID)
+	if errors.Is(err, ErrNotWaitlisted) {
+		s.redirectWithNotice(w, r, ev.ID, "They are not on the waitlist any more.")
+		return
+	}
+	if err != nil {
+		log.Printf("[discord-signup] move %s in waitlist of %d: %v", userID, ev.ID, err)
+		http.Error(w, "could not move them: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// The line is on the Discord copies too.
+	s.inBackground(func() { s.syncAfterChange(ev.ID, nil) })
+	s.redirectWithNotice(w, r, ev.ID, fmt.Sprintf("Now number %d on the waitlist.", place))
+}
+
 // handleWebToggleSignups is the page's Open signups / Close signups button,
 // the same toggle as the management row's.
 func (s *Server) handleWebToggleSignups(w http.ResponseWriter, r *http.Request) {
@@ -281,6 +348,12 @@ func (s *Server) handleWebToggleSignups(w http.ResponseWriter, r *http.Request) 
 	}
 	if !canManage {
 		http.Error(w, "you cannot edit this event", http.StatusForbidden)
+		return
+	}
+	// The page's switch sends the state it wants, so a double click or a
+	// second tab cannot flip it back.
+	if want := r.FormValue("open"); want != "" && (want == "true") == (ev.Status == StatusOpen) {
+		s.redirectWithNotice(w, r, ev.ID, "Signups are already "+ev.Status+".")
 		return
 	}
 	said, err := s.toggleSignups(ev, "web:"+session.DiscordUserID)
@@ -592,7 +665,19 @@ func (s *Server) handleWebPublish(w http.ResponseWriter, r *http.Request) {
 		"Published. The Discord event points back here and says that pressing Interested does not hold a place.")
 }
 
+// wantsJSON is a request from the page's own script, which updates the page
+// in place rather than following a redirect.
+func wantsJSON(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Accept"), "application/json")
+}
+
+// redirectWithNotice sends the browser back to the event page with a notice,
+// or, to the page's script, answers the notice as JSON.
 func (s *Server) redirectWithNotice(w http.ResponseWriter, r *http.Request, eventID int64, notice string) {
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]string{"notice": notice})
+		return
+	}
 	http.Redirect(w, r, fmt.Sprintf("/events/%d?%s", eventID, noticeQuery(notice)),
 		http.StatusSeeOther)
 }

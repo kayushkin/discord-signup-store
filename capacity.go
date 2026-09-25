@@ -63,7 +63,7 @@ func (s *Store) PromoteToFillCapacity(eventID int64) ([]Signup, error) {
 
 	query := `SELECT id, event_id, discord_user_id, display_name, state, signed_up_at,
 	                 state_changed_at, joined_via, discord_interested
-	          FROM signups WHERE event_id = ? AND state = ? ORDER BY signed_up_at ASC, id ASC`
+	          FROM signups WHERE event_id = ? AND state = ? ORDER BY ` + waitlistOrder("")
 	args := []any{eventID, StateWaitlisted}
 	if free >= 0 {
 		query += ` LIMIT ?`

@@ -271,7 +271,7 @@ func (s *Store) Roster(eventID int64, includeWithdrawn bool) ([]Signup, error) {
 	// to sort correctly today and would break the moment a state is renamed.
 	query += `
 		ORDER BY CASE s.state WHEN 'attending' THEN 0 WHEN 'waitlisted' THEN 1 WHEN 'maybe' THEN 2 ELSE 3 END,
-		         s.signed_up_at ASC, s.id ASC`
+		         ` + waitlistOrder("s.")
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
@@ -343,17 +343,26 @@ func (s *Store) fillWaitlistPlace(sg *Signup) error {
 		sg.WaitlistPlace = 0
 		return nil
 	}
-	var ahead int
-	err := s.db.QueryRow(`
-		SELECT COUNT(*) FROM signups
-		WHERE event_id = ? AND state = ?
-		  AND (signed_up_at < ? OR (signed_up_at = ? AND id < ?))`,
-		sg.EventID, StateWaitlisted, sg.SignedUpAt, sg.SignedUpAt, sg.ID).Scan(&ahead)
+	rows, err := s.db.Query(`SELECT discord_user_id FROM signups WHERE event_id = ? AND state = ?
+		ORDER BY `+waitlistOrder(""), sg.EventID, StateWaitlisted)
 	if err != nil {
-		return fmt.Errorf("count waitlist ahead: %w", err)
+		return fmt.Errorf("read waitlist: %w", err)
 	}
-	sg.WaitlistPlace = ahead + 1
-	return nil
+	defer rows.Close()
+	for place := 1; rows.Next(); place++ {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return fmt.Errorf("scan waitlist: %w", err)
+		}
+		if userID == sg.DiscordUserID {
+			sg.WaitlistPlace = place
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read waitlist: %w", err)
+	}
+	return fmt.Errorf("%s is waitlisted on event %d but not in its line", sg.DiscordUserID, sg.EventID)
 }
 
 func logSignupUpdate(tx *sql.Tx, eventID int64, userID, action, from, to, actor string, at int64) error {
@@ -483,7 +492,7 @@ func promoteNextInLineTx(tx *sql.Tx, eventID, ts int64) (*Signup, error) {
 		SELECT id, event_id, discord_user_id, display_name, state, signed_up_at,
 		       state_changed_at, joined_via, discord_interested
 		FROM signups WHERE event_id = ? AND state = ?
-		ORDER BY signed_up_at ASC, id ASC LIMIT 1`, eventID, StateWaitlisted).
+		ORDER BY `+waitlistOrder("")+` LIMIT 1`, eventID, StateWaitlisted).
 		Scan(&next.ID, &next.EventID, &next.DiscordUserID, &next.DisplayName,
 			&next.State, &next.SignedUpAt, &next.StateChangedAt,
 			&next.JoinedVia, &next.DiscordInterested)

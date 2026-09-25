@@ -86,6 +86,7 @@ computed at read time and never stored.
 | `signed_up_at` | INTEGER | Arrival, and **half the ordering key**: the roster is `ORDER BY signed_up_at, id`. Reset on a rejoin, which is what sends a rejoiner to the back. |
 | `state_changed_at` | INTEGER | Last move between states. |
 | `joined_via` | TEXT | How they got on: `button`, `interested`, `reaction`, `operator` or `organiser`. Not cosmetic — it is what makes an un-marked Interested readable as leaving rather than as noise. |
+| `waitlist_rank` | INTEGER | A place in the waitlist an organiser set, 1 at the front; `0` means none. A move ranks the whole line, so everyone with a rank arrived before everyone without one, and the line is `(waitlist_rank = 0), waitlist_rank, signed_up_at, id` — `waitlistOrder` in `waitlistorder.go`, the one ORDER BY every "who is next" query uses. A rejoin is a new row, so it starts at `0`. `signed_up_at` is never rewritten by a move. |
 | `discord_interested` | INTEGER | Whether Discord currently lists them as Interested. Recorded even when the roster does not move, because without it un-marking and re-marking is indistinguishable from a duplicate event. |
 
 **`UNIQUE(event_id, discord_user_id)`** — one row per person per event, enforced
@@ -96,7 +97,7 @@ by the database rather than by the code that inserts. Index
 as a number, which was a second copy of what `signed_up_at` already said and
 able to disagree with it; the rule that rejoining sends you to the back was
 written twice, bumping the position *and* resetting the timestamp. Order is now
-`(signed_up_at, id)`. Checked against every event in the live database before
+`(signed_up_at, id)` — and, for the waitlist, `waitlist_rank` ahead of it once an organiser has moved someone. Checked against every event in the live database before
 the column went: **15 events, 0 where the derived order differed from the stored
 one.**
 

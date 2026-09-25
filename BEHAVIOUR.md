@@ -74,6 +74,9 @@ Rules that hold for all eight:
   order.
 - **Arrival order is ours.** Discord's own list sorts by account age, so a
   waitlist rebuilt from Discord would put the oldest accounts first.
+- **An organiser can reorder the waitlist** on the web page, with ↑ and ↓ on
+  each person. The line then follows their order, not arrival; anyone joining
+  afterwards waits behind all of them. Moving someone does not message them.
 
 ## 3. What updates, when
 

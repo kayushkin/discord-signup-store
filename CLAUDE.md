@@ -20,7 +20,7 @@ A Join click enforces the cap inside one `BEGIN IMMEDIATE` transaction, so two p
 
 ## Arrival order, state and history
 
-**`(signed_up_at, id)` is arrival order, and the only ordering that exists** — it cannot be recovered from Discord. There is no `position` column any more: it was a second copy of `signed_up_at` that could disagree with it; older notes still name it. A signup's `state` (`attending`, `waitlisted`, `withdrawn`) is **stored, not derived**, on purpose: it records a decision that was made and told to a person. `signup_updates` and `event_updates` are the append-only histories (the first was once called `transitions`).
+**`(signed_up_at, id)` is arrival order** — it cannot be recovered from Discord. The waitlist follows it unless an organiser reorders the line on the web page, which ranks everyone in `signups.waitlist_rank`; every "who is next" query orders by `waitlistOrder()` so the page and promotion cannot disagree. There is no `position` column any more: it was a second copy of `signed_up_at` that could disagree with it; older notes still name it. A signup's `state` (`attending`, `waitlisted`, `withdrawn`) is **stored, not derived**, on purpose: it records a decision that was made and told to a person. `signup_updates` and `event_updates` are the append-only histories (the first was once called `transitions`).
 
 ## Roles are a projection
 

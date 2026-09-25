@@ -29,8 +29,11 @@ func personHTML(readableName, displayName, userID string) template.HTML {
 	if displayName == "" || displayName == readableName {
 		return template.HTML(template.HTMLEscapeString(readableName))
 	}
+	// The caret says it opens; the box floats over the table rather than
+	// widening its column.
 	return template.HTML(fmt.Sprintf(
-		`<details class="aka"><summary title="On Discord: %s">%s</summary><span class="muted">on Discord: %s</span></details>`,
+		`<details class="aka"><summary title="On Discord: %s">%s<svg class="caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>`+
+			`<span class="aka-pop"><span class="aka-label">On Discord</span>%s</span></details>`,
 		template.HTMLEscapeString(displayName), template.HTMLEscapeString(readableName),
 		template.HTMLEscapeString(displayName)))
 }
@@ -152,7 +155,10 @@ func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventI
 	out := make([]eventLogEntry, 0, len(signups)+len(edits)+len(invites))
 	for i, u := range signups {
 		what := u.Action
-		if u.Action != u.ToState {
+		switch {
+		case u.Action == ActionMoved:
+			what = "moved in the waitlist"
+		case u.Action != u.ToState:
 			what += " → " + u.ToState
 		}
 		out = append(out, eventLogEntry{At: u.At, order: i,
@@ -169,8 +175,8 @@ func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventI
 		if u.Field == "description" {
 			// A description can be paragraphs; the change is one line with
 			// the new text behind it.
-			what = template.HTML(`<details class="aka"><summary>changed the description</summary><span class="muted">` +
-				template.HTMLEscapeString(u.ToValue) + `</span></details>`)
+			what = template.HTML(`<details class="log-more"><summary>changed the description</summary><div class="muted">` +
+				template.HTMLEscapeString(u.ToValue) + `</div></details>`)
 		} else {
 			what = template.HTML("changed the "+template.HTMLEscapeString(label)+": ") +
 				names.eventUpdateValue(u.Field, u.FromValue) + " → " + names.eventUpdateValue(u.Field, u.ToValue)

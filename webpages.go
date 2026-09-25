@@ -61,8 +61,11 @@ type pageData struct {
 	Archived []Event
 	Event    *Event
 
-	Roster  []Signup
-	Invites []EventInvite
+	Roster []Signup
+	// Going, Waiting and Maybes are the roster split into its three lists,
+	// each in its own order, for the event page.
+	Going, Waiting, Maybes []Signup
+	Invites                []EventInvite
 	// EventLog is the event page's log: signups, edits and invites, newest
 	// first.
 	EventLog []eventLogEntry

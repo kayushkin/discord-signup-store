@@ -63,20 +63,157 @@ th{color:var(--dim);font-weight:500;font-size:12px;text-transform:uppercase;lett
 .picker li{padding:6px 10px;cursor:pointer}
 .picker li:hover,.picker li[aria-selected="true"]{background:var(--line)}
 .picker li.note{cursor:default;color:var(--dim)}
-/* A short name with the Discord name behind it: a tooltip on hover, and a
-   tap opens it, since a phone has no hover. */
-details.aka{display:inline}
-details.aka summary{display:inline;cursor:pointer;list-style:none;
-  text-decoration:underline dotted var(--dim);text-underline-offset:3px}
+/* A short name with the Discord name behind it. The caret says it opens;
+   the box floats over the page rather than widening a column. */
+details.aka{display:inline-block;position:relative}
+details.aka summary{display:inline-flex;align-items:center;gap:3px;cursor:pointer;list-style:none;
+  border-bottom:1px dotted var(--dim);line-height:1.3}
 details.aka summary::-webkit-details-marker{display:none}
-details.aka[open] summary{margin-right:6px}
+details.aka summary:hover{color:#fff;border-bottom-color:var(--ink)}
+details.aka .caret{width:10px;height:10px;color:var(--dim);transition:transform .15s}
+details.aka[open] .caret{transform:rotate(180deg)}
+.aka-pop{position:absolute;left:0;top:calc(100% + 6px);z-index:20;min-width:160px;max-width:260px;
+  background:#2f3136;border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+  box-shadow:0 8px 24px #0007;font-size:13px;white-space:normal}
+.aka-label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin-bottom:2px}
 .bad{color:var(--bad)}
+.small{font-size:13px}
+.nowrap{white-space:nowrap}
 /* A wide table scrolls inside its card on a phone rather than pushing the
    whole page sideways. */
 .table-scroll{overflow-x:auto}
-.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
-.actions form{margin:0}
-.section-label{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin:18px 0 0}
+
+/* The event page: the event and its people on the left, its controls and
+   Discord's side of it on the right. */
+main:has(.event-layout){max-width:1140px}
+.event-layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:16px;align-items:start}
+.event-side{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px}
+.event-side .card{margin:0}
+/* On a phone it is one column: the event, then its controls, then the
+   people, with Discord's side of it last. minmax(0,1fr), not 1fr, or a wide
+   table stretches the column past the screen. */
+@media (max-width:900px){
+  .event-layout{display:flex;flex-direction:column;align-items:stretch;gap:14px}
+  .event-main,.event-side{display:contents}
+  .event-layout .card{margin:0;min-width:0;max-width:100%}
+  .event-head{order:1}.side-card:not(.info){order:2}.event-main>.card:not(.event-head){order:3}.side-card.info{order:4}
+}
+.card-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.card-head h3{margin:0}
+.sub-head{margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
+.badge{font-size:12px;font-variant-numeric:tabular-nums;background:var(--line);color:var(--ink);
+  border-radius:999px;padding:1px 9px}
+.empty{color:var(--dim);font-size:14px;margin:6px 0}
+.pills{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px}
+.pill.bad-pill{color:var(--bad);border-color:#e0526055}
+
+/* Fields: read as text, with a pencil to edit one in place. */
+.title-row{display:flex;align-items:center;gap:8px}
+.title-row h2{margin:0;font-size:22px;line-height:1.25}
+.title-input{font-size:20px;font-weight:600}
+.facts{margin:14px 0 0;display:flex;flex-direction:column}
+.facts .field{display:grid;grid-template-columns:92px minmax(0,1fr);gap:0 12px;padding:9px 0;border-top:1px solid #2d2f35}
+.facts dt{color:var(--dim);font-size:13px;padding-top:2px}
+.facts dd{margin:0;grid-column:2}
+.field-view{display:flex;align-items:flex-start;gap:8px}
+.field-view > span:first-child{flex:0 1 auto}
+.field-view .sub{display:block;color:var(--dim);font-size:12px;margin-top:2px}
+.prose{white-space:pre-wrap}
+.field.editing > .field-view, .field.editing dd.field-view{display:none}
+.icon-btn{background:transparent;border:1px solid transparent;color:var(--dim);border-radius:6px;
+  width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.icon-btn:hover{background:var(--line);color:var(--ink);filter:none}
+.icon-btn:disabled{opacity:.3;cursor:default;background:transparent}
+.icon-btn.edit{opacity:.55;margin-top:-3px}
+.field:hover .icon-btn.edit,.icon-btn.edit:focus-visible{opacity:1}
+@media (hover:none){.icon-btn.edit{opacity:1}}
+.icon-btn.ok{color:var(--ok);border-color:#2eb87255}
+.icon-btn.ok:hover{background:#2eb87222;color:var(--ok)}
+.field-edit label{margin:0;font-size:12px}
+.field-edit label input,.field-edit label select{margin-top:4px}
+.editbar{display:flex;align-items:center;gap:6px;margin-top:8px}
+.field-error{color:var(--bad);font-size:13px;margin-left:6px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+@media (max-width:600px){.grid3,.grid2{grid-template-columns:1fr}}
+input.narrow,select.narrow{max-width:260px}
+
+/* People lists. */
+ol.people{list-style:none;margin:4px 0 0;padding:0}
+.person{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #2d2f35;flex-wrap:wrap}
+.person:last-child{border-bottom:0}
+.place{flex:none;min-width:30px;text-align:center;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+.place.wait{background:#e8a33d1f;color:var(--warn);border-radius:6px;padding:2px 6px;font-weight:600}
+.who{flex:1 1 140px;min-width:0}
+.when{color:var(--dim);font-size:12px}
+.row-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
+.row-actions form{margin:0}
+.mover{display:inline-flex;border:1px solid var(--line);border-radius:7px}
+.mover form{display:inline-flex}
+.mover .icon-btn{border-radius:0;width:26px;height:26px}
+.btn-sm{font-size:13px;padding:4px 10px;border-radius:6px;background:transparent;border:1px solid var(--line);color:var(--ink);font-weight:500}
+.btn-sm.danger{border-color:#e0526044;color:var(--bad)}
+.btn-sm:hover{background:var(--line);filter:none}
+.btn-sm.danger:hover{background:#e0526018}
+
+/* Add someone: one person, two clearly different ways in. */
+.picker-wrap{position:relative;margin:8px 0 12px}
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:640px){.choices{grid-template-columns:1fr}}
+.choice{border:1px solid var(--line);border-radius:9px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:#1f2024}
+.choice p{margin:0;font-size:13px;color:var(--dim);flex:1}
+.choice p strong{color:var(--ink)}
+.choice-title{display:flex;align-items:center;gap:7px;font-weight:600}
+.choice.force{border-color:#e8a33d55;background:linear-gradient(180deg,#e8a33d0f,transparent 70%)}
+.choice.force .choice-title{color:var(--warn)}
+.tag{font-size:11px;font-weight:500;color:var(--warn);border:1px solid #e8a33d55;border-radius:999px;padding:0 7px}
+.choice > button{align-self:flex-start}
+.segmented{display:flex;border:1px solid #e8a33d66;border-radius:8px;overflow:hidden;align-self:flex-start}
+.seg{background:transparent;color:var(--ink);border:0;border-radius:0;padding:7px 14px;font-size:14px}
+.seg + .seg{border-left:1px solid #e8a33d44}
+.seg:hover{background:#e8a33d22;filter:none}
+.seg:disabled{color:var(--dim);cursor:not-allowed;background:transparent}
+
+/* The side column. */
+.side-card h4{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);font-weight:600}
+.side-card p{margin:6px 0}
+.switch-row{display:flex;gap:12px;align-items:flex-start;margin:0 0 14px}
+.switch{flex:none;width:40px;height:22px;border-radius:999px;background:#44464d;border:0;padding:0;position:relative;margin-top:1px}
+.switch .knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.switch[aria-checked="true"]{background:var(--ok)}
+.switch[aria-checked="true"] .knob{left:21px}
+.switch:hover{filter:brightness(1.1)}
+.switch-label{font-weight:600;font-size:14px}
+.switch-row .hint{margin-top:2px}
+.side-actions{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:12px}
+.side-actions form{margin:0}
+.btn-block{width:100%;text-align:center}
+button.danger.btn-block{border-color:#e0526055}
+button.danger:hover{background:#e0526018;filter:none}
+details.why summary{cursor:pointer;color:var(--dim)}
+details.log-more summary{cursor:pointer}
+table.log td{vertical-align:top}
+/* On a phone a log line is two lines: when, then who, what and by. A
+   four-column table with a timestamp in it does not fit 390 pixels. */
+@media (max-width:600px){
+  table.log,table.log tbody{display:block}
+  table.log tr{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:8px 0;border-bottom:1px solid var(--line)}
+  table.log td{border:0;padding:0}
+  table.log td:first-child{grid-column:1 / -1;font-size:12px}
+  table.log td:nth-child(4){grid-column:1 / -1;font-size:12px}
+}
+
+/* Dialog and toast. */
+dialog.dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:12px;
+  padding:20px 22px;max-width:420px;width:calc(100% - 32px);box-shadow:0 20px 60px #000a}
+dialog.dialog::backdrop{background:#000a}
+dialog.dialog h3{margin:0 0 6px}
+dialog.dialog label{margin:14px 0 0}
+.dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.danger-solid{background:var(--bad);color:#fff}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:50;max-width:min(560px,calc(100% - 32px));
+  background:#2f3136;border:1px solid var(--line);border-left:3px solid var(--ok);border-radius:8px;
+  padding:10px 14px;box-shadow:0 10px 30px #0008;font-size:14px}
+.toast.is-error{border-left-color:var(--bad)}
 </style></head><body>
 <header>
   <h1><a href="/" style="color:inherit">Events</a></h1>
@@ -196,5 +333,125 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     }
   });
 });
+</script>
+<script>
+// The event page, in place. A pencil turns one field into its inputs; Enter
+// saves (Ctrl+Enter in a text box), Esc puts it back. Any form marked
+// data-async is sent by fetch and the page redraws where it was, with the
+// answer in a toast, instead of jumping to the top on a redirect. Without
+// JavaScript every form still posts and redirects as before.
+(function () {
+  var toast = document.getElementById("toast");
+  function say(text, isError) {
+    if (!toast || !text) return;
+    toast.textContent = text;
+    toast.classList.toggle("is-error", !!isError);
+    toast.hidden = false;
+    clearTimeout(say.timer);
+    say.timer = setTimeout(function () { toast.hidden = true; }, isError ? 9000 : 5000);
+  }
+  try {
+    var carried = sessionStorage.getItem("dss-notice");
+    if (carried) {
+      sessionStorage.removeItem("dss-notice");
+      say(carried);
+      var y = +sessionStorage.getItem("dss-scroll");
+      sessionStorage.removeItem("dss-scroll");
+      if (y) window.scrollTo(0, y);
+    }
+  } catch (e) {}
+
+  function closeField(field) {
+    field.classList.remove("editing");
+    var form = field.querySelector(".field-edit");
+    if (form) { form.hidden = true; form.reset(); }
+    var err = field.querySelector(".field-error");
+    if (err) err.hidden = true;
+  }
+  document.querySelectorAll("[data-edit]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var field = btn.closest("[data-field]");
+      document.querySelectorAll("[data-field].editing").forEach(closeField);
+      field.classList.add("editing");
+      var form = field.querySelector(".field-edit");
+      form.hidden = false;
+      var first = form.querySelector("input:not([type=hidden]),select,textarea");
+      if (first) { first.focus(); if (first.select && first.type !== "number") first.select(); }
+    });
+  });
+  document.querySelectorAll(".field-edit").forEach(function (form) {
+    var field = form.closest("[data-field]");
+    form.querySelector("[data-cancel]").addEventListener("click", function () { closeField(field); });
+    form.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { e.preventDefault(); closeField(field); }
+      if (e.key === "Enter" && e.target.tagName === "TEXTAREA" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault(); form.requestSubmit();
+      }
+    });
+  });
+
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form.hasAttribute("data-async") || e.defaultPrevented) return;
+    e.preventDefault();
+    var submitter = e.submitter;
+    var ask = (submitter && submitter.getAttribute("data-confirm")) || form.getAttribute("data-confirm");
+    if (ask) {
+      var box = form.querySelector(".member-name");
+      if (!confirm(ask.replace("{name}", box && box.value ? box.value : "them"))) return;
+    }
+    var action = (submitter && submitter.hasAttribute("formaction")) ? submitter.formAction : form.action;
+    var body = new URLSearchParams(new FormData(form, submitter));
+    var busy = form.querySelectorAll("button");
+    busy.forEach(function (b) { b.disabled = true; });
+    var fieldError = form.querySelector(".field-error");
+    fetch(action, { method: "POST", body: body, credentials: "same-origin",
+                    headers: { "Accept": "application/json" } })
+      .then(function (r) {
+        return r.text().then(function (text) {
+          var parsed = null;
+          try { parsed = JSON.parse(text); } catch (err) {}
+          return { ok: r.ok, body: parsed, text: text };
+        });
+      })
+      .then(function (res) {
+        if (res.ok && res.body && !res.body.error) {
+          try {
+            sessionStorage.setItem("dss-notice", res.body.notice || "Saved.");
+            sessionStorage.setItem("dss-scroll", String(window.scrollY));
+          } catch (err) {}
+          location.replace(location.pathname);
+          return;
+        }
+        var message = (res.body && res.body.error) || res.text || "Something went wrong.";
+        busy.forEach(function (b) { b.disabled = false; });
+        if (fieldError) { fieldError.textContent = message; fieldError.hidden = false; }
+        else say(message, true);
+      })
+      .catch(function (err) {
+        busy.forEach(function (b) { b.disabled = false; });
+        say("Could not reach the server: " + err.message, true);
+      });
+  });
+
+  document.querySelectorAll("[data-open-dialog]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var d = document.getElementById(btn.getAttribute("data-open-dialog"));
+      d.showModal();
+      var input = d.querySelector("input:not([type=hidden])");
+      if (input) input.focus();
+    });
+  });
+  document.querySelectorAll("[data-close-dialog]").forEach(function (btn) {
+    btn.addEventListener("click", function () { btn.closest("dialog").close(); });
+  });
+
+  // One name open at a time, and a click anywhere else closes it.
+  document.addEventListener("click", function (e) {
+    document.querySelectorAll("details.aka[open]").forEach(function (d) {
+      if (!d.contains(e.target)) d.open = false;
+    });
+  });
+})();
 </script>
 </body></html>{{end}}

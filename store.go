@@ -405,6 +405,12 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// forever. Without this column, the next Interested signal would read as
 	// fresh intent and put them straight back on a roster they chose to leave.
 	{"signups", "discord_interested", "INTEGER NOT NULL DEFAULT 0"},
+
+	// A place in the waitlist an organiser set by moving people up or down
+	// on the web page. 0 means none: the person waits by arrival, behind
+	// everyone who has one — they all arrived earlier, since a move ranks
+	// the whole line. See waitlistOrder.
+	{"signups", "waitlist_rank", "INTEGER NOT NULL DEFAULT 0"},
 }
 
 // ensureColumns applies every ALTER that a pre-existing database is missing.

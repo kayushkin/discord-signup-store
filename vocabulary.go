@@ -37,6 +37,7 @@ const (
 	ActionRejoined   = "rejoined"   // signed up again after withdrawing
 	ActionMaybe      = "maybe"      // put themselves down as Maybe
 	ActionAdded      = "added"      // put on a list by an organiser, who is the actor
+	ActionMoved      = "moved"      // moved within the waitlist by an organiser
 )
 
 var validActions = map[string]bool{
@@ -47,6 +48,7 @@ var validActions = map[string]bool{
 	ActionRejoined:   true,
 	ActionMaybe:      true,
 	ActionAdded:      true,
+	ActionMoved:      true,
 }
 
 // Event lifecycle.

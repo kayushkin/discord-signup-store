@@ -2,7 +2,9 @@ package discordsignup
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -83,7 +85,7 @@ func TestTheEventPageIsTheEditForm(t *testing.T) {
 
 	page := getPage(t, mux, token, eventPath(ev)).Body.String()
 	for _, want := range []string{`name="name" required maxlength="100" value="Games"`, `name="waitlist"`,
-		`action="` + eventPath(ev) + `/signups"`, "Close signups", "Send invite", "Add now"} {
+		`action="` + eventPath(ev) + `/signups"`, "Signups open", "Send invite", "Force add", `data-edit`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("event page lacks %s", want)
 		}
@@ -156,7 +158,7 @@ func TestAnInviteIsADMWithJoinAndIsLogged(t *testing.T) {
 	}
 	store.Join(ev.ID, "222", "Alfie", JoinedViaButton)
 	page := getPage(t, mux, token, eventPath(ev)).Body.String()
-	for _, want := range []string{"not delivered — DMs closed", `<span class="pill open">going</span>`, "not delivered, their DMs are closed"} {
+	for _, want := range []string{"not delivered · DMs closed", `<span class="pill open">going</span>`, "not delivered, their DMs are closed"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("event page lacks %q", want)
 		}
@@ -170,7 +172,8 @@ func TestTheRosterShowsShortNamesWithTheDiscordNameBehindThem(t *testing.T) {
 	store.Join(ev.ID, "u-matt", "Lil' Fascist Matt 🌟", JoinedViaButton)
 	store.SetReadableName("u-matt", "Matt")
 	page := getPage(t, mux, token, eventPath(ev)).Body.String()
-	if !strings.Contains(page, `<summary title="On Discord: Lil&#39; Fascist Matt 🌟">Matt</summary>`) {
+	if !strings.Contains(page, `<summary title="On Discord: Lil&#39; Fascist Matt 🌟">Matt<svg class="caret"`) ||
+		!strings.Contains(page, `<span class="aka-label">On Discord</span>Lil&#39; Fascist Matt 🌟</span>`) {
 		t.Error("the roster does not show Matt with his Discord name behind it")
 	}
 }
@@ -186,5 +189,59 @@ func TestCancellingFromThePageNeedsTheName(t *testing.T) {
 	postForm(t, mux, token, eventPath(ev)+"/cancel", url.Values{"confirm_name": {"games"}})
 	if after, _ := store.GetEvent(ev.ID); after.Status != StatusCancelled {
 		t.Errorf("status = %s, want cancelled", after.Status)
+	}
+}
+
+// TestAnOrganiserReordersTheWaitlist, the next promotion follows the new
+// order, and someone joining later waits behind everyone moved.
+func TestAnOrganiserReordersTheWaitlist(t *testing.T) {
+	_, store, _, mux, token := webTestServer(t)
+	ev := publishedEvent(t, store, 1, "alice", "w1", "w2", "w3")
+	postForm(t, mux, token, eventPath(ev)+"/waitlist/move", url.Values{"discord_user_id": {"w3"}, "to": {"1"}})
+	store.Join(ev.ID, "w4", "w4", JoinedViaButton)
+	roster, _ := store.Roster(ev.ID, false)
+	var line []string
+	for _, sg := range roster {
+		if sg.State == StateWaitlisted {
+			line = append(line, fmt.Sprintf("%s#%d", sg.DiscordUserID, sg.WaitlistPlace))
+		}
+	}
+	if got := strings.Join(line, " "); got != "w3#1 w1#2 w2#3 w4#4" {
+		t.Errorf("waitlist = %s", got)
+	}
+	result, _ := store.Leave(ev.ID, "alice", ActorUser)
+	if result.Promoted == nil || result.Promoted.DiscordUserID != "w3" {
+		t.Errorf("promoted %+v, want w3, moved to the front", result.Promoted)
+	}
+}
+
+// TestSavingOneFieldLeavesTheOthersAlone: the page sends one field.
+func TestSavingOneFieldLeavesTheOthersAlone(t *testing.T) {
+	_, store, _, mux, token := webTestServer(t)
+	ev := publishedEvent(t, store, 3)
+	store.UpdateEvent(ev.ID, EventPatch{Location: strPtr("Cafe"), Description: strPtr("Bring dice")})
+	req := httptest.NewRequest(http.MethodPost, eventPath(ev), strings.NewReader(url.Values{"name": {"Chess"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"notice"`) {
+		t.Fatalf("save = %d %s", rec.Code, rec.Body.String())
+	}
+	after, _ := store.GetEvent(ev.ID)
+	if after.Name != "Chess" || after.Location != "Cafe" || after.Description != "Bring dice" ||
+		after.Capacity != 3 || after.StartsAt != ev.StartsAt {
+		t.Errorf("after = %+v", after)
+	}
+	// A bad value answers the script with the reason, not a page.
+	req = httptest.NewRequest(http.MethodPost, eventPath(ev), strings.NewReader(url.Values{"capacity": {"lots"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "whole number") {
+		t.Errorf("bad limit = %d %s", rec.Code, rec.Body.String())
 	}
 }
