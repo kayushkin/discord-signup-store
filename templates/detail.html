@@ -229,47 +229,41 @@
          becomes that person, and what can be done with them appears under
          their name. */}}
     <form method="post" action="/events/{{$ev.ID}}/invite" data-async data-member-search="/events/{{$ev.ID}}/members" class="add-form"{{if .PlaceFreesOnLeave}} data-place-frees{{end}}>
-      <input type="hidden" name="discord_user_id">
-      <div data-pick-step>
-        <div class="picker-wrap search">
-          <svg class="search-icon" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m13 13 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <input class="member-name" autocomplete="off" role="combobox" aria-autocomplete="list"
-                 aria-expanded="false" aria-label="Find a member" placeholder="Find someone by name">
-          <ul class="picker" role="listbox" hidden></ul>
-        </div>
-        <p class="hint">Pick a person first. You can then invite them, or put them on a list yourself. A Discord user id works too.</p>
+      {{/* The search box finds one member at a time; each pick joins the
+           list under it as a hidden discord_user_id. Names are never sent —
+           two members can share one. */}}
+      <input type="hidden" data-picker-id>
+      <div class="picker-wrap search">
+        <svg class="search-icon" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m13 13 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <input class="member-name" autocomplete="off" role="combobox" aria-autocomplete="list"
+               aria-expanded="false" aria-label="Find a member" placeholder="Find someone by name">
+        <ul class="picker" role="listbox" hidden></ul>
       </div>
+      <p class="hint" data-empty-hint>Pick one or more people, then invite them or put them on a list yourself. A Discord user id works too.</p>
+      <ul class="picked-list" data-picked-list aria-label="Picked"></ul>
 
-      <div data-picked hidden>
-        <div class="picked-person">
-          <span class="avatar" data-avatar aria-hidden="true"></span>
-          <div class="picked-text">
-            <div class="picked-name" data-picked-name></div>
-            <div class="picked-sub" data-picked-sub></div>
-          </div>
-          <button type="button" class="btn-sm" data-unpick>Pick someone else</button>
-        </div>
+      <div data-actions hidden>
         <div class="choices">
           <div class="choice">
-            <div class="choice-title"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M3 5.5h14v9H3zM3.5 6l6.5 5 6.5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg> Ask them</div>
+            <div class="choice-title"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M3 5.5h14v9H3zM3.5 6l6.5 5 6.5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg> Ask <span data-them>them</span></div>
             <p>A DM with the event and its Join and Maybe buttons. <strong>They decide</strong>; nothing is held for them.</p>
-            <button formaction="/events/{{$ev.ID}}/invite" data-choice="invite">Send invite</button>
+            <button formaction="/events/{{$ev.ID}}/invite" data-choice="invite">Send <span data-invites>invite</span></button>
           </div>
           <div class="choice force">
-            <div class="choice-title"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M11 2 4 11h5l-1 7 7-9h-5z" fill="currentColor"/></svg> Add them yourself <span class="tag">without asking</span></div>
+            <div class="choice-title"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M11 2 4 11h5l-1 7 7-9h-5z" fill="currentColor"/></svg> Add <span data-them>them</span> yourself <span class="tag">without asking</span></div>
             <p><strong>You decide.</strong> They go straight onto a list and get a DM saying so. Going ignores the limit.</p>
             <div class="segmented" role="group" aria-label="Add them to">
               <button class="seg" name="list" value="attending" formaction="/events/{{$ev.ID}}/roster/add" data-choice="attending"
-                      data-confirm="Add {name} as going{{if .EventFull}}, past the limit{{end}}? They will not be asked.">Going</button>
+                      data-confirm="Add {name} as going{{if .EventFull}}, past the limit{{end}}? They are not asked first; each gets a DM saying so.">Going</button>
               <button class="seg" name="list" value="maybe" formaction="/events/{{$ev.ID}}/roster/add" data-choice="maybe"
-                      data-confirm="Add {name} as maybe? They will not be asked.">Maybe</button>
+                      data-confirm="Add {name} as maybe? They are not asked first; each gets a DM saying so.">Maybe</button>
               <button class="seg" name="list" value="waitlisted" formaction="/events/{{$ev.ID}}/roster/add" data-choice="waitlisted"
-                      data-confirm="Add {name} to the waitlist, at number {{add $ev.WaitlistCount 1}}? They will not be asked."
-                      {{if or (not .EventFull) $ev.WaitlistDisabled}}data-never title="{{if $ev.WaitlistDisabled}}The event turns people away when full{{else}}Only while the event is full{{end}}"{{end}}>Waitlist{{if and .EventFull (not $ev.WaitlistDisabled)}} #{{add $ev.WaitlistCount 1}}{{end}}</button>
+                      data-confirm="Add {name} to the end of the waitlist? They are not asked first; each gets a DM saying so."
+                      {{if or (not .EventFull) $ev.WaitlistDisabled}}data-never title="{{if $ev.WaitlistDisabled}}The event turns people away when full{{else}}Only while the event is full{{end}}"{{end}}>Waitlist</button>
             </div>
-            <p class="choice-note" data-choice-note hidden></p>
           </div>
         </div>
+        <p class="choice-note" data-choice-note hidden></p>
       </div>
     </form>
 

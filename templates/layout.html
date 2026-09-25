@@ -159,12 +159,14 @@ ol.people{list-style:none;margin:4px 0 0;padding:0}
 .picker-wrap{position:relative;margin:8px 0 6px}
 .picker-wrap.search .member-name{padding-left:34px}
 .search-icon{position:absolute;left:11px;top:12px;color:var(--dim);pointer-events:none}
-.picked-person{display:flex;align-items:center;gap:12px;margin:8px 0 14px;padding:10px 12px;
+.picked-list{list-style:none;margin:10px 0 14px;padding:0;display:flex;flex-direction:column;gap:6px}
+.picked-list:empty{display:none}
+.picked-person{display:flex;align-items:center;gap:10px;padding:7px 8px 7px 10px;
   border:1px solid #5865f266;background:#5865f214;border-radius:10px}
 .picked-text{flex:1;min-width:0}
-.picked-name{font-weight:600;font-size:16px;overflow:hidden;text-overflow:ellipsis}
+.picked-name{font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis}
 .picked-sub{color:var(--dim);font-size:13px}
-.avatar{flex:none;width:40px;height:40px;border-radius:50%;background:#5865f2;color:#fff;display:inline-flex;
+.avatar{flex:none;width:32px;height:32px;font-size:14px;border-radius:50%;background:#5865f2;color:#fff;display:inline-flex;
   align-items:center;justify-content:center;font-weight:600;overflow:hidden}
 .avatar img{width:100%;height:100%;object-fit:cover}
 /* Unavailable reads as unavailable, the same on both panels. */
@@ -172,14 +174,14 @@ ol.people{list-style:none;margin:4px 0 0;padding:0}
   color:#6b6e76;border-color:var(--line);opacity:1;cursor:not-allowed;filter:none;
   text-decoration:line-through;text-decoration-color:#8a8d94;text-decoration-thickness:1.5px}
 .choice > button:disabled{border:1px solid var(--line)}
-.choice-note{margin:0;font-size:12px;color:var(--dim)}
+.choice-note{margin:10px 0 0;font-size:12px;color:var(--dim)}
 .ask-text{margin:0;font-size:15px;line-height:1.5}
 .choices{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:640px){.choices{grid-template-columns:1fr}}
 .choice{border:1px solid var(--line);border-radius:9px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:#1f2024}
 .choice p{margin:0;font-size:13px;color:var(--dim);flex:1}
 .choice p strong{color:var(--ink)}
-.choice-title{display:flex;align-items:center;gap:7px;font-weight:600}
+.choice-title{display:flex;align-items:center;flex-wrap:wrap;gap:4px 7px;font-weight:600}
 .choice.force{border-color:#e8a33d55;background:linear-gradient(180deg,#e8a33d0f,transparent 70%)}
 .choice.force .choice-title{color:var(--warn)}
 .tag{font-size:11px;font-weight:500;color:var(--warn);border:1px solid #e8a33d55;border-radius:999px;padding:0 7px}
@@ -272,7 +274,13 @@ dialog.dialog label{margin:14px 0 0}
 // form with a guild_id field searches the server it names.
 document.querySelectorAll("form[data-member-search]").forEach(function (form) {
   var box = form.querySelector(".member-name");
-  var hidden = form.querySelector("input[name=discord_user_id]");
+  // A form that collects several people keeps the picker's own id in an
+  // unnamed field, and each pick becomes a named one of its own.
+  var hidden = form.querySelector("[data-picker-id]") || form.querySelector("input[name=discord_user_id]");
+  function picked(id) {
+    return Array.prototype.some.call(form.querySelectorAll("input[name=discord_user_id]"),
+      function (i) { return id ? i.value === id : !!i.value; });
+  }
   var list = form.querySelector(".picker");
   var guild = form.querySelector("[name=guild_id]");
   var base = form.getAttribute("data-member-search");
@@ -308,7 +316,9 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
       li.appendChild(name);
       var extra = document.createElement("span");
       extra.className = "meta";
-      extra.textContent = " @" + m.username + (m.on_roster ? " · already " + m.on_roster : "") +
+      extra.textContent = " @" + m.username + (picked(m.user_id) ? " · picked" : "") +
+        (m.on_roster ? " · " + ({ attending: "already going", waitlisted: "already on the waitlist",
+                                   maybe: "down as maybe", withdrawn: "left this event" }[m.on_roster] || m.on_roster) : "") +
         (m.readable_name ? " · shown as " + m.readable_name : "");
       li.appendChild(extra);
       // mousedown, not click: click fires after the box loses focus and the
@@ -356,7 +366,7 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
   box.addEventListener("blur", close);
   if (guild) guild.addEventListener("change", function () { box.value = ""; hidden.value = ""; close(); });
   form.addEventListener("submit", function (e) {
-    if (!hidden.value) {
+    if (!picked("")) {
       e.preventDefault();
       note("Pick someone from the list first — a name alone could be more than one person.");
     }
@@ -419,8 +429,6 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     });
   });
 
-  var listWords = { attending: "going", waitlisted: "the waitlist", maybe: "maybe", withdrawn: "left" };
-
   // askFirst is confirm() in the page's own look: a dialog with the question,
   // Cancel, and a button that says what it does.
   var asker = document.createElement("dialog");
@@ -456,15 +464,11 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     var ask = (submitter && submitter.getAttribute("data-confirm")) || form.getAttribute("data-confirm");
     var box = form.querySelector(".member-name");
     var who = form.getAttribute("data-person-name") || (box && box.value) || "them";
-    // Someone already on the event is moved, not added, and the question
-    // says so — with what happens to the place they give up.
-    var standingNow = form.getAttribute("data-person-standing");
+    // Anyone already on the event is moved, not added, and the question
+    // says so, with what happens to a place given up.
     var choice = submitter && submitter.getAttribute("data-choice");
-    if (standingNow && choice && choice !== "invite") {
-      ask = "Move " + who + " from " + listWords[standingNow] + " to " + listWords[choice] + "?" +
-        (standingNow === "attending" && form.hasAttribute("data-place-frees") ? " Their place goes to whoever is next on the waitlist." : "") +
-        " They will be messaged.";
-    }
+    var moving = form.getAttribute("data-moving");
+    if (ask && moving && choice && choice !== "invite") ask += " " + moving;
     // The answer is marked on the button pressed, or on the form when Enter
     // sent it, and the submit is sent again once it is yes.
     var asked = submitter || form;
@@ -511,67 +515,104 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
       });
   });
 
-  // Add someone: once a person is picked, the search box becomes them, and
-  // only what can be done with them is offered.
+  // Add someone: each pick joins a list under the search box, with a ✕ to
+  // take it off again, and the actions appear once anyone is picked. What
+  // an action would do to someone already on the event is said under it.
   var standing = { attending: "already going", waitlisted: "already on the waitlist",
                    maybe: "down as maybe", withdrawn: "left this event" };
+  function joinNames(names) {
+    if (names.length < 2) return names.join("");
+    return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+  }
   document.querySelectorAll("form.add-form").forEach(function (form) {
-    var pickStep = form.querySelector("[data-pick-step]");
-    var picked = form.querySelector("[data-picked]");
+    var list = form.querySelector("[data-picked-list]");
+    var actions = form.querySelector("[data-actions]");
+    var hint = form.querySelector("[data-empty-hint]");
     var box = form.querySelector(".member-name");
-    var hidden = form.querySelector("input[name=discord_user_id]");
+    var scratch = form.querySelector("[data-picker-id]");
+    var people = [];
+
+    function refresh() {
+      var n = people.length;
+      actions.hidden = n === 0;
+      hint.hidden = n > 0;
+      var names = people.map(function (p) { return p.name; });
+      if (n) form.setAttribute("data-person-name", joinNames(names));
+      else form.removeAttribute("data-person-name");
+      form.querySelectorAll("[data-them]").forEach(function (el) {
+        el.textContent = n === 1 ? names[0] : n + " people";
+      });
+      form.querySelector("[data-invites]").textContent = n > 1 ? n + " invites" : "invite";
+
+      var on = people.filter(function (p) { return p.standing && p.standing !== "withdrawn"; });
+      var notes = [];
+      form.querySelectorAll("[data-choice]").forEach(function (b) {
+        var choice = b.getAttribute("data-choice");
+        // Unavailable when it would change nobody.
+        var nobody = people.every(function (p) {
+          return choice === "invite" ? (p.standing === "attending" || p.standing === "waitlisted") : p.standing === choice;
+        });
+        b.disabled = b.hasAttribute("data-never") || (n > 0 && nobody);
+        if (b.hasAttribute("data-never") && choice !== "invite") notes.push("Waitlist: " + b.getAttribute("title").toLowerCase() + ".");
+      });
+      if (on.length) {
+        notes.unshift(on.map(function (p) { return p.name + " is " + standing[p.standing]; }).join("; ") +
+          ". A list moves " + (on.length === 1 ? "them" : "them all") + " to it" +
+          (on.length < n ? ", and an invite skips anyone already going or waiting." : "."));
+        var fromGoing = on.filter(function (p) { return p.standing === "attending"; });
+        form.setAttribute("data-moving", joinNames(on.map(function (p) { return p.name; })) +
+          (on.length === 1 ? " is" : " are") + " already on the event and will be moved." +
+          (fromGoing.length && form.hasAttribute("data-place-frees") ? " A place given up goes to whoever is next on the waitlist." : ""));
+      } else {
+        form.removeAttribute("data-moving");
+      }
+      var note = form.querySelector("[data-choice-note]");
+      note.textContent = notes.join(" ");
+      note.hidden = notes.length === 0;
+    }
+
     form.addEventListener("member-picked", function (e) {
       var m = e.detail;
+      box.value = ""; scratch.value = "";
+      if (people.some(function (p) { return p.id === m.user_id; })) { box.focus(); return; }
       var name = m.pasted ? "User " + m.user_id : (m.readable_name || m.display_name);
-      form.setAttribute("data-person-name", name);
-      if (m.on_roster && m.on_roster !== "withdrawn") form.setAttribute("data-person-standing", m.on_roster);
-      else form.removeAttribute("data-person-standing");
-      var nameEl = picked.querySelector("[data-picked-name]");
-      nameEl.textContent = name;
-      if (m.readable_name && m.readable_name !== m.display_name) {
-        var aka = document.createElement("span");
-        aka.className = "muted";
-        aka.textContent = "  " + m.display_name;
-        nameEl.appendChild(aka);
-      }
-      picked.querySelector("[data-picked-sub]").textContent = m.pasted
-        ? "Pasted id · checked against the server when you go ahead"
-        : "@" + m.username + " · " + (standing[m.on_roster] || "not on this event yet");
-      var avatar = picked.querySelector("[data-avatar]");
-      avatar.textContent = "";
+      var person = { id: m.user_id, name: name, standing: m.on_roster || "" };
+      people.push(person);
+
+      var li = document.createElement("li");
+      li.className = "picked-person";
+      var avatar = document.createElement("span");
+      avatar.className = "avatar"; avatar.setAttribute("aria-hidden", "true");
       if (m.avatar_url) {
-        var img = document.createElement("img");
-        img.src = m.avatar_url; img.alt = "";
+        var img = document.createElement("img"); img.src = m.avatar_url; img.alt = "";
         avatar.appendChild(img);
       } else {
         avatar.textContent = (name || "?").trim().charAt(0).toUpperCase();
       }
-      var notes = [];
-      picked.querySelectorAll("[data-choice]").forEach(function (b) {
-        var choice = b.getAttribute("data-choice");
-        var already = choice === m.on_roster ||
-          (choice === "invite" && (m.on_roster === "attending" || m.on_roster === "waitlisted"));
-        b.disabled = b.hasAttribute("data-never") || already;
-        if (b.hasAttribute("data-never") && choice !== "invite") notes.push(b.getAttribute("title") + ".");
-      });
-      var onIt = m.on_roster && m.on_roster !== "withdrawn";
-      if (onIt) {
-        notes.unshift(name + " is " + standing[m.on_roster] + ". Picking another list moves them" +
-          (m.on_roster === "attending" && form.hasAttribute("data-place-frees") ? ", and their place goes to whoever is next." : "."));
+      var text = document.createElement("div"); text.className = "picked-text";
+      var nameEl = document.createElement("div"); nameEl.className = "picked-name"; nameEl.textContent = name;
+      if (m.readable_name && m.readable_name !== m.display_name) {
+        var aka = document.createElement("span"); aka.className = "muted"; aka.textContent = "  " + m.display_name;
+        nameEl.appendChild(aka);
       }
-      var note = picked.querySelector("[data-choice-note]");
-      note.textContent = notes.join(" ");
-      note.hidden = notes.length === 0;
-      pickStep.hidden = true;
-      picked.hidden = false;
-      var first = picked.querySelector("[data-choice]:not(:disabled)");
-      if (first) first.focus();
-    });
-    form.querySelector("[data-unpick]").addEventListener("click", function () {
-      hidden.value = ""; box.value = "";
-      form.removeAttribute("data-person-name");
-      form.removeAttribute("data-person-standing");
-      picked.hidden = true; pickStep.hidden = false;
+      var sub = document.createElement("div"); sub.className = "picked-sub";
+      sub.textContent = m.pasted ? "Pasted id · checked against the server when you go ahead"
+        : "@" + m.username + " · " + (standing[m.on_roster] || "not on this event yet");
+      text.appendChild(nameEl); text.appendChild(sub);
+      var id = document.createElement("input");
+      id.type = "hidden"; id.name = "discord_user_id"; id.value = m.user_id;
+      var drop = document.createElement("button");
+      drop.type = "button"; drop.className = "icon-btn"; drop.title = "Take " + name + " off this list";
+      drop.setAttribute("aria-label", "Take " + name + " off this list");
+      drop.innerHTML = '<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+      drop.addEventListener("click", function () {
+        li.remove();
+        people = people.filter(function (p) { return p !== person; });
+        refresh(); box.focus();
+      });
+      li.appendChild(avatar); li.appendChild(text); li.appendChild(id); li.appendChild(drop);
+      list.appendChild(li);
+      refresh();
       box.focus();
     });
   });

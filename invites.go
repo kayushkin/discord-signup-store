@@ -137,45 +137,69 @@ func (s *Server) handleWebInvite(w http.ResponseWriter, r *http.Request) {
 			", so their Join button would be refused. Open signups first, or add them to a list directly.")
 		return
 	}
-	userID := strings.TrimSpace(r.FormValue("discord_user_id"))
-	if userID == "" {
-		s.redirectWithNotice(w, r, ev.ID, "No invite was sent: pick a person from the list under the box.")
+	userIDs := pickedUserIDs(r)
+	if len(userIDs) == 0 {
+		s.redirectWithNotice(w, r, ev.ID, "No invite was sent: pick someone from the list under the box.")
 		return
 	}
+	lines := make([]string, 0, len(userIDs))
+	for _, userID := range userIDs {
+		lines = append(lines, s.invitePerson(ev, session, userID))
+	}
+	s.redirectWithNotice(w, r, ev.ID, strings.Join(lines, " "))
+}
+
+// invitePerson sends one invite and records it, whether or not Discord
+// delivered it, and says what happened in a sentence.
+func (s *Server) invitePerson(ev *Event, session *WebSession, userID string) string {
 	displayName, err := s.discord.GuildMemberDisplayName(ev.GuildID, userID)
 	if err != nil {
-		s.redirectWithNotice(w, r, ev.ID, "No invite was sent: "+userID+" is not a member of this server ("+err.Error()+").")
-		return
+		return "No invite for " + userID + ": not a member of this server (" + err.Error() + ")."
 	}
 	switch state, err := s.store.SignupState(ev.ID, userID); {
 	case err != nil && !errors.Is(err, ErrNotFound):
 		log.Printf("[discord-signup] invite: read state of %s on %d: %v", userID, ev.ID, err)
-		http.Error(w, "could not read the roster", http.StatusInternalServerError)
-		return
+		return "No invite for " + displayName + ": could not read the roster (" + err.Error() + ")."
 	case state == StateAttending || state == StateWaitlisted:
-		s.redirectWithNotice(w, r, ev.ID, fmt.Sprintf("No invite was sent: %s is already %s.", displayName, state))
-		return
+		return fmt.Sprintf("No invite for %s: already %s.", displayName, state)
 	}
 
 	inv := EventInvite{EventID: ev.ID, DiscordUserID: userID, DisplayName: displayName,
 		InvitedBy: "web:" + session.DiscordUserID, Delivery: InviteDeliverySent}
 	sendErr := s.discord.SendDirectMessagePayload(userID, inviteMessage(ev, session.DisplayName))
-	var notice string
+	var said string
 	switch {
 	case sendErr == nil:
-		notice = "Invited " + displayName + ". They have a DM with Join and Maybe buttons; the log below shows when they answer."
+		said = "Invited " + displayName + "."
 	case errors.Is(sendErr, ErrCannotMessageUser):
 		inv.Delivery, inv.DeliveryError = InviteDeliveryDMsClosed, sendErr.Error()
-		notice = displayName + " has DMs from server members turned off, so the invite could not be delivered. " +
-			"Ask them in the server, or add them to a list directly."
+		said = displayName + " has DMs from server members turned off, so their invite was not delivered."
 	default:
 		inv.Delivery, inv.DeliveryError = InviteDeliveryFailed, sendErr.Error()
 		log.Printf("[discord-signup] invite user=%s event=%d: %v", userID, ev.ID, sendErr)
-		notice = "Discord did not deliver the invite to " + displayName + ": " + sendErr.Error()
+		said = "Discord did not deliver the invite to " + displayName + ": " + sendErr.Error() + "."
 	}
 	if _, err := s.store.RecordInvite(inv); err != nil {
 		log.Printf("[discord-signup] record invite user=%s event=%d: %v", userID, ev.ID, err)
-		notice += " (It could not be saved to the log: " + err.Error() + ".)"
+		said += " (It could not be saved to the log: " + err.Error() + ".)"
 	}
-	s.redirectWithNotice(w, r, ev.ID, notice)
+	return said
+}
+
+// pickedUserIDs is everyone the Add someone box sent, in the order picked,
+// each once. The box sends Discord user ids, never names.
+func pickedUserIDs(r *http.Request) []string {
+	if err := r.ParseForm(); err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, id := range r.Form["discord_user_id"] {
+		id = strings.TrimSpace(id)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
 }

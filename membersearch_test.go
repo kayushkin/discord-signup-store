@@ -111,8 +111,8 @@ func TestOnlyAManagerCanSearchMembers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("session: %v", err)
 	}
-	if code := getJSON(t, mux, member.Token, eventPath(ev)+"/members?q=al", nil); code != http.StatusForbidden {
-		t.Errorf("a member without Manage Events got %d, want 403", code)
+	if code := getJSON(t, mux, member.Token, eventPath(ev)+"/members?q=al", nil); code != http.StatusNotFound {
+		t.Errorf("a member without Manage Events got %d, want 404", code)
 	}
 }
 
@@ -146,7 +146,7 @@ func TestAnIDThatIsNotAMemberAddsNobody(t *testing.T) {
 
 	for _, id := range []string{"404404", ""} {
 		rec := postForm(t, mux, token, eventPath(ev)+"/roster/add", url.Values{"discord_user_id": {id}, "list": {StateAttending}})
-		if !strings.Contains(rec.Header().Get("Location"), "Nobody+was+added") {
+		if loc := rec.Header().Get("Location"); !strings.Contains(loc, "Nobody+was+added") && !strings.Contains(loc, "Did+not+add") {
 			t.Errorf("id %q: redirected to %s", id, rec.Header().Get("Location"))
 		}
 	}
@@ -162,7 +162,7 @@ func TestTheEventPageHasTheNameBox(t *testing.T) {
 	srv.render(rec, "detail.html", pageData{Session: &WebSession{}, CanManage: true,
 		Event: &Event{ID: 7, GuildID: "g1", Name: "Games", Status: StatusOpen}})
 	page := rec.Body.String()
-	for _, want := range []string{`data-member-search="/events/7/members"`, `<input type="hidden" name="discord_user_id">`,
+	for _, want := range []string{`data-member-search="/events/7/members"`, `<input type="hidden" data-picker-id>`,
 		`class="picker"`, `/^\d{15,21}$/`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %s", want)

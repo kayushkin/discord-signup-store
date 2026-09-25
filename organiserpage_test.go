@@ -85,7 +85,7 @@ func TestTheEventPageIsTheEditForm(t *testing.T) {
 
 	page := getPage(t, mux, token, eventPath(ev)).Body.String()
 	for _, want := range []string{`name="name" required maxlength="100" value="Games"`, `name="waitlist"`,
-		`action="` + eventPath(ev) + `/signups"`, `data-tone="ok" aria-checked="true"`, "Send invite", "Add them yourself", `data-edit`} {
+		`action="` + eventPath(ev) + `/signups"`, `data-tone="ok" aria-checked="true"`, `data-choice="invite"`, "without asking", `data-edit`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("event page lacks %s", want)
 		}
@@ -263,5 +263,56 @@ func TestLeavingAnEventOverItsLimitPromotesNobody(t *testing.T) {
 	}
 	if after, _ := store.GetEvent(ev.ID); after.AttendingCount != 2 || after.WaitlistCount != 1 {
 		t.Errorf("after = %d going, %d waiting; want 2 and 1", after.AttendingCount, after.WaitlistCount)
+	}
+}
+
+// TestTheWebPagesShowOnlyEventsYouMayEdit: a member who created one event
+// sees that one, and someone else's is a 404, as if it did not exist.
+func TestTheWebPagesShowOnlyEventsYouMayEdit(t *testing.T) {
+	_, store, _, mux, _ := webTestServer(t)
+	mine, _ := store.CreateEvent(Event{GuildID: "g1", ChannelID: "c", Name: "My picnic", Status: StatusOpen,
+		StartsAt: 4102444800, CreatedBy: "member"})
+	theirs, _ := store.CreateEvent(Event{GuildID: "g1", ChannelID: "c", Name: "Someone else's quiz", Status: StatusOpen,
+		StartsAt: 4102444800, CreatedBy: "other"})
+	member, _ := store.CreateWebSession("member", "Member", "", map[string]uint64{"g1": 0})
+
+	home := getPage(t, mux, member.Token, "/").Body.String()
+	if !strings.Contains(home, "My picnic") || strings.Contains(home, "Someone else") {
+		t.Errorf("home page shows the wrong events for a member who created one")
+	}
+	if rec := getPage(t, mux, member.Token, eventPath(mine)); rec.Code != http.StatusOK {
+		t.Errorf("their own event = %d, want 200", rec.Code)
+	}
+	if rec := getPage(t, mux, member.Token, eventPath(theirs)); rec.Code != http.StatusNotFound {
+		t.Errorf("someone else's event = %d, want 404", rec.Code)
+	}
+}
+
+// TestAddingSeveralPeopleAtOnce says what happened to each.
+func TestAddingSeveralPeopleAtOnce(t *testing.T) {
+	_, store, fake, mux, token := webTestServer(t)
+	for id, name := range map[string]string{"222": "Alfie", "333": "Bea"} {
+		fake.on(http.MethodGet, "/guilds/g1/members/"+id, func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"nick":"` + name + `","user":{"id":"` + id + `","username":"x"}}`))
+		})
+	}
+	fake.on(http.MethodGet, "/guilds/g1/members/bob", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"nick":"Bob","user":{"id":"bob","username":"bob"}}`))
+	})
+	ev := publishedEvent(t, store, 8, "bob")
+	rec := postForm(t, mux, token, eventPath(ev)+"/roster/add",
+		url.Values{"discord_user_id": {"222", "333", "bob", "222"}, "list": {StateMaybe}})
+	notice, _ := url.QueryUnescape(rec.Header().Get("Location"))
+	for _, want := range []string{"Alfie is down as maybe now", "Bea is down as maybe now", "Bob is down as maybe now"} {
+		if !strings.Contains(notice, want) {
+			t.Errorf("notice %q lacks %q", notice, want)
+		}
+	}
+	if after, _ := store.GetEvent(ev.ID); after.AttendingCount != 0 {
+		t.Errorf("going = %d, want 0: bob was moved to maybe", after.AttendingCount)
+	}
+	roster, _ := store.Roster(ev.ID, false)
+	if len(roster) != 3 {
+		t.Errorf("roster has %d rows, want 3 — the repeated 222 must count once", len(roster))
 	}
 }

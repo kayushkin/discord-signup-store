@@ -147,8 +147,8 @@ because Discord has none to give.
 | **Details** | just you | A private reply: the description, when and where, the host, and the full roster by name in sign-up order, read-only, with Join / Maybe / Leave under it while signups are open. A message rather than a modal: a modal's only read-only text was refused by Discord every time, and its text box opened a keyboard. Pings nobody. |
 | **My events** | just you | The events *you* are on, with Join / Leave in place. |
 | **Discord's own event** | everyone | Discord's native event, linked to a roster here. Its title carries the count. |
-| **Web — list** | logged in | Every event, live from the database. |
-| **Web — detail** | logged in | One event. For an organiser its fields are the edit form, with Open/Close signups, the waitlist switch, End and Cancel beside them; then the roster, **Add people** (Send invite, or Add now to a list), the invites and how each was answered, and one log of signups, edits and invites, newest first. People are shown by their short name, with their Discord name on hover or tap. |
+| **Web — list** | whoever may edit | The events you may edit, live from the database: ones you created, and every event in a server where you may edit them all. Members who only sign up use Discord; another event's page is a 404 to them. |
+| **Web — detail** | whoever may edit | One event. For an organiser its fields are the edit form, with Open/Close signups, the waitlist switch, End and Cancel beside them; then the roster, **Add people** (Send invite, or Add now to a list), the invites and how each was answered, and one log of signups, edits and invites, newest first. People are shown by their short name, with their Discord name on hover or tap. |
 | **Web — form** | organisers | Create, with the fields a Discord form has no room for. Editing is on the detail page. |
 | **Web — names** | site admins, server owners | The short name each person is shown by, everywhere. A 404 for anyone else, and not linked for them. |
 

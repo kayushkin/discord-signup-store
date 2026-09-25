@@ -45,8 +45,9 @@
   {{if not .Events}}
     <div class="card"><p class="meta">
       {{if .Archived}}Nothing coming up. Finished events are in the archive below.
-      {{else}}No events yet. Create one — events made in Discord's own Events
-      tab appear here by themselves within ten minutes.{{end}}
+      {{else}}No events for you to manage yet. This page lists the events you
+      created, and every event in a server where you may edit them all. To sign
+      up for an event, use its Join button in Discord.{{end}}
     </p></div>
   {{end}}
   {{range .Events}}{{template "eventcard" .}}{{end}}

@@ -52,18 +52,18 @@ service's, and proxying any other route publishes roster editing to the world.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/` | Events in servers you belong to. |
+| GET | `/` | The events you may edit: those you created, and all events in servers where you may edit every event. |
 | GET | `/login` · `/auth/callback` · POST `/logout` | Discord OAuth2, scopes `identify guilds`. |
 | GET · POST | `/events/new` | Create, with a real date picker and an IANA timezone. |
-| GET | `/events/{id}` | The event, its roster, invites and log (signups, edits and invites, newest first). For an organiser the fields are the edit form. |
+| GET | `/events/{id}` | 404 unless you may edit it. The event, its roster, invites and log (signups, edits and invites, newest first). For an organiser the fields are the edit form. |
 | POST | `/events/{id}` | Save fields. **Only the fields the request carries change**; the page sends one field, or one group (starts, ends and timezone together), at a time. With `Accept: application/json` every event-page route answers `{"notice":…}` or `{"error":…}` instead of redirecting, and the page's script redraws in place. `waitlist` is `on` or `off`; `status` is honoured if sent but the page no longer sends it. A failed save shows the page again with what was typed. |
 | GET | `/events/{id}/edit` | 301 to `/events/{id}`, where the fields now are. |
 | POST | `/events/{id}/signups` | Open or close signups — the management row's toggle, through the same function. |
 | POST | `/events/{id}/cancel` | Cancel, as the management row's Cancel does: `confirm_name` must match the event's name (any case), and the native Discord event is deleted. |
 | POST | `/events/{id}/roster/remove` | Take someone off; removal promotes the next in line. |
-| POST | `/events/{id}/roster/add` | **Add now**: `discord_user_id` and `list` (`attending`, `maybe` or `waitlisted`). Going ignores the limit; the waitlist is refused unless the event is full, counting everyone else going, and has a waitlist. Logged as `added` by `web:<organiser id>`, and they are told by DM (a channel mention if going and DMs are closed). Refuses an id that is not a member of the event's server; the name shown comes from that lookup. |
+| POST | `/events/{id}/roster/add` | **Add now**: one or more `discord_user_id` (repeated) and `list` (`attending`, `maybe` or `waitlisted`). Going ignores the limit; the waitlist is refused unless the event is full, counting everyone else going, and has a waitlist. Logged as `added` by `web:<organiser id>`, and they are told by DM (a channel mention if going and DMs are closed). Refuses an id that is not a member of the event's server; the name shown comes from that lookup. |
 | POST | `/events/{id}/waitlist/move` | Move `discord_user_id` to place `to` in the waitlist, 1 at the front (past either end is that end). Ranks the whole line in `waitlist_rank`, logs `moved` by `web:<organiser id>`, and republishes the Discord copies. Messages nobody. |
-| POST | `/events/{id}/invite` | **Send invite**: DMs `discord_user_id` the event with its Join and Maybe buttons. Holds nothing. Refused while signups are not open, or if they are already going or waitlisted. Recorded in `event_invites` whether or not Discord delivered it; no channel mention when DMs are closed. |
+| POST | `/events/{id}/invite` | **Send invite**: DMs each `discord_user_id` (repeated for several people; the notice says what happened to each) the event with its Join and Maybe buttons. Holds nothing. Refused while signups are not open, or if they are already going or waitlisted. Recorded in `event_invites` whether or not Discord delivered it; no channel mention when DMs are closed. |
 | POST | `/events/{id}/roster/promote` | Give someone on the waitlist or the Maybe list a place, on the organiser's say-so: not checked against the limit, logged as `promoted` by `web:<organiser id>`, and they are told by DM. Anyone else is a notice, not a change. |
 | GET | `/events/{id}/members?q=` | The add box's suggestions: up to 10 server members whose username, display name or nickname **starts with** `q`, bots left out, each with `on_roster` if already on the roster and `readable_name` if one is set. Uses Discord's member search, because listing members needs the privileged GUILD_MEMBERS intent, which this application does not have. Manage Events only. |
 | POST | `/events/{id}/publish` | Create a native Discord event linked to this roster. |
@@ -72,7 +72,7 @@ service's, and proxying any other route publishes roster editing to the world.
 | POST | `/preferences/home-server` | Save which server the home page shows (`guild_id`, `""` for every server). Kept per Discord user in `user_preferences`, so it holds across logins. |
 | GET | `/names/members?guild_id=&q=` | The names page's search: members of one server where you may name people, each with the short name set for them. |
 
-**Authorization.** Reading an event needs guild membership. Editing needs `MANAGE_EVENTS` (or `ADMINISTRATOR`) in that guild, or having created the event — matched on `created_by`, the Discord user id, never on a name. Creating needs `CREATE_EVENTS`, `MANAGE_EVENTS` or `ADMINISTRATOR` (the web page used to want the last two only).
+**Authorization.** The web pages show an event only to whoever may edit it; anyone else gets a 404. Editing needs `MANAGE_EVENTS` (or `ADMINISTRATOR`) in that guild, or having created the event — matched on `created_by`, the Discord user id, never on a name. Creating needs `CREATE_EVENTS`, `MANAGE_EVENTS` or `ADMINISTRATOR` (the web page used to want the last two only).
 
 A site admin (`site_admins`, below) may do all of it in every server. A server can replace that with its own rule (`PUT /api/guilds/{guildID}/editing`, stored in `guild_editing_rules`). With an **editor role** set, an event is edited by its creator, anyone holding that role, or the server's owner — and `MANAGE_EVENTS` and `ADMINISTRATOR` no longer count there. With **anyone may create** set, every member may create. The same rule governs the Discord buttons and the web pages. In a server with an editor role, the web pages read the person's roles and the server's owner from Discord on each check rather than from the login, so taking the role away takes the right away at once.
 

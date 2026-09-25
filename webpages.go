@@ -249,6 +249,10 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 	} else {
 		data.MayName = len(guilds) > 0
 	}
+	// Only the events the viewer may edit. Everyone else joins from Discord;
+	// the web pages are an organiser's tool. Whether they may edit every
+	// event in a server is asked once per server, since with an editor role
+	// it costs a Discord call.
 	var visible []Event
 	for guildID := range guildIDs {
 		events, err := s.store.ListEvents(guildID, "", 200)
@@ -256,7 +260,16 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 			data.Error = err.Error()
 			break
 		}
-		visible = append(visible, events...)
+		editsAll, err := s.mayEditAllEventsIn(session.editActor(guildID))
+		if err != nil {
+			data.Error = "Could not check which events you may edit: " + err.Error()
+			continue
+		}
+		for _, ev := range events {
+			if editsAll || (ev.CreatedBy != "" && ev.CreatedBy == session.DiscordUserID) {
+				visible = append(visible, ev)
+			}
+		}
 	}
 	data.Events, data.Archived = splitByArchived(visible)
 	s.render(w, "index.html", data)

@@ -40,6 +40,13 @@ func (s *Server) webEvent(w http.ResponseWriter, r *http.Request, session *WebSe
 		http.Error(w, "could not check whether you may edit this event: "+err.Error(), http.StatusBadGateway)
 		return nil, false
 	}
+	// The web pages are for whoever may edit an event. Anyone else — a
+	// member who only signs up — gets the same answer as for an event that
+	// does not exist, so the page does not say which ids are in use.
+	if !canManage {
+		http.NotFound(w, r)
+		return nil, false
+	}
 	return ev, canManage
 }
 
@@ -577,41 +584,52 @@ func (s *Server) handleWebRosterAdd(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "you cannot edit this event", http.StatusForbidden)
 		return
 	}
-	userID := strings.TrimSpace(r.FormValue("discord_user_id"))
-	if userID == "" {
-		s.redirectWithNotice(w, r, ev.ID, "Nobody was added: pick a person from the list under the box.")
+	userIDs := pickedUserIDs(r)
+	if len(userIDs) == 0 {
+		s.redirectWithNotice(w, r, ev.ID, "Nobody was added: pick someone from the list under the box.")
 		return
 	}
+	if IsArchived(ev.Status) {
+		s.redirectWithNotice(w, r, ev.ID, "Nobody was added: the event is "+ev.Status+".")
+		return
+	}
+	list := r.FormValue("list")
+	lines := make([]string, 0, len(userIDs)+1)
+	for _, userID := range userIDs {
+		lines = append(lines, s.placePerson(ev, session, userID, list))
+	}
+	if after, err := s.store.GetEvent(ev.ID); err == nil && after.Capacity > 0 && after.AttendingCount > after.Capacity {
+		lines = append(lines, fmt.Sprintf("That takes it to %d/%d, over the limit.", after.AttendingCount, after.Capacity))
+	}
+	s.redirectWithNotice(w, r, ev.ID, strings.Join(lines, " "))
+}
+
+// placePerson puts one person on the list an organiser picked, tells them,
+// and says what happened in a sentence.
+func (s *Server) placePerson(ev *Event, session *WebSession, userID, list string) string {
 	displayName := ""
 	if s.discord != nil {
 		name, err := s.discord.GuildMemberDisplayName(ev.GuildID, userID)
 		if err != nil {
-			s.redirectWithNotice(w, r, ev.ID, "Nobody was added: "+userID+" is not a member of this server ("+err.Error()+").")
-			return
+			return "Did not add " + userID + ": not a member of this server (" + err.Error() + ")."
 		}
 		displayName = name
-	}
-	result, err := s.store.PlaceOnList(ev.ID, userID, displayName, r.FormValue("list"), "web:"+session.DiscordUserID)
-	switch {
-	case errors.Is(err, ErrEventNotOpen):
-		s.redirectWithNotice(w, r, ev.ID, "Nobody was added: the event is "+ev.Status+".")
-		return
-	case errors.Is(err, ErrInvalidEvent):
-		s.redirectWithNotice(w, r, ev.ID, "Nobody was added: "+plainError(err))
-		return
-	case err != nil:
-		log.Printf("[discord-signup] web add %s to %d: %v", userID, ev.ID, err)
-		s.redirectWithNotice(w, r, ev.ID, "Could not add them: "+err.Error())
-		return
 	}
 	// Without a Discord client there is no name to say; only tests run so.
 	who := "They"
 	if displayName != "" {
 		who = displayName
 	}
+	result, err := s.store.PlaceOnList(ev.ID, userID, displayName, list, "web:"+session.DiscordUserID)
+	switch {
+	case errors.Is(err, ErrInvalidEvent), errors.Is(err, ErrEventNotOpen):
+		return "Did not add " + who + ": " + plainError(err)
+	case err != nil:
+		log.Printf("[discord-signup] web add %s to %d: %v", userID, ev.ID, err)
+		return "Could not add " + who + ": " + err.Error() + "."
+	}
 	if result.Unchanged {
-		s.redirectWithNotice(w, r, ev.ID, fmt.Sprintf("%s is already %s — no change.", who, stateWords(result.Signup)))
-		return
+		return fmt.Sprintf("%s is already %s — no change.", who, stateWords(result.Signup))
 	}
 	changes := []stateChange{{UserID: userID, State: result.Signup.State}}
 	if result.Promoted != nil {
@@ -619,15 +637,12 @@ func (s *Server) handleWebRosterAdd(w http.ResponseWriter, r *http.Request) {
 	}
 	s.inBackground(func() { s.syncAfterChange(ev.ID, changes) })
 	s.inBackground(func() { s.notifyPlacedOnList(ev, &result.Signup) })
-	notice := fmt.Sprintf("%s is %s now, and was messaged.", who, stateWords(result.Signup))
+	said := fmt.Sprintf("%s is %s now, and was messaged.", who, stateWords(result.Signup))
 	if result.Promoted != nil {
 		s.inBackground(func() { s.notifyPromoted(ev, result.Promoted) })
-		notice += " Their place went to the next person on the waitlist, who was messaged too."
+		said += " Their place went to the next person on the waitlist, who was messaged too."
 	}
-	if after, err := s.store.GetEvent(ev.ID); err == nil && after.Capacity > 0 && after.AttendingCount > after.Capacity {
-		notice += fmt.Sprintf(" That takes it to %d/%d, over the limit.", after.AttendingCount, after.Capacity)
-	}
-	s.redirectWithNotice(w, r, ev.ID, notice)
+	return said
 }
 
 // stateWords says where someone is, as the page says it.

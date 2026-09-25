@@ -60,7 +60,7 @@ func TestTheHomePageRemembersWhichServer(t *testing.T) {
 	})
 	store.CreateEvent(Event{GuildID: "g1", ChannelID: "c", Name: "First server night", Status: StatusOpen, StartsAt: 4102444800})
 	store.CreateEvent(Event{GuildID: "g2", ChannelID: "c", Name: "Second server night", Status: StatusOpen, StartsAt: 4102444800})
-	both, _ := store.CreateWebSession("u-both", "Both", "", map[string]uint64{"g1": 0, "g2": 0})
+	both, _ := store.CreateWebSession("u-both", "Both", "", map[string]uint64{"g1": permissionManageEvents, "g2": permissionManageEvents})
 
 	page := getPage(t, mux, both.Token, "/").Body.String()
 	if !strings.Contains(page, "First server night") || !strings.Contains(page, "Second server night") {
@@ -75,7 +75,7 @@ func TestTheHomePageRemembersWhichServer(t *testing.T) {
 		t.Error("filtered home page shows the wrong server")
 	}
 	// It is the person's, not the login's.
-	again, _ := store.CreateWebSession("u-both", "Both", "", map[string]uint64{"g1": 0, "g2": 0})
+	again, _ := store.CreateWebSession("u-both", "Both", "", map[string]uint64{"g1": permissionManageEvents, "g2": permissionManageEvents})
 	if strings.Contains(getPage(t, mux, again.Token, "/").Body.String(), "First server night") {
 		t.Error("a new login lost the filter")
 	}
