@@ -307,7 +307,7 @@ func (s *Server) sendMessageByDM(ev *Event, session *WebSession, body string, pe
 		session.DisplayName, audienceWords(lists), ev.Name, body)
 	var closed, broken []string
 	for _, sg := range people {
-		err := s.discord.SendDirectMessage(sg.DiscordUserID, content)
+		err := s.sendEventDM(ev, sg.DiscordUserID, map[string]any{"content": content}, DMKindMessage, summarise(body))
 		switch {
 		case err == nil:
 			delivered++

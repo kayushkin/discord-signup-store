@@ -287,7 +287,8 @@ func (s *Server) notifyPlacedOnList(ev *Event, placed *Signup) {
 	if ev.StartsAt > 0 {
 		content += fmt.Sprintf("\n🗓️ <t:%d:F>", ev.StartsAt)
 	}
-	if err := s.discord.SendDirectMessage(placed.DiscordUserID, content); err != nil {
+	if err := s.sendEventDM(ev, placed.DiscordUserID, map[string]any{"content": content}, DMKindPlaced,
+		"being put down as "+stateWords(*placed)); err != nil {
 		log.Printf("[discord-signup] dm placed user=%s event=%d: %v", placed.DiscordUserID, ev.ID, err)
 	}
 }
@@ -302,7 +303,7 @@ func (s *Server) tellTheyHaveAPlace(ev *Event, promoted *Signup, content string)
 		content += fmt.Sprintf("\n🗓️ <t:%d:F>", ev.StartsAt)
 	}
 
-	err := s.discord.SendDirectMessage(promoted.DiscordUserID, content)
+	err := s.sendEventDM(ev, promoted.DiscordUserID, map[string]any{"content": content}, DMKindPromoted, "getting a place")
 	if err == nil {
 		return
 	}

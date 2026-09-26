@@ -342,6 +342,19 @@ regular. Values stored under the old name — `joined_via = pinned`, actor
 | `detail` | TEXT | Who had DMs closed, or what Discord said. |
 | `at` | INTEGER | When. |
 
+## `event_dms` and `event_dm_replies` — DMs about events, and what came back, new 2026-09-26
+
+`event_dms` is every DM sent about an event, keyed by Discord's message id:
+`channel_id`, `event_id`, `discord_user_id`, `kind` (`message`, `invite`,
+`placed`, `promoted`), a one-line `summary`, `sent_at`.
+
+`event_dm_replies` is what people wrote back: `event_id`, `discord_user_id`,
+`display_name` (their name in the event's server when it came), `message_id`
+(unique, so a gateway replay stores it once), `content`, `attachments` (a
+count; the files stay in the DM), `replied_to` (our DM's id when they used
+Reply), `matched` (`reply`, or `latest` for a plain message put with the
+latest DM in the last 14 days), `at`.
+
 ## `event_table_rows` — **dropped 2026-09-02**
 
 A one-message-per-event table from before the consolidated table was paged,

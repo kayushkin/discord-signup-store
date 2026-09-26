@@ -398,6 +398,27 @@
   </section>
   {{end}}
 
+  {{if $canManage}}
+  <section class="card" id="replies">
+    <div class="card-head"><h3>Replies</h3><span class="badge">{{len .Replies}}</span>
+      <span class="muted small">what people wrote back to the bot's DMs</span></div>
+    {{if not .Replies}}<p class="empty">Nobody has written back yet. Every DM about this event — messages, invites, places — says replies reach the organisers.</p>{{end}}
+    <ol class="replies">
+      {{range .Replies}}
+      <li class="reply">
+        <div class="reply-head">
+          <span class="who">{{person .ReadableName .DisplayName .DiscordUserID}}</span>
+          <span class="when">{{shortTime .At}}</span>
+        </div>
+        <div class="reply-to">{{if eq .Matched "reply"}}replying to{{else}}after{{end}}
+          {{if eq .AnsweringKind "message"}}your message “{{.AnsweringSummary}}”{{else if .AnsweringSummary}}{{.AnsweringSummary}}{{else}}a DM{{end}}{{if eq .Matched "latest"}} <span class="muted" title="They did not use Reply; this was the last DM the bot sent them about an event.">· best guess</span>{{end}}</div>
+        <div class="reply-body prose">{{if .Content}}{{.Content}}{{else}}<span class="muted">no text</span>{{end}}{{if .Attachments}} <span class="muted">· {{.Attachments}} attachment{{if gt .Attachments 1}}s{{end}}, see the DM</span>{{end}}</div>
+      </li>
+      {{end}}
+    </ol>
+  </section>
+  {{end}}
+
   <section class="card">
     <div class="card-head"><h3>Log</h3><span class="muted small">signups, edits and invites · newest first</span></div>
     {{if not .EventLog}}<p class="empty">Nothing yet.</p>{{end}}

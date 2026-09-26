@@ -199,7 +199,7 @@ func (s *Server) invitePerson(ev *Event, session *WebSession, userID, reserve st
 		// A held place can make the event read as full on Discord.
 		s.inBackground(func() { s.syncAfterChange(ev.ID, nil) })
 	}
-	sendErr := s.discord.SendDirectMessagePayload(userID, inviteMessage(ev, session.DisplayName, reserve))
+	sendErr := s.sendEventDM(ev, userID, inviteMessage(ev, session.DisplayName, reserve), DMKindInvite, "the invite")
 	said := "Invited " + displayName + "."
 	switch reserve {
 	case reserveHold:

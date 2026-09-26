@@ -203,6 +203,12 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		}
 	}
 	data.InvitedIDs = strings.Join(unanswered, " ")
+	if canManage {
+		if data.Replies, err = s.store.DMReplies(ev.ID); err != nil {
+			log.Printf("[discord-signup] dm replies %d: %v", ev.ID, err)
+			data.Error = strings.TrimSpace(data.Error + " Could not read the replies: " + err.Error())
+		}
+	}
 	data.MessagesLeft, data.MessagesNextAt = messageAllowance(messages, now())
 	data.MessageLimit, data.MessageWindowMinutes, data.MessageBodyLimit = messageLimit, int(messageWindow/time.Minute), messageBodyLimit
 	data.RegularIDs = map[string]bool{}

@@ -78,6 +78,14 @@ them — as a post in the event's forum thread that mentions each of them, which
 pings them, or as a DM to each. At most two per event in any ten minutes,
 whoever sends them, so the page cannot be used to ping a roster over and over.
 
+**Replies to the bot's DMs are shown on the event page.** Every DM sent
+about an event — an organiser's message, an invite, being put on a list or
+given a place — says replies reach the organisers, and is remembered with its
+event. Someone who writes back with Discord's Reply on one of those DMs is put
+with that DM's event; a plain message goes with the latest DM the bot sent
+them in the last two weeks, marked *best guess* on the page. The bot reacts 📨
+so they know it arrived. A DM about no recent event is left alone.
+
 **Add now is not an invite.** Add now puts someone on the list the organiser
 picks — going even past the limit, maybe, or the waitlist while the event is
 full — and DMs them to say so; the history records it as `added` by the

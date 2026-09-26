@@ -82,6 +82,8 @@ type pageData struct {
 	// are left; the other three are the limits, for the page to say.
 	MessagesLeft, MessageLimit, MessageWindowMinutes, MessageBodyLimit int
 	MessagesNextAt                                                     int64
+	// Replies are what people wrote back to the event's DMs, newest first.
+	Replies []DMReply
 	// InvitedIDs are the people invited who have not answered, space
 	// separated, so a person picked in Add someone can say so.
 	InvitedIDs string

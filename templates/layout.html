@@ -366,6 +366,15 @@ label.chip:has(input:checked){border-color:var(--accent);background:#5865f21f}
 .msg-foot .hint{flex:1;min-width:200px;margin:0}
 @media (max-width:600px){.radio-seg{min-width:0;flex-basis:100%}.msg-label{width:auto}}
 
+/* Replies. */
+ol.replies{list-style:none;margin:6px 0 0;padding:0}
+.reply{padding:10px 0;border-bottom:1px solid #2d2f35}
+.reply:last-child{border-bottom:0}
+.reply-head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.reply-head .when{margin-left:auto}
+.reply-to{font-size:12px;color:var(--dim);margin-top:2px}
+.reply-body{margin-top:6px;background:#1b1c20;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px}
+
 /* Dialog and toast. */
 dialog.dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:12px;
   padding:20px 22px;max-width:420px;width:calc(100% - 32px);box-shadow:0 20px 60px #000a}

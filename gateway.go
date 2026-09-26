@@ -52,8 +52,12 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver, notifyDiscon
 	// forum posts. Both standard intents — nothing privileged.
 	// GUILDS is what delivers GUILD_CREATE, which is how the bot notices it
 	// was added to a server and sets it up.
+	// DIRECT_MESSAGES delivers what people write back to the bot's DMs about
+	// an event; see dmreplies.go. Standard, and a DM's text comes with it
+	// without the privileged Message Content intent.
 	session.Identify.Intents = discordgo.IntentGuildScheduledEvents |
-		discordgo.IntentGuildMessageReactions | discordgo.IntentGuilds
+		discordgo.IntentGuildMessageReactions | discordgo.IntentGuilds |
+		discordgo.IntentDirectMessages
 
 	// discordgo's own reconnect is off. It ran once on this host and ended with
 	// no socket and no log line for five days; see gateway_supervisor.go.
@@ -68,6 +72,7 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver, notifyDiscon
 	session.AddHandler(listener.onScheduledEventDeleted)
 	session.AddHandler(listener.onScheduledEventChanged)
 	session.AddHandler(listener.onGuildCreate)
+	session.AddHandler(listener.onDirectMessage)
 	session.AddHandler(func(_ *discordgo.Session, r *discordgo.Ready) {
 		log.Printf("[discord-signup] gateway ready as %s#%s, %d guild(s)",
 			r.User.Username, r.User.Discriminator, len(r.Guilds))
@@ -79,6 +84,20 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver, notifyDiscon
 		notifyDisconnected()
 	})
 	return listener, nil
+}
+
+// onDirectMessage takes a message someone sent the bot in a DM — never one
+// in a server, and never the bot's own — and puts it with the event it
+// answers.
+func (g *GatewayListener) onDirectMessage(_ *discordgo.Session, m *discordgo.MessageCreate) {
+	if m.GuildID != "" || m.Author == nil || m.Author.Bot {
+		return
+	}
+	repliedTo := ""
+	if m.MessageReference != nil {
+		repliedTo = m.MessageReference.MessageID
+	}
+	g.server.receiveDMReply(m.ChannelID, m.ID, m.Author.ID, m.Content, repliedTo, len(m.Attachments))
 }
 
 // onUserAdd handles someone pressing Interested.

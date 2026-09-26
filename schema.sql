@@ -367,3 +367,38 @@ CREATE TABLE IF NOT EXISTS event_messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_event_messages_event ON event_messages(event_id, at);
+
+-- event_dms: every DM this service sent a person about an event — an
+-- organiser's message, an invite, being put on a list or given a place — so a
+-- reply in that DM can be traced to its event. summary is a short line saying
+-- what the DM was, shown beside a reply.
+CREATE TABLE IF NOT EXISTS event_dms (
+    message_id      TEXT PRIMARY KEY,
+    channel_id      TEXT NOT NULL,
+    event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    kind            TEXT NOT NULL,
+    summary         TEXT NOT NULL DEFAULT '',
+    sent_at         INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_dms_user ON event_dms(discord_user_id, sent_at);
+
+-- event_dm_replies: what people wrote back in those DMs. matched says how
+-- the event was found: 'reply' — they used Discord's Reply on one of our DMs,
+-- so replied_to is that DM — or 'latest' — a plain message, put with the
+-- latest DM we sent them in the last two weeks.
+CREATE TABLE IF NOT EXISTS event_dm_replies (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    display_name    TEXT NOT NULL DEFAULT '',
+    message_id      TEXT NOT NULL UNIQUE,
+    content         TEXT NOT NULL DEFAULT '',
+    attachments     INTEGER NOT NULL DEFAULT 0,
+    replied_to      TEXT NOT NULL DEFAULT '',
+    matched         TEXT NOT NULL,
+    at              INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_dm_replies_event ON event_dm_replies(event_id, at);
