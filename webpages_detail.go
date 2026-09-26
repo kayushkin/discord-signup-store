@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // webEvent loads an event and the caller's standing on it, or writes the
@@ -124,6 +125,11 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		log.Printf("[discord-signup] event updates %d: %v", ev.ID, err)
 		problems = append(problems, "Could not read the edit history: "+err.Error())
 	}
+	messages, err := s.store.Messages(ev.ID)
+	if err != nil {
+		log.Printf("[discord-signup] messages %d: %v", ev.ID, err)
+		problems = append(problems, "Could not read the messages: "+err.Error())
+	}
 	regulars, err := s.store.Regulars(ev.ID)
 	if err != nil {
 		log.Printf("[discord-signup] regulars %d: %v", ev.ID, err)
@@ -156,6 +162,9 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	for _, p := range regulars {
 		actors = append(actors, p.AddedBy, p.EndedBy)
 	}
+	for _, m := range messages {
+		actors = append(actors, m.SentBy)
+	}
 	names := eventLogNames{actors: s.historyActorNames(ev.GuildID, actors), people: map[string]actorName{}, roles: map[string]string{}}
 	for actor, name := range names.actors {
 		if snowflake.MatchString(actor) {
@@ -176,7 +185,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 
 	data := pageData{
 		Title: ev.Name, Session: session, Event: ev, Roster: roster, Invites: invites,
-		EventLog:          buildEventLog(signupUpdates, edits, invites, regulars, names),
+		EventLog:          buildEventLog(signupUpdates, edits, invites, regulars, messages, names),
 		CanManage:         canManage,
 		EventUnderway:     eventIsUnderway(ev),
 		EventFull:         eventIsFull(ev),
@@ -194,6 +203,8 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		}
 	}
 	data.InvitedIDs = strings.Join(unanswered, " ")
+	data.MessagesLeft, data.MessagesNextAt = messageAllowance(messages, now())
+	data.MessageLimit, data.MessageWindowMinutes, data.MessageBodyLimit = messageLimit, int(messageWindow/time.Minute), messageBodyLimit
 	data.RegularIDs = map[string]bool{}
 	going := map[string]bool{}
 	for _, sg := range roster {

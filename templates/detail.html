@@ -365,6 +365,39 @@
   </section>
   {{end}}
 
+  {{if $canManage}}
+  <section class="card" id="message">
+    <div class="card-head"><h3>Message people</h3>
+      <span class="badge" title="An event can send {{.MessageLimit}} messages in any {{.MessageWindowMinutes}} minutes">{{.MessagesLeft}} of {{.MessageLimit}} left</span></div>
+    {{if eq .MessagesLeft 0}}<p class="hint bad">An event can send {{.MessageLimit}} messages in any {{.MessageWindowMinutes}} minutes. The next can go at {{shortTime .MessagesNextAt}}.</p>{{end}}
+    <form method="post" action="/events/{{$ev.ID}}/message" data-async data-message class="message-form"
+          data-going="{{len .Going}}" data-waiting="{{len .Waiting}}" data-maybe="{{len .Maybes}}">
+      <textarea name="body" rows="4" maxlength="{{.MessageBodyLimit}}" required placeholder="What do you want to tell them?"></textarea>
+      <div class="hint msg-count" data-count>0 / {{.MessageBodyLimit}}</div>
+      <div class="msg-opts">
+        <div class="msg-opt"><span class="msg-label">To</span>
+          <span class="chips">
+            <span class="chip is-fixed">Going · {{len .Going}}</span>
+            {{if .Waiting}}<label class="chip"><input type="checkbox" name="include_waitlisted" value="on"> Waitlist · {{len .Waiting}}</label>{{end}}
+            {{if .Maybes}}<label class="chip"><input type="checkbox" name="include_maybe" value="on"> Maybe · {{len .Maybes}}</label>{{end}}
+          </span>
+        </div>
+        <div class="msg-opt"><span class="msg-label">How</span>
+          <span class="seg-control radio-seg" role="radiogroup" aria-label="How to send it">
+            <label{{if not $ev.ForumPostID}} class="is-off" title="This event has no forum post"{{end}}><input type="radio" name="via" value="forum" {{if $ev.ForumPostID}}checked{{else}}disabled{{end}}> Forum thread, pinging them</label>
+            <label><input type="radio" name="via" value="dm" {{if not $ev.ForumPostID}}checked{{end}}> Private DM to each</label>
+          </span>
+        </div>
+      </div>
+      <div class="msg-foot">
+        <button {{if eq .MessagesLeft 0}}disabled{{end}}>Send message</button>
+        <span class="hint"><span data-via-hint="forum"{{if not $ev.ForumPostID}} hidden{{end}}>The post mentions each of them, so they are pinged.</span><span data-via-hint="dm"{{if $ev.ForumPostID}} hidden{{end}}>Each gets it privately; closed DMs are reported.</span>
+          {{.MessageLimit}} messages per event in any {{.MessageWindowMinutes}} minutes.</span>
+      </div>
+    </form>
+  </section>
+  {{end}}
+
   <section class="card">
     <div class="card-head"><h3>Log</h3><span class="muted small">signups, edits and invites · newest first</span></div>
     {{if not .EventLog}}<p class="empty">Nothing yet.</p>{{end}}

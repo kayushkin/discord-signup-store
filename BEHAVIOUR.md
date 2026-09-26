@@ -72,6 +72,12 @@ them. When the date rolls over and the roster clears, every regular is put
 back on as going, past the limit if it comes to that. The host becomes a
 regular the first time the event repeats; if they stop being one, that stands.
 
+**Messaging the people on an event.** From the event page an organiser can
+send a message to everyone going — and the waitlist and Maybe if they tick
+them — as a post in the event's forum thread that mentions each of them, which
+pings them, or as a DM to each. At most two per event in any ten minutes,
+whoever sends them, so the page cannot be used to ping a roster over and over.
+
 **Add now is not an invite.** Add now puts someone on the list the organiser
 picks — going even past the limit, maybe, or the waitlist while the event is
 full — and DMs them to say so; the history records it as `added` by the

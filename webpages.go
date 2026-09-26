@@ -77,6 +77,11 @@ type pageData struct {
 	// them not going on the current date.
 	RegularIDs   map[string]bool
 	RegularsAway []EventRegular
+	// MessagesLeft is how many more messages the event may send in the
+	// current window, and MessagesNextAt when the next is allowed once none
+	// are left; the other three are the limits, for the page to say.
+	MessagesLeft, MessageLimit, MessageWindowMinutes, MessageBodyLimit int
+	MessagesNextAt                                                     int64
 	// InvitedIDs are the people invited who have not answered, space
 	// separated, so a person picked in Add someone can say so.
 	InvitedIDs string

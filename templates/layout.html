@@ -77,6 +77,8 @@ button,.btn{background:var(--accent);color:#fff;border:0;border-radius:7px;
 button.ghost,.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
 button.danger{background:transparent;border:1px solid #e0526055;color:var(--bad)}
 button:hover{filter:brightness(1.12)}
+/* A button that cannot be pressed looks it, everywhere. */
+button:disabled{opacity:.45;cursor:not-allowed;filter:none}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
 .hint{color:var(--dim);font-size:12px;margin-top:5px}
 .err{background:#e0526018;border:1px solid #e0526055;color:#ffb3bb;
@@ -341,6 +343,29 @@ table.log td{vertical-align:top}
   details.aka summary{padding:4px 0}
 }
 
+/* Message people. */
+.message-form textarea{min-height:96px}
+.msg-count{text-align:right;margin-top:3px}
+.msg-opts{display:flex;flex-direction:column;gap:10px;margin:8px 0 12px}
+.msg-opt{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.msg-label{width:36px;color:var(--dim);font-size:13px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;margin:0;padding:6px 12px;border:1px solid var(--line);
+  border-radius:999px;font-size:13px;color:var(--ink);cursor:pointer;background:#1b1c20}
+.chip input{width:auto;margin:0;accent-color:var(--accent)}
+.chip.is-fixed{border-color:#2eb87266;color:var(--ok);background:#2eb87214;cursor:default}
+label.chip:has(input:checked){border-color:var(--accent);background:#5865f21f}
+.radio-seg{flex:1;min-width:260px}
+.radio-seg label{flex:1;margin:0;display:flex;align-items:center;justify-content:center;text-align:center;
+  padding:7px 10px;border-radius:7px;font-size:13.5px;color:var(--dim);cursor:pointer;border:1px solid transparent}
+.radio-seg input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.radio-seg label:has(input:checked){color:var(--ink);background:#5865f21f;border-color:#5865f288}
+.radio-seg label:has(input:focus-visible){outline:2px solid var(--accent)}
+.radio-seg label.is-off{opacity:.45;cursor:not-allowed}
+.msg-foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.msg-foot .hint{flex:1;min-width:200px;margin:0}
+@media (max-width:600px){.radio-seg{min-width:0;flex-basis:100%}.msg-label{width:auto}}
+
 /* Dialog and toast. */
 dialog.dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:12px;
   padding:20px 22px;max-width:420px;width:calc(100% - 32px);box-shadow:0 20px 60px #000a}
@@ -604,6 +629,17 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     var ask = (submitter && submitter.getAttribute("data-confirm")) || form.getAttribute("data-confirm");
     var box = form.querySelector(".member-name");
     var who = form.getAttribute("data-person-name") || (box && box.value) || "them";
+    // A message says how many people it reaches and how, before it goes.
+    if (form.hasAttribute("data-message")) {
+      var count = +form.getAttribute("data-going");
+      var w = form.querySelector("input[name=include_waitlisted]");
+      var m = form.querySelector("input[name=include_maybe]");
+      if (w && w.checked) count += +form.getAttribute("data-waiting");
+      if (m && m.checked) count += +form.getAttribute("data-maybe");
+      var viaForum = form.querySelector("input[name=via]:checked").value === "forum";
+      ask = (viaForum ? "Post this in the forum thread, pinging " : "Send this by DM to ") +
+        count + (count === 1 ? " person" : " people") + "?";
+    }
     // Anyone already on the event is moved, not added, and the question
     // says so, with what happens to a place given up.
     var choice = submitter && submitter.getAttribute("data-choice");
@@ -825,6 +861,24 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     } else {
       update();
     }
+  });
+
+  // The message box counts what is typed against the limit.
+  document.querySelectorAll("form[data-message]").forEach(function (form) {
+    var text = form.querySelector("textarea[name=body]");
+    var count = form.querySelector("[data-count]");
+    var limit = text.getAttribute("maxlength");
+    function show() { count.textContent = text.value.length + " / " + limit; }
+    text.addEventListener("input", show);
+    show();
+    // The line beside Send says what the chosen way does.
+    form.querySelectorAll("input[name=via]").forEach(function (radio) {
+      radio.addEventListener("change", function () {
+        form.querySelectorAll("[data-via-hint]").forEach(function (el) {
+          el.hidden = el.getAttribute("data-via-hint") !== radio.value;
+        });
+      });
+    });
   });
 
   document.querySelectorAll("[data-open-dialog]").forEach(function (btn) {

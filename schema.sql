@@ -344,3 +344,26 @@ CREATE TABLE IF NOT EXISTS event_pins (
 );
 
 CREATE INDEX IF NOT EXISTS idx_event_pins_event ON event_pins(event_id, unpinned_at);
+
+-- event_messages: an organiser's message to the people on an event, from the
+-- web page — posted in its forum thread with each of them mentioned, or sent
+-- to each by DM. Kept for the event's log, and to limit how often: at most
+-- messageLimit in any messageWindow per event, counting every send that did
+-- not fail outright. status is 'sending' while it goes out, then 'sent' or
+-- 'failed'; delivered and failed count people (DMs) or are 1/0 (the post).
+CREATE TABLE IF NOT EXISTS event_messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id   INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    sent_by    TEXT NOT NULL,
+    via        TEXT NOT NULL,                -- 'forum' | 'dm'
+    audience   TEXT NOT NULL,                -- lists, comma separated: attending,waitlisted,maybe
+    body       TEXT NOT NULL,
+    recipients INTEGER NOT NULL DEFAULT 0,
+    delivered  INTEGER NOT NULL DEFAULT 0,
+    failed     INTEGER NOT NULL DEFAULT 0,
+    status     TEXT NOT NULL,
+    detail     TEXT NOT NULL DEFAULT '',
+    at         INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_messages_event ON event_messages(event_id, at);

@@ -217,8 +217,23 @@ func holdOutcomeText(inv EventInvite) string {
 }
 
 // buildEventLog merges an event's three histories, newest first.
-func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventInvite, regulars []EventRegular, names eventLogNames) []eventLogEntry {
-	out := make([]eventLogEntry, 0, len(signups)+len(edits)+len(invites)+len(regulars))
+func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventInvite, regulars []EventRegular, messages []EventMessage, names eventLogNames) []eventLogEntry {
+	out := make([]eventLogEntry, 0, len(signups)+len(edits)+len(invites)+len(regulars)+len(messages))
+	for i, m := range messages {
+		how := "in the forum thread"
+		if m.Via == MessageViaDM {
+			how = fmt.Sprintf("by DM, reaching %d of %d", m.Delivered, m.Recipients)
+		}
+		what := template.HTML(`<details class="log-more"><summary>messaged everyone ` +
+			template.HTMLEscapeString(audienceWords(m.Audience)) + " " + template.HTMLEscapeString(how) +
+			`</summary><div class="muted prose">` + template.HTMLEscapeString(m.Body) + `</div></details>`)
+		if m.Status == messageFailed {
+			what += template.HTML(` <span class="bad">— not sent: ` + template.HTMLEscapeString(m.Detail) + `</span>`)
+		}
+		out = append(out, eventLogEntry{At: m.At, order: 1_000_000 + i,
+			Subject: template.HTML(`<span class="muted">` + strconv.Itoa(m.Recipients) + ` ` + plural(m.Recipients, "person", "people") + `</span>`),
+			What:    what, By: names.actor(m.SentBy)})
+	}
 	base := len(signups) + len(edits) + 2*len(invites)
 	for i, p := range regulars {
 		subject := personHTML(p.ReadableName, p.DisplayName, p.DiscordUserID)

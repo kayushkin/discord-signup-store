@@ -327,6 +327,21 @@ regular. Values stored under the old name — `joined_via = pinned`, actor
 | `pinned_by` / `unpinned_by` | TEXT | Who made them a regular and who stopped it; `regular` when the service made the host one. |
 | `pinned_at` / `unpinned_at` | INTEGER | `unpinned_at` 0 is a current regular. At each rollover every current regular is seated as going (`joined_via = regular`, logged `added` by `regular`). The host is made one only if they never had a row, so stopping stands. |
 
+## `event_messages` — organisers' messages to the people on an event, new 2026-09-26
+
+| column | type | description |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `event_id` | INTEGER | → `events(id)` ON DELETE CASCADE. |
+| `sent_by` | TEXT | `web:<discord id>`. |
+| `via` | TEXT | `forum` (a post in the event's thread, mentioning each person) or `dm`. |
+| `audience` | TEXT | The lists it went to, comma separated: `attending`, `waitlisted`, `maybe`. |
+| `body` | TEXT | What was sent. |
+| `recipients` / `delivered` / `failed` | INTEGER | People it was for; for a DM how many got it and how many did not, for a post 1 or 0. |
+| `status` | TEXT | `sending`, then `sent`, or `failed` when it reached nobody. Every row not `failed` counts toward the limit of 2 in 10 minutes per event, checked in the same transaction that writes the row. |
+| `detail` | TEXT | Who had DMs closed, or what Discord said. |
+| `at` | INTEGER | When. |
+
 ## `event_table_rows` — **dropped 2026-09-02**
 
 A one-message-per-event table from before the consolidated table was paged,
