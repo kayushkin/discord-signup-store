@@ -222,7 +222,7 @@ func (s *Server) handleWebNameSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"members": []any{}})
 		return
 	}
-	matches, err := s.discord.SearchGuildMembers(guildID, query, memberSearchLimit)
+	matches, err := s.findMembers(guildID, query, memberSearchLimit)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Discord member search failed: " + err.Error()})
 		return

@@ -94,6 +94,11 @@ func TestTheNamesPageCanNameSomeoneOnNoList(t *testing.T) {
 		w.Write([]byte(`{"nick":null,"user":{"id":"222","username":"alfie","global_name":"Alfie"}}`))
 	})
 	publishedEvent(t, store, 4, "u-al")
+	// u-al is on a roster, so the search looks them up too; they have left.
+	fake.on(http.MethodGet, "/guilds/g1/members/u-al", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"message":"Unknown Member","code":10007}`))
+	})
 
 	rec := getPage(t, mux, token, "/names/members?guild_id=g1&q=al")
 	var out struct {

@@ -169,3 +169,63 @@ func TestTheEventPageHasTheNameBox(t *testing.T) {
 		}
 	}
 }
+
+// TestTheAddBoxFindsAPersonByAnyPartOfTheirName, or their short name: Discord
+// matches only the start of a name, so "Woah" never finds "Evolved Woah/ Noah"
+// there. The lookup is their name now, and it replaces the one written down.
+func TestTheAddBoxFindsAPersonByAnyPartOfTheirName(t *testing.T) {
+	_, store, fake, mux, token := webTestServer(t)
+	fake.on(http.MethodGet, "/guilds/g1/members/search", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`[]`))
+	})
+	fake.on(http.MethodGet, "/guilds/g1/members/203738211174842369", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"nick":"Evolved Woah/ Noah","user":{"id":"203738211174842369","username":"kookierot"}}`))
+	})
+	ev := publishedEvent(t, store, 8)
+	store.Join(ev.ID, "203738211174842369", "Woah/ John Dragon Ball", JoinedViaButton)
+	store.SetReadableName("203738211174842369", "Noah")
+
+	// "dragon" is only in the name written down; the first search corrects it.
+	for _, q := range []string{"dragon", "woah", "Noah"} {
+		var out struct {
+			Members []memberSuggestion `json:"members"`
+		}
+		if code := getJSON(t, mux, token, eventPath(ev)+"/members?q="+q, &out); code != http.StatusOK {
+			t.Fatalf("q=%s: %d", q, code)
+		}
+		if len(out.Members) != 1 || out.Members[0].DisplayName != "Evolved Woah/ Noah" || out.Members[0].ReadableName != "Noah" {
+			t.Errorf("q=%s found %+v, want Evolved Woah/ Noah, shown as Noah", q, out.Members)
+		}
+	}
+	roster, _ := store.Roster(ev.ID, false)
+	if roster[0].DisplayName != "Evolved Woah/ Noah" {
+		t.Errorf("roster still says %q", roster[0].DisplayName)
+	}
+}
+
+// TestTheSyncRefreshesNamesOnLiveEvents.
+func TestTheSyncRefreshesNamesOnLiveEvents(t *testing.T) {
+	srv, store, fake, _, _ := webTestServer(t)
+	fake.on(http.MethodGet, "/guilds/g1/members/n1", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"nick":"New Name","user":{"id":"n1","username":"n"}}`))
+	})
+	fake.on(http.MethodGet, "/guilds/g1/members/gone", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"message":"Unknown Member","code":10007}`))
+	})
+	ev := publishedEvent(t, store, 8)
+	store.Join(ev.ID, "n1", "Old Name", JoinedViaButton)
+	store.Join(ev.ID, "gone", "Left Person", JoinedViaButton)
+	renamed, err := srv.RefreshDisplayNames("g1")
+	if err != nil || renamed != 1 {
+		t.Fatalf("renamed %d (%v), want 1", renamed, err)
+	}
+	roster, _ := store.Roster(ev.ID, false)
+	names := map[string]string{}
+	for _, sg := range roster {
+		names[sg.DiscordUserID] = sg.DisplayName
+	}
+	if names["n1"] != "New Name" || names["gone"] != "Left Person" {
+		t.Errorf("names = %v", names)
+	}
+}

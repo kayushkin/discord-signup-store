@@ -539,7 +539,7 @@ type memberSuggestion struct {
 }
 
 // handleWebMemberSearch answers the add box as someone types: the server's
-// members whose name starts with what they typed. The picked person travels
+// members found by findMembers — any part of a name, or a short name. The picked person travels
 // back to roster/add as their Discord user id, never as the name — two
 // people in one server can share a display name.
 func (s *Server) handleWebMemberSearch(w http.ResponseWriter, r *http.Request) {
@@ -564,7 +564,7 @@ func (s *Server) handleWebMemberSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no Discord client configured"})
 		return
 	}
-	matches, err := s.discord.SearchGuildMembers(ev.GuildID, query, memberSearchLimit)
+	matches, err := s.findMembers(ev.GuildID, query, memberSearchLimit)
 	if err != nil {
 		log.Printf("[discord-signup] member search in %s for %q: %v", ev.GuildID, query, err)
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Discord member search failed: " + err.Error()})

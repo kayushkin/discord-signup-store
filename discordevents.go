@@ -137,7 +137,10 @@ type SyncResult struct {
 	Cancelled int `json:"cancelled"`
 	// Finished counts events Discord says are over — somebody pressed End on
 	// the native event — that this run settled locally.
-	Finished int      `json:"finished"`
+	Finished int `json:"finished"`
+	// Renamed counts people whose name changed in Discord since it was
+	// written down, and has now been corrected.
+	Renamed  int      `json:"renamed"`
 	Problems []string `json:"problems,omitempty"`
 }
 
@@ -220,6 +223,11 @@ func (s *Server) SyncAllGuilds() (*SyncResult, error) {
 		total.Cancelled += result.Cancelled
 		total.Finished += result.Finished
 		total.Problems = append(total.Problems, result.Problems...)
+		renamed, err := s.RefreshDisplayNames(g.ID)
+		total.Renamed += renamed
+		if err != nil {
+			total.Problems = append(total.Problems, g.Name+": refresh names: "+err.Error())
+		}
 	}
 	return total, nil
 }

@@ -504,6 +504,35 @@ func (c *DiscordClient) GuildMemberDisplayName(guildID, userID string) (string, 
 	return member.displayName(), nil
 }
 
+// errorCodeUnknownMember is Discord's 10007: they are not in that server.
+const errorCodeUnknownMember = 10007
+
+// ErrUnknownMember is a member lookup for someone not in the server — most
+// often someone who has left.
+var ErrUnknownMember = errors.New("not a member of that server")
+
+// GuildMember is one member as a search would show them: their name in the
+// server now, username and picture.
+func (c *DiscordClient) GuildMember(guildID, userID string) (MemberMatch, error) {
+	raw, err := c.do(http.MethodGet, "/guilds/"+escapePathSegment(guildID)+"/members/"+escapePathSegment(userID), nil)
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.Code == errorCodeUnknownMember {
+		return MemberMatch{}, fmt.Errorf("%w: %s", ErrUnknownMember, userID)
+	}
+	if err != nil {
+		return MemberMatch{}, err
+	}
+	var member guildMember
+	if err := json.Unmarshal(raw, &member); err != nil {
+		return MemberMatch{}, fmt.Errorf("decode member: %w", err)
+	}
+	if member.User.ID == "" {
+		return MemberMatch{}, fmt.Errorf("discord returned a member with no user for %s", userID)
+	}
+	return MemberMatch{UserID: member.User.ID, DisplayName: member.displayName(),
+		Username: member.User.Username, AvatarURL: member.avatarURL(guildID)}, nil
+}
+
 // MemberMatch is one person a member search found.
 type MemberMatch struct {
 	UserID      string `json:"user_id"`
