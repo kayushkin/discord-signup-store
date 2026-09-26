@@ -320,7 +320,7 @@ func TestTheHeadlineLeavesOutWhatItDoesNotHave(t *testing.T) {
 // accept on one message, and the page still inside the component cap.
 func TestCreateIsAtTheTopAndTheBottomOfTheManagementTable(t *testing.T) {
 	events := rosterTableEvents(3)
-	reserve := (rowComponents(managementTrailing(""))-1) + 2 + (rowComponents(managementLeading(""))-1) + 2
+	reserve := (rowComponents(managementTrailing("")) - 1) + 2 + (rowComponents(managementLeading("")) - 1) + 2
 	pages := packEventTable(events, nil, managementButtons, nil, reserve)
 	payload := RenderEventTablePage(pages[0], 0, len(pages), managementLeading(""), managementTrailing(""))
 	body := payload["components"].([]any)[0].(map[string]any)["components"].([]any)
@@ -362,7 +362,7 @@ func TestCreateIsAtTheTopAndTheBottomOfTheManagementTable(t *testing.T) {
 // TestAFullManagementPageStaysInsideTheCapWithBothCreateRows.
 func TestAFullManagementPageStaysInsideTheCapWithBothCreateRows(t *testing.T) {
 	events := rosterTableEvents(40)
-	reserve := (rowComponents(managementTrailing(""))-1) + 2 + (rowComponents(managementLeading(""))-1) + 2
+	reserve := (rowComponents(managementTrailing("")) - 1) + 2 + (rowComponents(managementLeading("")) - 1) + 2
 	pages := packEventTable(events, nil, managementButtons, nil, reserve)
 	for i, page := range pages {
 		payload := RenderEventTablePage(page, i, len(pages), managementLeading(""), managementTrailing(""))

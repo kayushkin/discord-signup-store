@@ -26,7 +26,7 @@ func TestARepliedDMIsPutWithItsEvent(t *testing.T) {
 	first := publishedEvent(t, store, 8, "alice")
 	second, _ := store.CreateEvent(Event{GuildID: "g1", ChannelID: "c", Name: "Quiz", Status: StatusOpen, StartsAt: 4102444800})
 	store.Join(second.ID, "alice", "Alice", JoinedViaButton)
-	postForm(t, mux, token, eventPath(first)+"/message", url.Values{"body": {"Bring snacks"}, "via": {"dm"}}) // dm-1
+	postForm(t, mux, token, eventPath(first)+"/message", url.Values{"body": {"Bring snacks"}, "via": {"dm"}})      // dm-1
 	postForm(t, mux, token, eventPath(second)+"/message", url.Values{"body": {"Quiz starts late"}, "via": {"dm"}}) // dm-2
 
 	srv.receiveDMReply("dm-chan", "r1", "alice", "I'll bring crisps", "dm-1", 0) // Reply on the first

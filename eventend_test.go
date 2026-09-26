@@ -70,7 +70,7 @@ func TestTheManagementTableCountsTheEndButton(t *testing.T) {
 	for i := range ahead {
 		ahead[i].StartsAt = time.Now().Add(time.Hour).Unix()
 	}
-	reserve := (rowComponents(managementTrailing(""))-1) + 2
+	reserve := (rowComponents(managementTrailing("")) - 1) + 2
 	underwayPages := packEventTable(underway, nil, managementButtons, nil, reserve)
 	aheadPages := packEventTable(ahead, nil, managementButtons, nil, reserve)
 	if len(underwayPages[0]) >= len(aheadPages[0]) {
