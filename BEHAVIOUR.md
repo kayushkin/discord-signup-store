@@ -163,7 +163,7 @@ because Discord has none to give.
 |---|---|---|
 | **Forum post** | everyone | The card again, plus discussion, in a channel that lists every event. |
 | **Event table** (`#events`) | everyone | Every upcoming event: its thread, its place, the live count and who is going, with Join / Maybe / Leave / Details. |
-| **Management table** (`#event-management`) | organisers | The same events with **Edit**, **Repeat**, **Close/Reopen signups** (it says *waitlist* while the event is full), **End** (once it has started) and **Cancel** on each row, and **Create an event** on the end, with **Advanced Settings** under it linking the web pages; a 🌐 → by each event's name opens its page. Where anything about an event is changed. |
+| **Management table** (`#event-management`) | organisers | The same events with **Edit**, **Repeat**, **Close/Reopen signups** (it says *waitlist* while the event is full), **End** (once it has started) and **Cancel** on each row, and **Create an event** on the end, with **Advanced Settings** under it linking the web pages; an **Advanced →** link by each event's name opens its page. Where anything about an event is changed. |
 | **Details** | just you | A private reply: the description, when and where, the host, and the full roster by name in sign-up order, read-only, with Join / Maybe / Leave under it while signups are open. A message rather than a modal: a modal's only read-only text was refused by Discord every time, and its text box opened a keyboard. Pings nobody. |
 | **My events** | just you | The events *you* are on, with Join / Leave in place. |
 | **Discord's own event** | everyone | Discord's native event, linked to a roster here. Its title carries the count. |

@@ -473,8 +473,8 @@ func (s *Server) RefreshManagementTable(guildID string) error {
 	})
 }
 
-// webRosterLink goes after an event's name on the management table: a globe
-// and a small link to its page on the web, where the roster, invites, held places and
+// webRosterLink goes after an event's name on the management table: a short
+// link, "Advanced →", to its page on the web, where the roster, invites, held places and
 // regulars are. In the text rather than a button, because the row already has
 // the five buttons an action row holds. None when the web pages are off.
 func (s *Server) webRosterLink(ev *Event) string {
@@ -482,10 +482,11 @@ func (s *Server) webRosterLink(ev *Event) string {
 	if origin == "" {
 		return ""
 	}
-	// The globe sits outside the brackets and the link is a plain arrow:
-	// Discord does not make a masked link of text holding an emoji, and ↗
-	// counts as one, so "[🌐↗](…)" showed as bare text.
-	return fmt.Sprintf("🌐 [→](%s/events/%d)", origin, ev.ID)
+	// Words and a plain arrow, no emoji: Discord does not make a masked link
+	// of text holding one — "[🌐↗](…)" showed as bare text — and a globe
+	// outside the brackets read as clickable when it was not. "Advanced"
+	// matches the Advanced Settings button under Create an event.
+	return fmt.Sprintf("[Advanced →](%s/events/%d)", origin, ev.ID)
 }
 
 // webOrigin is where the web pages are served, taken from the OAuth
