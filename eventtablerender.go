@@ -329,14 +329,26 @@ func closeToggleSubject(ev *Event) string {
 	return "signups"
 }
 
+// repeatButton opens the Repeat form. On an event that already repeats it
+// says how — "Repeats weekly" — so the row reads the schedule at a glance
+// and the button is where it is changed or stopped.
+func repeatButton(ev *Event) map[string]any {
+	button := map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
+		"label": "Repeat", "custom_id": RepeatCustomID(ev.ID)}
+	if ev.RecurrenceRule != "" {
+		button["label"] = "Repeats " + describeRepeat(ev.RecurrenceRule)
+		button["emoji"] = map[string]any{"name": "🔁"}
+	}
+	return button
+}
+
 // managementButtons is the row on the management table: what an organiser
 // does to an event, and nothing a member does.
 func managementButtons(ev *Event) []any {
 	buttons := []any{
 		map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
 			"label": "Edit", "custom_id": EditCustomID(ev.ID)},
-		map[string]any{"type": componentTypeButton, "style": buttonStyleSecondary,
-			"label": "Repeat", "custom_id": RepeatCustomID(ev.ID)},
+		repeatButton(ev),
 	}
 	// One toggle whose label says which way it goes. Closed means nobody new
 	// can join while everyone on it stays; it is not cancelled. On a full
@@ -432,7 +444,7 @@ func (s *Server) RefreshManagementTable(guildID string) error {
 }
 
 // webRosterLink is the management table's last line under an event: a link
-// to its page on the web, where the roster, invites, holds and pins are. A
+// to its page on the web, where the roster, invites, holds and regulars are. A
 // link in the text rather than a button, because the row already has the
 // five buttons an action row holds. None when the web pages are off.
 func (s *Server) webRosterLink(ev *Event) string {

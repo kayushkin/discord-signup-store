@@ -191,7 +191,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/invite", s.handleWebInvite)
 	mux.HandleFunc("POST /events/{id}/waitlist/move", s.handleWebWaitlistMove)
 	mux.HandleFunc("POST /events/{id}/holds/release", s.handleWebReleaseHold)
-	mux.HandleFunc("POST /events/{id}/pins", s.handleWebPin)
+	mux.HandleFunc("POST /events/{id}/regulars", s.handleWebRegular)
 	mux.HandleFunc("POST /events/{id}/signups", s.handleWebToggleSignups)
 	mux.HandleFunc("POST /events/{id}/cancel", s.handleWebCancelEvent)
 	mux.HandleFunc("GET /events/{id}/members", s.handleWebMemberSearch)

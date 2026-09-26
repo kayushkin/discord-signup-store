@@ -66,11 +66,11 @@ and the event has a limit.
 it's full*: nothing is kept and nothing counts against the limit, but their
 Join takes them past it instead of onto the waitlist.
 
-**Pinned people are on every date.** On a repeating event an organiser can
-pin someone — from their row in Going, or with *Pin to every date* when adding
-them. When the date rolls over and the roster clears, everyone pinned is put
-back on as going, past the limit if it comes to that. The host is pinned the
-first time the event repeats; an unpin stands, and they are not pinned again.
+**Regulars are on every date.** On a repeating event an organiser can make
+someone a regular — from their row in Going, or with *Make regular* when adding
+them. When the date rolls over and the roster clears, every regular is put
+back on as going, past the limit if it comes to that. The host becomes a
+regular the first time the event repeats; if they stop being one, that stands.
 
 **Add now is not an invite.** Add now puts someone on the list the organiser
 picks — going even past the limit, maybe, or the waitlist while the event is

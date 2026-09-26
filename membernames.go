@@ -16,7 +16,7 @@ import (
 // and listing a server's members to search them here needs the privileged
 // GUILD_MEMBERS intent, which this application does not have. So a search
 // asks Discord, and also looks through everyone this service has seen in the
-// server — on a roster, invited or pinned — matching anywhere in their name
+// server — on a roster, invited or a regular — matching anywhere in their name
 // or their short name. Those it finds only here are looked up in Discord, so
 // they show as they are now, and anyone who has left drops out.
 //
@@ -31,7 +31,7 @@ type knownPerson struct {
 	ReadableName string
 }
 
-// KnownPeopleInGuild is everyone on a roster, invited or pinned on any event
+// KnownPeopleInGuild is everyone on a roster, invited or a regular on any event
 // in a server, each with the most recent name recorded for them and their
 // short name.
 func (s *Store) KnownPeopleInGuild(guildID string) ([]knownPerson, error) {
@@ -70,7 +70,7 @@ func (s *Store) KnownPeopleInGuild(guildID string) ([]knownPerson, error) {
 	return out, rows.Err()
 }
 
-// PeopleOnLiveEvents is everyone on a roster, invited or pinned on an event
+// PeopleOnLiveEvents is everyone on a roster, invited or a regular on an event
 // in a server that is not over: whose names the pages and tables show.
 func (s *Store) PeopleOnLiveEvents(guildID string) ([]string, error) {
 	rows, err := s.db.Query(`
@@ -101,7 +101,7 @@ func (s *Store) PeopleOnLiveEvents(guildID string) ([]string, error) {
 }
 
 // RenameInGuild records someone's current name in a server on every row that
-// carries it — their signups, invites and pins there — and reports how many
+// carries it — their signups, invites and regular rows there — and reports how many
 // changed. Display only: nothing joins on a name.
 func (s *Store) RenameInGuild(guildID, userID, name string) (int64, error) {
 	if name == "" {

@@ -217,16 +217,16 @@ func holdOutcomeText(inv EventInvite) string {
 }
 
 // buildEventLog merges an event's three histories, newest first.
-func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventInvite, pins []EventPin, names eventLogNames) []eventLogEntry {
-	out := make([]eventLogEntry, 0, len(signups)+len(edits)+len(invites)+len(pins))
+func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventInvite, regulars []EventRegular, names eventLogNames) []eventLogEntry {
+	out := make([]eventLogEntry, 0, len(signups)+len(edits)+len(invites)+len(regulars))
 	base := len(signups) + len(edits) + 2*len(invites)
-	for i, p := range pins {
+	for i, p := range regulars {
 		subject := personHTML(p.ReadableName, p.DisplayName, p.DiscordUserID)
-		out = append(out, eventLogEntry{At: p.PinnedAt, order: base + i, Subject: subject,
-			What: "pinned to every date", By: names.actor(p.PinnedBy)})
-		if p.UnpinnedAt > 0 {
-			out = append(out, eventLogEntry{At: p.UnpinnedAt, order: base + len(pins) + i, Subject: subject,
-				What: "unpinned", By: names.actor(p.UnpinnedBy)})
+		out = append(out, eventLogEntry{At: p.AddedAt, order: base + i, Subject: subject,
+			What: "made a regular: on every date", By: names.actor(p.AddedBy)})
+		if p.EndedAt > 0 {
+			out = append(out, eventLogEntry{At: p.EndedAt, order: base + len(regulars) + i, Subject: subject,
+				What: "no longer a regular", By: names.actor(p.EndedBy)})
 		}
 	}
 	for i, u := range signups {

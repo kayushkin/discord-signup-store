@@ -311,16 +311,21 @@ joined when the page is drawn.
 | `hold_outcome` | TEXT | `joined`, `declined` (Maybe or Can't go), `released` (an organiser, or a second invite replacing the first), `undelivered` (the DM bounced) or `expired` (the date rolled over). |
 | `hold_ended_by` | TEXT | The actor that ended it, as elsewhere; `''` when the service did. |
 
-## `event_pins` — people on every date of a repeating event, new 2026-09-25
+## `event_pins` — regulars: people on every date of a repeating event, new 2026-09-25
+
+Named from when regulars were called pins; the table and its `pinned_*` /
+`unpinned_*` columns kept the name, and mean became and stopped being a
+regular. Values stored under the old name — `joined_via = pinned`, actor
+`pin` — are rewritten to `regular` at start.
 
 | column | type | description |
 |---|---|---|
 | `id` | INTEGER PK | |
 | `event_id` | INTEGER | → `events(id)` ON DELETE CASCADE. |
-| `discord_user_id` | TEXT | Who. At most one live pin per person per event. |
-| `display_name` | TEXT | Their name when pinned. Display only. |
-| `pinned_by` / `unpinned_by` | TEXT | Actors, as elsewhere; `pin` when the service pinned the host. |
-| `pinned_at` / `unpinned_at` | INTEGER | `unpinned_at` 0 is a live pin. At each rollover every live pin is seated as going (`joined_via = pinned`, logged `added` by `pin`). The host is pinned only if they never had a row, so an unpin stands. |
+| `discord_user_id` | TEXT | Who. At most one current row per person per event. |
+| `display_name` | TEXT | Their name when made a regular, kept current by the sync. Display only. |
+| `pinned_by` / `unpinned_by` | TEXT | Who made them a regular and who stopped it; `regular` when the service made the host one. |
+| `pinned_at` / `unpinned_at` | INTEGER | `unpinned_at` 0 is a current regular. At each rollover every current regular is seated as going (`joined_via = regular`, logged `added` by `regular`). The host is made one only if they never had a row, so stopping stands. |
 
 ## `event_table_rows` — **dropped 2026-09-02**
 

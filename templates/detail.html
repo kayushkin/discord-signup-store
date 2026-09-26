@@ -2,6 +2,8 @@
 
 {{define "pin"}}<svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true"><path d="M10 18s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="10" cy="8" r="2.2" fill="currentColor"/></svg>{{end}}
 
+{{define "regular"}}<svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true"><path d="M15.5 8A6 6 0 0 0 4.6 6.2M4.5 12a6 6 0 0 0 10.9 1.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 2.8v3.6h3.6M16 17.2v-3.6h-3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
+
 {{define "locationinput"}}
 <div class="location-input" data-location>
   <div class="location-row">
@@ -160,15 +162,15 @@
       <li class="person">
         <span class="place">{{add $i 1}}</span>
         <span class="person-main">
-          <span class="who">{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}{{if index $.PinnedIDs $s.DiscordUserID}} <span class="pin-mark" title="Pinned: a place on every date">{{template "pin"}}</span>{{end}}</span>
+          <span class="who">{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}{{if index $.RegularIDs $s.DiscordUserID}} <span class="regular-mark" title="A regular: a place on every date">{{template "regular"}}</span>{{end}}</span>
           <span class="when">joined {{shortTime $s.SignedUpAt}}</span></span>
         {{if $canManage}}<span class="row-actions">
-          {{if $ev.RecurrenceRule}}{{$pinned := index $.PinnedIDs $s.DiscordUserID}}
-          <form method="post" action="/events/{{$ev.ID}}/pins" data-async>
+          {{if $ev.RecurrenceRule}}{{$regular := index $.RegularIDs $s.DiscordUserID}}
+          <form method="post" action="/events/{{$ev.ID}}/regulars" data-async>
             <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
-            <input type="hidden" name="pinned" value="{{if $pinned}}false{{else}}true{{end}}">
-            <button class="btn-sm pin-toggle{{if $pinned}} is-on{{end}}" aria-pressed="{{$pinned}}"
-                    title="{{if $pinned}}Pinned: a place on every date. Press to unpin.{{else}}Pin: give them a place on every date{{end}}">{{template "pin"}} {{if $pinned}}Pinned{{else}}Pin{{end}}</button></form>
+            <input type="hidden" name="regular" value="{{if $regular}}false{{else}}true{{end}}">
+            <button class="btn-sm regular-toggle{{if $regular}} is-on{{end}}" aria-pressed="{{$regular}}"
+                    title="{{if $regular}}A regular: a place on every date. Press to stop.{{else}}Make them a regular: a place on every date{{end}}">{{template "regular"}} {{if $regular}}Regular{{else}}Make regular{{end}}</button></form>
           {{end}}
           <form method="post" action="/events/{{$ev.ID}}/roster/remove" data-async
                 data-confirm="Take {{or $s.ReadableName $s.DisplayName}} off?{{if $.PlaceFreesOnLeave}} Their place goes to whoever is next on the waitlist, who will be messaged.{{else if and $ev.Capacity (gt $ev.AttendingCount $ev.Capacity)}} The event is over its limit, so nobody moves up.{{end}}">
@@ -179,9 +181,9 @@
       {{end}}
     </ol>
 
-    {{if .PinnedAway}}
-    <p class="pinned-away">{{template "pin"}} Pinned but not going this date:
-      {{range $i, $p := .PinnedAway}}{{if $i}}, {{end}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}.
+    {{if .RegularsAway}}
+    <p class="regulars-away">{{template "regular"}} Regulars not going this date:
+      {{range $i, $p := .RegularsAway}}{{if $i}}, {{end}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}.
       <span class="muted">They are put back on when the next date comes round.</span></p>
     {{end}}
 
@@ -309,10 +311,10 @@
             <p class="choice-what"><strong>You decide.</strong> They go straight onto a list and get a DM saying so. Going ignores the limit.</p>
             {{if $ev.RecurrenceRule}}
             <label class="tile force-tile" data-tile>
-              <input type="checkbox" name="pin" value="on" data-pin>
+              <input type="checkbox" name="regular" value="on" data-regular>
               <span class="tile-box" aria-hidden="true"></span>
-              <span class="tile-text"><strong>Pin to every date</strong>
-                <span>Going now, and put back on each time the event repeats.</span></span>
+              <span class="tile-text"><strong>Make regular</strong>
+                <span>A place on every date: going now, and put back on each time the event repeats.</span></span>
             </label>
             {{end}}
             <p class="choice-note" data-force-note hidden></p>

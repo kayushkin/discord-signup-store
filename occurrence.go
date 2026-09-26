@@ -66,7 +66,7 @@ func (s *Store) FinishedRecurringOccurrences() ([]Event, error) {
 //
 // Returns the people withdrawn, so the caller can settle their roles and
 // reactions through the same path a Leave uses.
-func (s *Store) RollOverOccurrence(eventID, nextStart, nextEnd int64) (withdrawnFromLastDate, seatedByPin []Signup, err error) {
+func (s *Store) RollOverOccurrence(eventID, nextStart, nextEnd int64) (withdrawnFromLastDate, seatedAsRegulars []Signup, err error) {
 	if nextStart <= 0 {
 		return nil, nil, fmt.Errorf("%w: next occurrence needs a start", ErrInvalidEvent)
 	}
@@ -130,11 +130,12 @@ func (s *Store) RollOverOccurrence(eventID, nextStart, nextEnd int64) (withdrawn
 		sg.StateChangedAt = ts
 	}
 
-	// Then the pinned are put back on for the new date, the host first time.
-	if err := pinHostTx(tx, eventID, ts); err != nil {
+	// Then the regulars are put back on for the new date; the host becomes
+	// one the first time.
+	if err := makeHostRegularTx(tx, eventID, ts); err != nil {
 		return nil, nil, err
 	}
-	seated, err := seatPinnedTx(tx, eventID, ts)
+	seated, err := seatRegularsTx(tx, eventID, ts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -190,7 +191,7 @@ func (s *Server) rollOverOccurrence(ev *Event, nextStart, nextEnd int64) {
 		log.Printf("[discord-signup] roll event %d to its next occurrence: %v", ev.ID, err)
 		return
 	}
-	// Roles follow where each person ends up: the pinned are going again.
+	// Roles follow where each person ends up: the regulars are going again.
 	final := map[string]string{}
 	for _, sg := range withdrawn {
 		final[sg.DiscordUserID] = StateWithdrawn
@@ -202,7 +203,7 @@ func (s *Server) rollOverOccurrence(ev *Event, nextStart, nextEnd int64) {
 	for userID, state := range final {
 		changes = append(changes, stateChange{UserID: userID, State: state})
 	}
-	log.Printf("[discord-signup] event %d (%q) rolled to its next occurrence at %d; %d withdrawn, %d pinned back on",
+	log.Printf("[discord-signup] event %d (%q) rolled to its next occurrence at %d; %d withdrawn, %d regulars back on",
 		ev.ID, ev.Name, nextStart, len(withdrawn), len(seated))
 	if s.discord != nil {
 		s.syncAfterChange(ev.ID, changes)

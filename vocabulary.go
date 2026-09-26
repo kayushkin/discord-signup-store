@@ -171,9 +171,9 @@ const (
 	// JoinedViaReaction is the ✅ on a forum post — clickable from the forum's
 	// list view without opening the post, which is the point of it.
 	JoinedViaReaction = "reaction"
-	// JoinedViaPinned is someone pinned to a recurring event, put back on as
+	// JoinedViaRegular is a regular at a recurring event, put back on as
 	// going when its date rolls over.
-	JoinedViaPinned = "pinned"
+	JoinedViaRegular = "regular"
 )
 
 var validJoinedVia = map[string]bool{
@@ -182,7 +182,7 @@ var validJoinedVia = map[string]bool{
 	JoinedViaOperator:   true,
 	JoinedViaOrganiser:  true,
 	JoinedViaReaction:   true,
-	JoinedViaPinned:     true,
+	JoinedViaRegular:    true,
 }
 
 // ValidJoinedVia returns the accepted arrival routes, sorted.

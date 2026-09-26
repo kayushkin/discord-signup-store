@@ -73,10 +73,10 @@ type pageData struct {
 	Form eventFormValues
 	// HoldOutcomeWords say how a held place ended.
 	HoldOutcomeWords map[string]string
-	// PinnedIDs are the people pinned to a repeating event, and PinnedAway
-	// those of them not going on the current date.
-	PinnedIDs  map[string]bool
-	PinnedAway []EventPin
+	// RegularIDs are a repeating event's regulars, and RegularsAway those of
+	// them not going on the current date.
+	RegularIDs   map[string]bool
+	RegularsAway []EventRegular
 	// InvitedIDs are the people invited who have not answered, space
 	// separated, so a person picked in Add someone can say so.
 	InvitedIDs string

@@ -234,10 +234,10 @@ label.force-tile:has(input:checked){border-color:var(--warn);background:#e8a33d1
 label.force-tile:has(input:checked) .tile-box{background:var(--warn);border-color:var(--warn)}
 .choice-what{flex:none!important}
 .choice-foot{margin-top:auto;padding-top:4px}
-.pin-mark{color:#9aa4ff;vertical-align:-1px}
-.btn-sm.pin-toggle{display:inline-flex;align-items:center;gap:4px}
-.btn-sm.pin-toggle.is-on{color:#9aa4ff;border-color:#5865f266;background:#5865f214}
-.pinned-away{font-size:13px;color:var(--ink);margin:10px 0 0;display:flex;gap:6px;flex-wrap:wrap;align-items:baseline}
+.regular-mark{color:#9aa4ff;vertical-align:-1px}
+.btn-sm.regular-toggle{display:inline-flex;align-items:center;gap:4px}
+.btn-sm.regular-toggle.is-on{color:#9aa4ff;border-color:#5865f266;background:#5865f214}
+.regulars-away{font-size:13px;color:var(--ink);margin:10px 0 0;display:flex;gap:6px;flex-wrap:wrap;align-items:baseline}
 .pill.held{color:#9aa4ff;border-color:#5865f266}
 .control.is-off h4{opacity:.6}
 .map-link{display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:13px}
@@ -610,9 +610,11 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     var choice = submitter && submitter.getAttribute("data-choice");
     if (ask && choice && choice !== "invite" && form.hasAttribute("data-standings")) {
       var standings = JSON.parse(form.getAttribute("data-standings"));
-      var pinBox = form.querySelector("input[data-pin]");
-      if (pinBox && pinBox.checked) {
-        ask = "Pin " + who + " to every date, and put them down as going now? They are not asked first; each gets a DM saying so.";
+      var regularBox = form.querySelector("input[data-regular]");
+      if (regularBox && regularBox.checked) {
+        ask = "Make " + who + (standings.length === 1 ? " a regular" : " regulars") +
+          ", with a place on every date, and put " + (standings.length === 1 ? "them" : "them all") +
+          " down as going now? They are not asked first; each gets a DM saying so.";
       }
       // Only someone on a different list is moved; someone already on the
       // chosen one stays where they are.
@@ -723,21 +725,21 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
         joinNames(answered.map(function (p) { return p.name; })) + (answered.length === 1 ? " is" : " are") +
         " already on the event" + (askable ? ", so the invite skips " + (answered.length === 1 ? "them." : "them.") : ": there is nobody to ask."));
 
-      // Add yourself: a list that would change nobody is off; pinning goes
+      // Add yourself: a list that would change nobody is off; a regular goes
       // with Going only; someone already on the event is moved.
-      var pin = form.querySelector("input[data-pin]");
-      var pinning = !!(pin && pin.checked);
+      var regularBox = form.querySelector("input[data-regular]");
+      var makingRegular = !!(regularBox && regularBox.checked);
       form.querySelectorAll(".seg[data-choice]").forEach(function (b) {
         var choice = b.getAttribute("data-choice");
         var nobody = n > 0 && people.every(function (p) { return p.standing === choice; });
-        b.disabled = b.hasAttribute("data-never") || (nobody && !(pinning && choice === "attending")) ||
-          (pinning && choice !== "attending");
+        b.disabled = b.hasAttribute("data-never") || (nobody && !(makingRegular && choice === "attending")) ||
+          (makingRegular && choice !== "attending");
       });
       var on = people.filter(function (p) { return p.standing && p.standing !== "withdrawn"; });
-      var forceNote = pinning ? "Pinning puts them on as going, so only Going applies." : "";
+      var forceNote = makingRegular ? "A regular is put on as going, so only Going applies." : "";
       form.setAttribute("data-standings", JSON.stringify(people.map(function (p) { return { name: p.name, standing: p.standing }; })));
       if (on.length) {
-        if (!pinning) {
+        if (!makingRegular) {
           forceNote = on.map(function (p) { return p.name + " is " + standing[p.standing]; }).join("; ") +
             ". Picking another list moves them.";
         }

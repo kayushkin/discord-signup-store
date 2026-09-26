@@ -283,9 +283,13 @@ func Open(dataDir string) (*Store, error) {
 		return nil, err
 	}
 	store := &Store{db: db, dataDir: dataDir}
-	// Every boot, and a no-op after the first for each event: a host is
-	// pinned only if they never had a pin there, so an unpin stands.
-	if err := store.pinHostsOfRecurringEvents(); err != nil {
+	if err := renameStoredPinValues(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	// Every boot, and a no-op after the first for each event: a host is made
+	// a regular only if they never were one there, so stopping stands.
+	if err := store.makeHostsOfRecurringEventsRegular(); err != nil {
 		db.Close()
 		return nil, err
 	}

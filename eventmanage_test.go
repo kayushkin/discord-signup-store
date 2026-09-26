@@ -161,3 +161,17 @@ func TestOnlyAnEditorCanCloseOrCancel(t *testing.T) {
 		t.Error("a member without Manage Events cancelled the event")
 	}
 }
+
+// TestTheRepeatButtonSaysHowAnEventRepeats, and is plain Repeat otherwise.
+func TestTheRepeatButtonSaysHowAnEventRepeats(t *testing.T) {
+	for rule, want := range map[string]string{
+		"":                       "Repeat",
+		"FREQ=WEEKLY":            "Repeats weekly",
+		"FREQ=WEEKLY;INTERVAL=2": "Repeats every 2 weeks",
+		"FREQ=MONTHLY":           "Repeats monthly",
+	} {
+		if got := repeatButton(&Event{ID: 1, RecurrenceRule: rule})["label"]; got != want {
+			t.Errorf("rule %q: label %q, want %q", rule, got, want)
+		}
+	}
+}

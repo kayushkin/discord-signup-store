@@ -124,10 +124,10 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		log.Printf("[discord-signup] event updates %d: %v", ev.ID, err)
 		problems = append(problems, "Could not read the edit history: "+err.Error())
 	}
-	pins, err := s.store.Pins(ev.ID)
+	regulars, err := s.store.Regulars(ev.ID)
 	if err != nil {
-		log.Printf("[discord-signup] pins %d: %v", ev.ID, err)
-		problems = append(problems, "Could not read the pins: "+err.Error())
+		log.Printf("[discord-signup] regulars %d: %v", ev.ID, err)
+		problems = append(problems, "Could not read the regulars: "+err.Error())
 	}
 	invites, err := s.store.Invites(ev.ID)
 	if err != nil {
@@ -153,8 +153,8 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	for _, inv := range invites {
 		actors = append(actors, inv.InvitedBy, inv.HoldEndedBy)
 	}
-	for _, p := range pins {
-		actors = append(actors, p.PinnedBy, p.UnpinnedBy)
+	for _, p := range regulars {
+		actors = append(actors, p.AddedBy, p.EndedBy)
 	}
 	names := eventLogNames{actors: s.historyActorNames(ev.GuildID, actors), people: map[string]actorName{}, roles: map[string]string{}}
 	for actor, name := range names.actors {
@@ -176,7 +176,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 
 	data := pageData{
 		Title: ev.Name, Session: session, Event: ev, Roster: roster, Invites: invites,
-		EventLog:          buildEventLog(signupUpdates, edits, invites, pins, names),
+		EventLog:          buildEventLog(signupUpdates, edits, invites, regulars, names),
 		CanManage:         canManage,
 		EventUnderway:     eventIsUnderway(ev),
 		EventFull:         eventIsFull(ev),
@@ -194,20 +194,20 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		}
 	}
 	data.InvitedIDs = strings.Join(unanswered, " ")
-	data.PinnedIDs = map[string]bool{}
+	data.RegularIDs = map[string]bool{}
 	going := map[string]bool{}
 	for _, sg := range roster {
 		if sg.State == StateAttending {
 			going[sg.DiscordUserID] = true
 		}
 	}
-	for _, p := range pins {
-		if p.UnpinnedAt != 0 {
+	for _, p := range regulars {
+		if p.EndedAt != 0 {
 			continue
 		}
-		data.PinnedIDs[p.DiscordUserID] = true
+		data.RegularIDs[p.DiscordUserID] = true
 		if !going[p.DiscordUserID] {
-			data.PinnedAway = append(data.PinnedAway, p)
+			data.RegularsAway = append(data.RegularsAway, p)
 		}
 	}
 	for _, sg := range roster {
@@ -627,16 +627,16 @@ func (s *Server) handleWebRosterAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	list := r.FormValue("list")
-	// Pinning is going on every date, so it goes with Going alone.
-	pin := r.FormValue("pin") == "on"
-	if pin && (list != StateAttending || ev.RecurrenceRule == "") {
-		s.redirectWithNotice(w, r, ev.ID, "Nobody was added: pinning is for Going, on a repeating event.")
+	// A regular is going on every date, so it goes with Going alone.
+	regular := r.FormValue("regular") == "on"
+	if regular && (list != StateAttending || ev.RecurrenceRule == "") {
+		s.redirectWithNotice(w, r, ev.ID, "Nobody was added: a regular is added as going, on a repeating event.")
 		return
 	}
 	lines := make([]string, 0, len(userIDs)+1)
 	for _, userID := range userIDs {
-		if pin {
-			lines = append(lines, s.pinPerson(ev, session, userID))
+		if regular {
+			lines = append(lines, s.makePersonRegular(ev, session, userID))
 			continue
 		}
 		lines = append(lines, s.placePerson(ev, session, userID, list))
