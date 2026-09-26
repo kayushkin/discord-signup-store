@@ -273,7 +273,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	   Settings under Create an event
 //	34 that link is "🌐 [→](…)": Discord will not link text holding an emoji
 //	35 that link is "[Advanced →](…)", all of it clickable
-const publishFormatVersion = 35
+//	36 that link is "[Settings →](…)"
+const publishFormatVersion = 36
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //
