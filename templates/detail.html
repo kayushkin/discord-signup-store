@@ -46,7 +46,7 @@
     <div class="pills">
       <span class="pill {{$ev.Status}}">{{if eq $ev.Status "open"}}signups open{{else if eq $ev.Status "closed"}}signups closed{{else}}{{$ev.Status}}{{end}}</span>
       {{if .EventFull}}<span class="pill closed">full</span>{{end}}
-      {{if $ev.WaitlistDisabled}}<span class="pill">no waitlist</span>{{end}}
+      {{if and $ev.Capacity $ev.WaitlistDisabled}}<span class="pill">no waitlist</span>{{end}}
       {{if $ev.RecurrenceRule}}<span class="pill">🔁 {{repeats $ev.RecurrenceRule}}</span>{{end}}
       {{if eq $ev.Origin "discord"}}<span class="pill discord">made in Discord</span>{{end}}
     </div>
@@ -454,8 +454,10 @@
       </div>
       <p class="hint">{{if $open}}People can join{{if eq (toggleSubject $ev) "waitlist"}}; it is full, so they join the waitlist{{end}}.{{else}}Nobody new can join. Everyone already on it stays.{{end}}</p>
     </div>
-    {{/* Closed signups let nobody in, the waitlist included, so the choice
-         of what a full event does has nothing to act on until they open. */}}
+    {{/* An event with no limit never fills, so it has no choice to make
+         about being full. Closed signups let nobody in, the waitlist
+         included, so the choice has nothing to act on until they open. */}}
+    {{if $ev.Capacity}}
     <div class="control{{if not $open}} is-off{{end}}">
       <h4 id="full-label">When it is full</h4>
       {{if not $open}}<p class="hint">Signups are closed, so nobody joins the waitlist either. Open signups to choose.</p>{{else}}
@@ -470,6 +472,7 @@
       <p class="hint">{{if $ev.WaitlistDisabled}}New signups are refused. A place that opens goes to the next person to press Join.{{else}}New signups line up and move up in order when a place opens.{{end}}</p>
       {{end}}
     </div>
+    {{end}}
     <div class="side-actions">
       {{if .EventUnderway}}
       <form method="post" action="/events/{{$ev.ID}}/end" data-async
