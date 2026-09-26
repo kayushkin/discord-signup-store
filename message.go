@@ -23,6 +23,8 @@ const (
 
 	buttonStylePrimary   = 1
 	buttonStyleSecondary = 2
+	// buttonStyleLink opens a URL instead of sending an interaction.
+	buttonStyleLink = 5
 )
 
 // discordMessageContentLimit is Discord's hard cap on a message's content.

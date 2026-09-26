@@ -175,3 +175,22 @@ func TestTheRepeatButtonSaysHowAnEventRepeats(t *testing.T) {
 		}
 	}
 }
+
+// TestTheManagementTableLinksTheWebPages: a 🌐↗ by each event's name to its
+// page, and Advanced Settings under Create an event.
+func TestTheManagementTableLinksTheWebPages(t *testing.T) {
+	ev := &Event{ID: 7, Name: "Board games", Status: StatusOpen, StartsAt: 4102444800}
+	link := func(*Event) string { return "[🌐↗](https://example.test/events/7)" }
+	block := buildEventTableBlock(ev, nil, true, managementButtons, link)
+	if first := strings.SplitN(block.text, "\n", 2)[0]; !strings.Contains(first, "Board games") || !strings.Contains(first, "[🌐↗](https://example.test/events/7)") {
+		t.Errorf("first line %q, want the name with the link beside it", first)
+	}
+	rows := managementTrailing("https://example.test")
+	if len(rows) != 2 || rows[1][0].(map[string]any)["label"] != "Advanced Settings" ||
+		rows[1][0].(map[string]any)["url"] != "https://example.test/" {
+		t.Errorf("trailing rows = %v, want Create, then Advanced Settings linking the web pages", rows)
+	}
+	if len(managementTrailing("")) != 1 {
+		t.Error("Advanced Settings is offered with the web pages off")
+	}
+}

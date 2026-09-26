@@ -432,11 +432,6 @@
     {{if $ev.DiscordScheduledEventID}}
     <p><a href="{{.DiscordEventURL}}">Open the Discord event ↗</a></p>
     <p class="small"><strong>{{$ev.DiscordInterestedCount}}</strong> <span class="muted">marked Interested there</span></p>
-    <details class="why small">
-      <summary>Why that is not the roster</summary>
-      <p class="muted">Discord counts people who asked to be notified, and it cannot be capped or have
-        anyone removed. The lists on this page are who has a place.</p>
-    </details>
     {{else}}
     <p class="small muted">Not in Discord's own event list yet.</p>
     {{if $canManage}}

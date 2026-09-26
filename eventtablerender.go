@@ -154,14 +154,14 @@ type eventTableBlock struct {
 // because every row is about the same size; here a row carrying twenty names is
 // many times one carrying none, so a fixed count would either waste most of a
 // message or overflow it.
-func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*Event) []any, footer func(*Event) string) eventTableBlock {
+func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*Event) []any, nameLink func(*Event) string) eventTableBlock {
 	title, _, _ := eventHeadlineParts(ev)
-	text := eventTableText(ev, roster, title, eventTableCharBudget, textDisplayLimit)
-	if footer != nil {
-		if line := footer(ev); line != "" {
-			text += "\n" + line
+	if nameLink != nil {
+		if link := nameLink(ev); link != "" {
+			title += " " + link
 		}
 	}
+	text := eventTableText(ev, roster, title, eventTableCharBudget, textDisplayLimit)
 
 	// One text block, one action row, its buttons, and the separator that
 	// divides this block from the one above it.
@@ -218,7 +218,7 @@ func eventTableText(ev *Event, roster []Signup, title string, budget, limit int)
 //
 // Returns at least one page, so an empty guild still gets a message saying
 // there is nothing on rather than leaving whatever was there last week.
-func packEventTable(events []Event, rosters map[int64][]Signup, buttons func(*Event) []any, footer func(*Event) string, reserve int) [][]eventTableBlock {
+func packEventTable(events []Event, rosters map[int64][]Signup, buttons func(*Event) []any, nameLink func(*Event) string, reserve int) [][]eventTableBlock {
 	pages := [][]eventTableBlock{}
 	var page []eventTableBlock
 	// The container itself is a component.
@@ -226,7 +226,7 @@ func packEventTable(events []Event, rosters map[int64][]Signup, buttons func(*Ev
 
 	for i := range events {
 		ev := &events[i]
-		block := buildEventTableBlock(ev, rosters[ev.ID], len(page) == 0, buttons, footer)
+		block := buildEventTableBlock(ev, rosters[ev.ID], len(page) == 0, buttons, nameLink)
 		// reserve holds room for a trailing action row on whichever page turns
 		// out to be last; nobody knows which that is while packing, so every
 		// page keeps it. It is three components on the management table and
@@ -239,7 +239,7 @@ func packEventTable(events []Event, rosters map[int64][]Signup, buttons func(*Ev
 			components, characters = 1, 0
 			// Re-measured as the first block on its new page, which is one
 			// component cheaper: no separator above it.
-			block = buildEventTableBlock(ev, rosters[ev.ID], true, buttons, footer)
+			block = buildEventTableBlock(ev, rosters[ev.ID], true, buttons, nameLink)
 		}
 		page = append(page, block)
 		components += block.components
@@ -252,7 +252,7 @@ func packEventTable(events []Event, rosters map[int64][]Signup, buttons func(*Ev
 }
 
 // RenderEventTablePage draws one packed page.
-func RenderEventTablePage(page []eventTableBlock, index, total int, leading, trailing []any) map[string]any {
+func RenderEventTablePage(page []eventTableBlock, index, total int, leading, trailing [][]any) map[string]any {
 	body := []any{}
 	if len(page) == 0 {
 		body = append(body, textBlock("-# Nothing coming up."))
@@ -262,7 +262,7 @@ func RenderEventTablePage(page []eventTableBlock, index, total int, leading, tra
 	// to reach them. Left off an empty table, where the bottom row is right
 	// there anyway.
 	if index == 0 && len(leading) > 0 && len(page) > 0 {
-		body = append(body, map[string]any{"type": componentTypeActionRow, "components": leading})
+		body = append(body, actionRows(leading)...)
 		body = append(body, map[string]any{"type": componentTypeSeparator, "divider": true, "spacing": 2})
 	}
 	for i, block := range page {
@@ -284,7 +284,7 @@ func RenderEventTablePage(page []eventTableBlock, index, total int, leading, tra
 	// event's row.
 	if index == total-1 && len(trailing) > 0 {
 		body = append(body, map[string]any{"type": componentTypeSeparator, "divider": true, "spacing": 2})
-		body = append(body, map[string]any{"type": componentTypeActionRow, "components": trailing})
+		body = append(body, actionRows(trailing)...)
 	}
 	return map[string]any{
 		"flags": messageFlagComponentsV2,
@@ -378,18 +378,48 @@ func managementButtons(ev *Event) []any {
 // managementLeading is the same Create button at the top of the table's first
 // page. Its own custom_id: Discord refuses a message whose components share
 // one, and a one-page table holds both rows.
-func managementLeading() []any {
-	return []any{
+func managementLeading(webOrigin string) [][]any {
+	return append([][]any{{
 		map[string]any{"type": componentTypeButton, "style": buttonStylePrimary,
 			"label": "Create an event", "custom_id": CreateAtTopCustomID()},
-	}
+	}}, advancedSettingsRow(webOrigin)...)
 }
 
-func managementTrailing() []any {
-	return []any{
+func managementTrailing(webOrigin string) [][]any {
+	return append([][]any{{
 		map[string]any{"type": componentTypeButton, "style": buttonStylePrimary,
 			"label": "Create an event", "custom_id": CreateCustomID()},
+	}}, advancedSettingsRow(webOrigin)...)
+}
+
+// advancedSettingsRow is the row under Create an event: a link to the web
+// pages, where rosters, invites, held places and regulars are managed. None
+// when the web pages are off.
+func advancedSettingsRow(webOrigin string) [][]any {
+	if webOrigin == "" {
+		return nil
 	}
+	return [][]any{{map[string]any{"type": componentTypeButton, "style": buttonStyleLink,
+		"label": "Advanced Settings", "url": webOrigin + "/", "emoji": map[string]any{"name": "🌐"}}}}
+}
+
+// rowComponents counts the components some action rows take: each row, and
+// each button in it.
+func rowComponents(rows [][]any) int {
+	n := 0
+	for _, row := range rows {
+		n += 1 + len(row)
+	}
+	return n
+}
+
+// actionRows wraps rows of buttons as action row components.
+func actionRows(rows [][]any) []any {
+	out := make([]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, map[string]any{"type": componentTypeActionRow, "components": row})
+	}
+	return out
 }
 
 // tableSurface is one channel's packed table: where it lives, what its rows
@@ -398,10 +428,10 @@ func managementTrailing() []any {
 type tableSurface struct {
 	channelID string
 	buttons   func(*Event) []any
-	// footer is a last line under each event, or nil for none.
-	footer   func(*Event) string
-	leading  []any
-	trailing []any
+	// nameLink goes after each event's name, or nil for nothing.
+	nameLink func(*Event) string
+	leading  [][]any
+	trailing [][]any
 	pages    func() ([]TablePage, error)
 	setPage  func(page int, messageID string) error
 	dropPage func(page int) error
@@ -435,24 +465,24 @@ func (s *Server) RefreshManagementTable(guildID string) error {
 		return err
 	}
 	return s.publishPackedTable(guildID, tableSurface{
-		channelID: table.ManagementChannelID, buttons: managementButtons, footer: s.webRosterLink,
-		leading: managementLeading(), trailing: managementTrailing(),
+		channelID: table.ManagementChannelID, buttons: managementButtons, nameLink: s.webRosterLink,
+		leading: managementLeading(s.webOrigin()), trailing: managementTrailing(s.webOrigin()),
 		pages:    func() ([]TablePage, error) { return s.store.ManagementPages(guildID) },
 		setPage:  func(p int, m string) error { return s.store.SetManagementPage(guildID, p, m) },
 		dropPage: func(p int) error { return s.store.DeleteManagementPage(guildID, p) },
 	})
 }
 
-// webRosterLink is the management table's last line under an event: a link
-// to its page on the web, where the roster, invites, holds and regulars are. A
-// link in the text rather than a button, because the row already has the
-// five buttons an action row holds. None when the web pages are off.
+// webRosterLink goes after an event's name on the management table: a small
+// link to its page on the web, where the roster, invites, held places and
+// regulars are. In the text rather than a button, because the row already has
+// the five buttons an action row holds. None when the web pages are off.
 func (s *Server) webRosterLink(ev *Event) string {
 	origin := s.webOrigin()
 	if origin == "" {
 		return ""
 	}
-	return fmt.Sprintf("-# 🌐 [Roster management settings](%s/events/%d)", origin, ev.ID)
+	return fmt.Sprintf("[🌐↗](%s/events/%d)", origin, ev.ID)
 }
 
 // webOrigin is where the web pages are served, taken from the OAuth
@@ -504,14 +534,15 @@ func (s *Server) publishPackedTable(guildID string, surface tableSurface) error 
 		}
 		rosters[events[i].ID] = roster
 	}
-	// Reserve: the trailing row, its buttons and the divider above it, and
-	// the same again for the leading row. Every page keeps both, since the
-	// packer does not know yet which pages are first and last.
-	reserve := len(surface.trailing) + 2
+	// Reserve: the trailing rows, their buttons and the divider above them,
+	// and the same again for the leading rows. Every page keeps both, since
+	// the packer does not know yet which pages are first and last. A table
+	// with no trailing rows still keeps two, as it always has.
+	reserve := max(rowComponents(surface.trailing), 1) + 1
 	if len(surface.leading) > 0 {
-		reserve += len(surface.leading) + 2
+		reserve += rowComponents(surface.leading) + 1
 	}
-	pages := packEventTable(events, rosters, surface.buttons, surface.footer, reserve)
+	pages := packEventTable(events, rosters, surface.buttons, surface.nameLink, reserve)
 
 	existing, err := surface.pages()
 	if err != nil {

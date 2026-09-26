@@ -70,7 +70,7 @@ func TestTheManagementTableCountsTheEndButton(t *testing.T) {
 	for i := range ahead {
 		ahead[i].StartsAt = time.Now().Add(time.Hour).Unix()
 	}
-	reserve := len(managementTrailing()) + 2
+	reserve := (rowComponents(managementTrailing(""))-1) + 2
 	underwayPages := packEventTable(underway, nil, managementButtons, nil, reserve)
 	aheadPages := packEventTable(ahead, nil, managementButtons, nil, reserve)
 	if len(underwayPages[0]) >= len(aheadPages[0]) {
@@ -78,7 +78,7 @@ func TestTheManagementTableCountsTheEndButton(t *testing.T) {
 			len(underwayPages[0]), len(aheadPages[0]))
 	}
 	for i, page := range underwayPages {
-		payload := RenderEventTablePage(page, i, len(underwayPages), managementLeading(), managementTrailing())
+		payload := RenderEventTablePage(page, i, len(underwayPages), managementLeading(""), managementTrailing(""))
 		rendered := countComponents(payload["components"].([]any))
 		if rendered > eventTableComponentBudget {
 			t.Errorf("page %d renders %d components, over %d", i, rendered, eventTableComponentBudget)

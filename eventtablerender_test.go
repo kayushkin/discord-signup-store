@@ -235,8 +235,8 @@ func TestTheRowReadsLikeTheExample(t *testing.T) {
 func TestTheManagementTableHasEditAndCreateAndNothingAMemberDoes(t *testing.T) {
 	events := rosterTableEvents(2)
 	rosters := map[int64][]Signup{events[0].ID: rosterOf("Al"), events[1].ID: nil}
-	pages := packEventTable(events, rosters, managementButtons, nil, len(managementTrailing())+1)
-	payload := RenderEventTablePage(pages[0], 0, 1, managementLeading(), managementTrailing())
+	pages := packEventTable(events, rosters, managementButtons, nil, (rowComponents(managementTrailing(""))-1)+1)
+	payload := RenderEventTablePage(pages[0], 0, 1, managementLeading(""), managementTrailing(""))
 	labels := []string{}
 	var walk func([]any)
 	walk = func(cs []any) {
@@ -285,8 +285,8 @@ func TestThePublicTableCarriesNoTrailingControls(t *testing.T) {
 // TestCreateSitsUnderADividerNotOnTheLastRow.
 func TestCreateSitsUnderADividerNotOnTheLastRow(t *testing.T) {
 	events := rosterTableEvents(2)
-	pages := packEventTable(events, nil, managementButtons, nil, len(managementTrailing())+2)
-	body := RenderEventTablePage(pages[0], 0, 1, managementLeading(), managementTrailing())["components"].([]any)[0].(map[string]any)["components"].([]any)
+	pages := packEventTable(events, nil, managementButtons, nil, (rowComponents(managementTrailing(""))-1)+2)
+	body := RenderEventTablePage(pages[0], 0, 1, managementLeading(""), managementTrailing(""))["components"].([]any)[0].(map[string]any)["components"].([]any)
 	last := body[len(body)-1].(map[string]any)
 	beforeLast := body[len(body)-2].(map[string]any)
 	if last["type"] != componentTypeActionRow || fmt.Sprint(last["components"]) == "" {
@@ -320,9 +320,9 @@ func TestTheHeadlineLeavesOutWhatItDoesNotHave(t *testing.T) {
 // accept on one message, and the page still inside the component cap.
 func TestCreateIsAtTheTopAndTheBottomOfTheManagementTable(t *testing.T) {
 	events := rosterTableEvents(3)
-	reserve := len(managementTrailing()) + 2 + len(managementLeading()) + 2
+	reserve := (rowComponents(managementTrailing(""))-1) + 2 + (rowComponents(managementLeading(""))-1) + 2
 	pages := packEventTable(events, nil, managementButtons, nil, reserve)
-	payload := RenderEventTablePage(pages[0], 0, len(pages), managementLeading(), managementTrailing())
+	payload := RenderEventTablePage(pages[0], 0, len(pages), managementLeading(""), managementTrailing(""))
 	body := payload["components"].([]any)[0].(map[string]any)["components"].([]any)
 	first := body[0].(map[string]any)
 	if first["type"] != componentTypeActionRow ||
@@ -362,10 +362,10 @@ func TestCreateIsAtTheTopAndTheBottomOfTheManagementTable(t *testing.T) {
 // TestAFullManagementPageStaysInsideTheCapWithBothCreateRows.
 func TestAFullManagementPageStaysInsideTheCapWithBothCreateRows(t *testing.T) {
 	events := rosterTableEvents(40)
-	reserve := len(managementTrailing()) + 2 + len(managementLeading()) + 2
+	reserve := (rowComponents(managementTrailing(""))-1) + 2 + (rowComponents(managementLeading(""))-1) + 2
 	pages := packEventTable(events, nil, managementButtons, nil, reserve)
 	for i, page := range pages {
-		payload := RenderEventTablePage(page, i, len(pages), managementLeading(), managementTrailing())
+		payload := RenderEventTablePage(page, i, len(pages), managementLeading(""), managementTrailing(""))
 		if n := countComponents(payload["components"].([]any)); n > eventTableComponentBudget {
 			t.Errorf("page %d of %d renders %d components, over %d", i+1, len(pages), n, eventTableComponentBudget)
 		}

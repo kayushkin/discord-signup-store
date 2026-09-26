@@ -269,7 +269,9 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	30 the management table links each event's page on the web
 //	31 that link reads "Roster management settings"
 //	32 the Repeat button says how a repeating event repeats
-const publishFormatVersion = 32
+//	33 the management table's web link is 🌐↗ by each name, and Advanced
+//	   Settings under Create an event
+const publishFormatVersion = 33
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //
