@@ -460,7 +460,7 @@ func (s *Server) handleWebRosterNotices(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := s.discord.SendDirectMessage(session.DiscordUserID, fmt.Sprintf(
-		"I will DM you here when people join or leave **%s**, once they have left it alone for a minute.", ev.Name)); err != nil {
+		"I'll DM you here when people join or leave **%s**.", ev.Name)); err != nil {
 		log.Printf("[discord-signup] first roster notice to %s about %d: %v", session.DiscordUserID, ev.ID, err)
 		s.redirectWithNotice(w, r, ev.ID, "Nothing was changed. "+rosterNoticeFailure(err))
 		return

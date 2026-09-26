@@ -75,8 +75,9 @@ regular the first time the event repeats; if they stop being one, that stands.
 **Messaging the people on an event.** From the event page an organiser can
 send a message to everyone going — and the waitlist and Maybe if they tick
 them — as a post in the event's forum thread that mentions each of them, which
-pings them, or as a DM to each. At most two per event in any ten minutes,
-whoever sends them, so the page cannot be used to ping a roster over and over.
+pings them, or as a DM to each. DMs are limited to two per event in any ten
+minutes, whoever sends them, so the page cannot be used to fill people's DMs;
+a forum post is not limited.
 
 **An organiser can be told who joins and leaves.** A switch on the event
 page, *Tell me who joins and leaves*, which each organiser sets for

@@ -174,14 +174,23 @@ input.narrow,select.narrow{max-width:260px}
 
 /* People lists. */
 ol.people{list-style:none;margin:4px 0 0;padding:0}
-.person{display:flex;align-items:center;gap:6px 12px;padding:9px 0;border-bottom:1px solid #2d2f35;flex-wrap:wrap}
-.person-main{flex:1 1 140px;min-width:0;display:flex;flex-direction:column;gap:1px}
-.person-main .when{font-size:12px}
-.person-main .who{flex:none}
+/* One line a person, in columns that line up down the list: number, name,
+   when they joined, and what can be done. */
+/* The list holds the columns and each row takes them (subgrid), so a wider
+   button on one row widens that column on every row. */
+ol.people{display:grid;grid-template-columns:32px minmax(0,1fr) auto auto;column-gap:12px}
+ol.people.no-place{grid-template-columns:minmax(0,1fr) auto auto}
+.person{display:grid;grid-column:1 / -1;grid-template-columns:subgrid;align-items:center;
+  padding:6px 0;border-bottom:1px solid #2d2f35;min-height:44px}
+.person .row-actions{justify-content:flex-end}
 .person:last-child{border-bottom:0}
+.person .when{white-space:nowrap;font-variant-numeric:tabular-nums}
+.person .row-actions{flex-wrap:nowrap}
+.btn-sm svg{flex:none}
+.btn-sm:has(svg){display:inline-flex;align-items:center;gap:5px}
 .place{flex:none;min-width:30px;text-align:center;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
 .place.wait{background:#e8a33d1f;color:var(--warn);border-radius:6px;padding:2px 6px;font-weight:600}
-.who{flex:1 1 140px;min-width:0}
+.who{min-width:0;overflow-wrap:anywhere}
 .when{color:var(--dim);font-size:12px}
 .row-actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
 .row-actions form{margin:0}
@@ -237,7 +246,7 @@ label.force-tile:has(input:checked) .tile-box{background:var(--warn);border-colo
 .choice-what{flex:none!important}
 .choice-foot{margin-top:auto;padding-top:4px}
 .regular-mark{color:#9aa4ff;vertical-align:-1px}
-.btn-sm.regular-toggle{display:inline-flex;align-items:center;gap:4px}
+.btn-sm.regular-toggle{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:124px}
 .btn-sm.regular-toggle.is-on{color:#9aa4ff;border-color:#5865f266;background:#5865f214}
 .regulars-away{font-size:13px;color:var(--ink);margin:10px 0 0;display:flex;gap:6px;flex-wrap:wrap;align-items:baseline}
 .pill.held{color:#9aa4ff;border-color:#5865f266}
@@ -290,10 +299,13 @@ table.log td{vertical-align:top}
    four-column table with a timestamp in it does not fit 390 pixels. */
 @media (max-width:600px){
   table.log,table.log tbody{display:block}
-  table.log tr{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:8px 0;border-bottom:1px solid var(--line)}
+  /* Two short lines: who and when, then what happened and by whom. */
+  table.log tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1px 10px;padding:7px 0;border-bottom:1px solid var(--line)}
   table.log td{border:0;padding:0}
-  table.log td:first-child{grid-column:1 / -1;font-size:12px}
-  table.log td:nth-child(4){grid-column:1 / -1;font-size:12px}
+  table.log td:nth-child(1){grid-column:2;grid-row:1;font-size:12px;text-align:right}
+  table.log td:nth-child(2){grid-column:1;grid-row:1}
+  table.log td:nth-child(3){grid-column:1;grid-row:2;font-size:13px;color:var(--dim)}
+  table.log td:nth-child(4){grid-column:2;grid-row:2;font-size:12px;text-align:right}
 }
 
 /* Phones. Field labels go above their values, lists get room to breathe,
@@ -310,7 +322,14 @@ table.log td{vertical-align:top}
   .facts dd{grid-column:1}
   .field-view{justify-content:space-between}
   .field-view > span:first-child{flex:1}
-  .person .place{min-width:24px}
+  ol.people{grid-template-columns:26px minmax(0,1fr) auto auto;column-gap:8px}
+  .person .place{min-width:0}
+  /* Buttons are their icons; the words are the tooltip and the label. */
+  .person .btn-sm .btn-text{display:none}
+  .person .btn-sm{padding:0;width:38px;min-width:0;min-height:38px;justify-content:center}
+  .person .row-actions{gap:4px}
+  /* The waitlist's order is its number; the time would crowd the arrows. */
+  .person.waiting .when{display:none}
   .choice-title{font-size:15px}
   .segmented{align-self:stretch}
   .segmented .seg{flex:1}
@@ -421,7 +440,10 @@ dialog.dialog label{margin:14px 0 0}
     el.querySelector(".db-mon").textContent = mon.format(when);
     el.title = fmt.format(when);
   });
-  var short = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  // On a phone a list's times are the date alone; the full one is the tooltip.
+  var short = window.matchMedia("(max-width: 600px)").matches
+    ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" })
+    : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   document.querySelectorAll("time.ts-short").forEach(function (el) {
     var when = new Date(el.getAttribute("datetime"));
     if (isNaN(when.getTime())) return;
@@ -880,14 +902,7 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     function show() { count.textContent = text.value.length + " / " + limit; }
     text.addEventListener("input", show);
     show();
-    // The line beside Send says what the chosen way does.
-    form.querySelectorAll("input[name=via]").forEach(function (radio) {
-      radio.addEventListener("change", function () {
-        form.querySelectorAll("[data-via-hint]").forEach(function (el) {
-          el.hidden = el.getAttribute("data-via-hint") !== radio.value;
-        });
-      });
-    });
+
   });
 
   document.querySelectorAll("[data-open-dialog]").forEach(function (btn) {

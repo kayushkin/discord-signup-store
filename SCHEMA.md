@@ -338,7 +338,7 @@ regular. Values stored under the old name — `joined_via = pinned`, actor
 | `audience` | TEXT | The lists it went to, comma separated: `attending`, `waitlisted`, `maybe`. |
 | `body` | TEXT | What was sent. |
 | `recipients` / `delivered` / `failed` | INTEGER | People it was for; for a DM how many got it and how many did not, for a post 1 or 0. |
-| `status` | TEXT | `sending`, then `sent`, or `failed` when it reached nobody. Every row not `failed` counts toward the limit of 2 in 10 minutes per event, checked in the same transaction that writes the row. |
+| `status` | TEXT | `sending`, then `sent`, or `failed` when it reached nobody. Every `dm` row not `failed` counts toward the limit of 2 DMs in 10 minutes per event, checked in the same transaction that writes the row. |
 | `detail` | TEXT | Who had DMs closed, or what Discord said. |
 | `at` | INTEGER | When. |
 

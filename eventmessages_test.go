@@ -46,28 +46,34 @@ func TestAMessageInTheForumPingsTheLists(t *testing.T) {
 	}
 }
 
-// TestMessagesAreLimitedPerEvent: two in ten minutes, and a send that
-// reached nobody does not count.
-func TestMessagesAreLimitedPerEvent(t *testing.T) {
+// TestMessagesByDMAreLimitedPerEvent: two in ten minutes, a send that
+// reached nobody does not count, and forum posts are not limited.
+func TestMessagesByDMAreLimitedPerEvent(t *testing.T) {
 	_, store, fake, mux, token := webTestServer(t)
 	ev := forumEvent(t, store, "alice")
-	fake.on(http.MethodPost, "/channels/thread-1/messages", func(w http.ResponseWriter, r *http.Request) {
+	fake.on(http.MethodPost, "/users/@me/channels", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte(`{"message":"Missing Access","code":50001}`))
+		w.Write([]byte(`{"message":"Cannot send messages to this user","code":50007}`))
 	})
-	postForm(t, mux, token, eventPath(ev)+"/message", url.Values{"body": {"one"}, "via": {"forum"}})
-	fake.on(http.MethodPost, "/channels/thread-1/messages", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"id":"m"}`))
+	postForm(t, mux, token, eventPath(ev)+"/message", url.Values{"body": {"one"}, "via": {"dm"}})
+	fake.on(http.MethodPost, "/users/@me/channels", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"id":"dm"}`))
 	})
 	for _, body := range []string{"two", "three"} {
-		postForm(t, mux, token, eventPath(ev)+"/message", url.Values{"body": {body}, "via": {"forum"}})
+		postForm(t, mux, token, eventPath(ev)+"/message", url.Values{"body": {body}, "via": {"dm"}})
 	}
-	rec := postForm(t, mux, token, eventPath(ev)+"/message", url.Values{"body": {"four"}, "via": {"forum"}})
+	rec := postForm(t, mux, token, eventPath(ev)+"/message", url.Values{"body": {"four"}, "via": {"dm"}})
 	if !strings.Contains(rec.Header().Get("Location"), "Nothing+was+sent") {
-		t.Errorf("a third counted message went out: %s", rec.Header().Get("Location"))
+		t.Errorf("a third counted DM went out: %s", rec.Header().Get("Location"))
+	}
+	for _, body := range []string{"five", "six", "seven"} {
+		rec = postForm(t, mux, token, eventPath(ev)+"/message", url.Values{"body": {body}, "via": {"forum"}})
+		if strings.Contains(rec.Header().Get("Location"), "Nothing+was+sent") {
+			t.Errorf("a forum post was limited: %s", rec.Header().Get("Location"))
+		}
 	}
 	messages, _ := store.Messages(ev.ID)
-	if len(messages) != 3 || messages[0].Status != messageFailed || messages[2].Status != messageSent {
+	if len(messages) != 6 || messages[0].Status != messageFailed {
 		t.Errorf("messages = %+v", messages)
 	}
 }

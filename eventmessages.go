@@ -14,10 +14,11 @@ import (
 // service pings on an organiser's say-so — or a DM to each. Going always;
 // the waitlist and Maybe if the organiser ticks them.
 //
-// Limited to messageLimit per event in any messageWindow, whoever sends
-// them, so a page cannot be used to ping a roster over and over. The limit is
-// checked and the send recorded in one transaction, so two organisers
-// pressing Send at once cannot both slip under it.
+// Messages by DM are limited to messageLimit per event in any messageWindow,
+// whoever sends them, so the page cannot be used to fill people's DMs. A post
+// in the forum thread is not limited: it is one message, in a channel people
+// can mute. The limit is checked and the send recorded in one transaction, so
+// two organisers pressing Send at once cannot both slip under it.
 
 const (
 	messageLimit  = 2
@@ -57,9 +58,9 @@ type EventMessage struct {
 	At         int64    `json:"at"`
 }
 
-// ClaimMessage records a message about to go out, if the event is under its
-// limit, and returns its id. Over the limit it returns ErrMessageLimit with
-// the time the next is allowed.
+// ClaimMessage records a message about to go out and returns its id. A DM
+// over the limit is refused with ErrMessageLimit, naming when the next is
+// allowed.
 func (s *Store) ClaimMessage(m EventMessage) (int64, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -68,8 +69,8 @@ func (s *Store) ClaimMessage(m EventMessage) (int64, error) {
 	defer tx.Rollback()
 	ts := now()
 	since := ts - int64(messageWindow/time.Second)
-	rows, err := tx.Query(`SELECT at FROM event_messages WHERE event_id = ? AND at > ? AND status != ?
-		ORDER BY at ASC`, m.EventID, since, messageFailed)
+	rows, err := tx.Query(`SELECT at FROM event_messages WHERE event_id = ? AND via = ? AND at > ? AND status != ?
+		ORDER BY at ASC`, m.EventID, MessageViaDM, since, messageFailed)
 	if err != nil {
 		return 0, fmt.Errorf("read recent messages: %w", err)
 	}
@@ -83,7 +84,7 @@ func (s *Store) ClaimMessage(m EventMessage) (int64, error) {
 		recent = append(recent, at)
 	}
 	rows.Close()
-	if len(recent) >= messageLimit {
+	if m.Via == MessageViaDM && len(recent) >= messageLimit {
 		next := recent[len(recent)-messageLimit] + int64(messageWindow/time.Second)
 		return 0, fmt.Errorf("%w: %d in %d minutes; the next can go at %d", ErrMessageLimit,
 			messageLimit, int(messageWindow/time.Minute), next)
@@ -138,13 +139,13 @@ func (s *Store) Messages(eventID int64) ([]EventMessage, error) {
 	return out, rows.Err()
 }
 
-// messageAllowance is how many messages an event may still send in the
-// current window, and when the next is allowed once there are none left.
+// messageAllowance is how many messages by DM an event may still send in
+// the current window, and when the next is allowed once there are none left.
 func messageAllowance(messages []EventMessage, at int64) (left int, nextAt int64) {
 	since := at - int64(messageWindow/time.Second)
 	var recent []int64
 	for _, m := range messages {
-		if m.At > since && m.Status != messageFailed {
+		if m.Via == MessageViaDM && m.At > since && m.Status != messageFailed {
 			recent = append(recent, m.At)
 		}
 	}
@@ -239,7 +240,7 @@ func (s *Server) handleWebMessage(w http.ResponseWriter, r *http.Request) {
 		Via: via, Audience: lists, Body: body, Recipients: len(people)})
 	if errors.Is(err, ErrMessageLimit) {
 		_, next := messageAllowance(mustMessages(s.store, ev.ID), now())
-		s.redirectWithNotice(w, r, ev.ID, fmt.Sprintf("Nothing was sent: an event can send %d messages in any %d minutes. The next can go at %s.",
+		s.redirectWithNotice(w, r, ev.ID, fmt.Sprintf("Nothing was sent: an event can send %d messages by DM in any %d minutes. The next can go at %s.",
 			messageLimit, int(messageWindow/time.Minute), time.Unix(next, 0).UTC().Format("15:04 UTC")))
 		return
 	}
