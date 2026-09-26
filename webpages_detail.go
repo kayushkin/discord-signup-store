@@ -208,6 +208,10 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 			log.Printf("[discord-signup] dm replies %d: %v", ev.ID, err)
 			data.Error = strings.TrimSpace(data.Error + " Could not read the replies: " + err.Error())
 		}
+		if data.RosterWatch, err = s.store.RosterWatcherFor(ev.ID, session.DiscordUserID); err != nil {
+			log.Printf("[discord-signup] roster watch %d for %s: %v", ev.ID, session.DiscordUserID, err)
+			data.Error = strings.TrimSpace(data.Error + " Could not read whether you get roster notices: " + err.Error())
+		}
 	}
 	data.MessagesLeft, data.MessagesNextAt = messageAllowance(messages, now())
 	data.MessageLimit, data.MessageWindowMinutes, data.MessageBodyLimit = messageLimit, int(messageWindow/time.Minute), messageBodyLimit
@@ -426,6 +430,49 @@ func (s *Server) handleWebToggleSignups(w http.ResponseWriter, r *http.Request) 
 	s.redirectWithNotice(w, r, ev.ID, strings.ReplaceAll(said, "**", ""))
 }
 
+// handleWebRosterNotices turns the viewer's own roster notices on or off.
+// Turning them on sends a first DM at once, so DMs Discord refuses are found
+// now rather than when the first person joins.
+func (s *Server) handleWebRosterNotices(w http.ResponseWriter, r *http.Request) {
+	session := s.requireSession(w, r)
+	if session == nil {
+		return
+	}
+	ev, canManage := s.webEvent(w, r, session)
+	if ev == nil {
+		return
+	}
+	if !canManage {
+		http.Error(w, "you cannot edit this event", http.StatusForbidden)
+		return
+	}
+	if r.FormValue("on") != "true" {
+		if err := s.store.UnwatchRoster(ev.ID, session.DiscordUserID); err != nil {
+			log.Printf("[discord-signup] web unwatch roster %d: %v", ev.ID, err)
+			s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: "+err.Error())
+			return
+		}
+		s.redirectWithNotice(w, r, ev.ID, "You will not be told when people join or leave.")
+		return
+	}
+	if s.discord == nil {
+		s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: this server has no Discord client to send DMs with.")
+		return
+	}
+	if err := s.discord.SendDirectMessage(session.DiscordUserID, fmt.Sprintf(
+		"I will DM you here when people join or leave **%s**, once they have left it alone for a minute.", ev.Name)); err != nil {
+		log.Printf("[discord-signup] first roster notice to %s about %d: %v", session.DiscordUserID, ev.ID, err)
+		s.redirectWithNotice(w, r, ev.ID, "Nothing was changed. "+rosterNoticeFailure(err))
+		return
+	}
+	if err := s.store.WatchRoster(ev.ID, session.DiscordUserID); err != nil {
+		log.Printf("[discord-signup] web watch roster %d: %v", ev.ID, err)
+		s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: "+err.Error())
+		return
+	}
+	s.redirectWithNotice(w, r, ev.ID, "You will get a DM when people join or leave. Check your DMs: the first one is there.")
+}
+
 // handleWebCancelEvent cancels, as the management row's Cancel does: the
 // name typed back is the confirm, and the native Discord event is deleted.
 func (s *Server) handleWebCancelEvent(w http.ResponseWriter, r *http.Request) {
@@ -480,16 +527,28 @@ func (s *Server) handleWebRosterPromote(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "you cannot edit this event", http.StatusForbidden)
 		return
 	}
-	userID := r.FormValue("discord_user_id")
-	promoted, from, err := s.store.GiveAPlace(ev.ID, userID, "web:"+session.DiscordUserID)
-	if errors.Is(err, ErrNotFound) {
-		s.redirectWithNotice(w, r, ev.ID, "They are not on the waitlist or the Maybe list.")
+	notice, err := s.giveAPlace(ev, r.FormValue("discord_user_id"), "web:"+session.DiscordUserID)
+	if err != nil {
+		log.Printf("[discord-signup] web promote %s on %d: %v", r.FormValue("discord_user_id"), ev.ID, err)
+		s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: "+err.Error())
 		return
 	}
+	s.redirectWithNotice(w, r, ev.ID, notice)
+}
+
+// errNotWaitingOrMaybe is giveAPlace's answer for someone on neither list.
+var errNotWaitingOrMaybe = errors.New("they are not on the waitlist or the Maybe list")
+
+// giveAPlace gives someone waiting or on Maybe a place now, past the limit
+// if it comes to that, messages them, and says what happened. The page's
+// Give a place and a roster notice's button both come here.
+func (s *Server) giveAPlace(ev *Event, userID, actor string) (string, error) {
+	promoted, from, err := s.store.GiveAPlace(ev.ID, userID, actor)
+	if errors.Is(err, ErrNotFound) {
+		return "", errNotWaitingOrMaybe
+	}
 	if err != nil {
-		log.Printf("[discord-signup] web promote %s on %d: %v", userID, ev.ID, err)
-		http.Error(w, "could not promote them", http.StatusInternalServerError)
-		return
+		return "", err
 	}
 	s.inBackground(func() { s.notifyGivenAPlace(ev, promoted) })
 	s.inBackground(func() {
@@ -499,7 +558,7 @@ func (s *Server) handleWebRosterPromote(w http.ResponseWriter, r *http.Request) 
 	if after, err := s.store.GetEvent(ev.ID); err == nil && after.Capacity > 0 && after.AttendingCount > after.Capacity {
 		notice += fmt.Sprintf(" That takes it to %d/%d, over the limit.", after.AttendingCount, after.Capacity)
 	}
-	s.redirectWithNotice(w, r, ev.ID, notice)
+	return notice, nil
 }
 
 // handleWebRosterRemove takes someone off, promoting whoever is next.

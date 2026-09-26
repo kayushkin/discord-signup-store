@@ -172,6 +172,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/events/complete-finished", s.handleCompleteFinished)
 	mux.HandleFunc("POST /api/republish", s.handleRepublish)
 	mux.HandleFunc("POST /api/reminders", s.handleSendReminders)
+	mux.HandleFunc("POST /api/roster-notices", s.handleSendRosterNotices)
 	mux.HandleFunc("POST /api/guilds/{guildID}/table/rebuild", s.handleRebuildGuildTable)
 	mux.HandleFunc("POST /api/tables/rebuild", s.handleRebuildAllTables)
 
@@ -192,6 +193,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/waitlist/move", s.handleWebWaitlistMove)
 	mux.HandleFunc("POST /events/{id}/holds/release", s.handleWebReleaseHold)
 	mux.HandleFunc("POST /events/{id}/regulars", s.handleWebRegular)
+	mux.HandleFunc("POST /events/{id}/roster-notices", s.handleWebRosterNotices)
 	mux.HandleFunc("POST /events/{id}/message", s.handleWebMessage)
 	mux.HandleFunc("POST /events/{id}/signups", s.handleWebToggleSignups)
 	mux.HandleFunc("POST /events/{id}/cancel", s.handleWebCancelEvent)
@@ -396,6 +398,17 @@ func (s *Server) handleEventUpdates(w http.ResponseWriter, r *http.Request) {
 // window is dropped rather than sent about an event already under way.
 func (s *Server) handleSendReminders(w http.ResponseWriter, r *http.Request) {
 	sent, err := s.SendDueReminders()
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sent": sent})
+}
+
+// handleSendRosterNotices DMs each watching organiser the joins and leaves
+// that have settled. Called every minute.
+func (s *Server) handleSendRosterNotices(w http.ResponseWriter, r *http.Request) {
+	sent, err := s.SendRosterNotices()
 	if err != nil {
 		writeStoreError(w, err)
 		return

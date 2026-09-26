@@ -473,6 +473,19 @@
       {{end}}
     </div>
     {{end}}
+    {{$watch := .RosterWatch}}
+    <div class="control">
+      <h4 id="notices-label">Tell me who joins and leaves</h4>
+      <div class="seg-control" role="radiogroup" aria-labelledby="notices-label">
+        <form method="post" action="/events/{{$ev.ID}}/roster-notices" data-async>
+          <input type="hidden" name="on" value="true">
+          <button role="radio" data-tone="ok" aria-checked="{{if $watch}}true{{else}}false{{end}}" {{if $watch}}tabindex="-1"{{end}}>By DM</button></form>
+        <form method="post" action="/events/{{$ev.ID}}/roster-notices" data-async>
+          <input type="hidden" name="on" value="false">
+          <button role="radio" aria-checked="{{if $watch}}false{{else}}true{{end}}" {{if not $watch}}tabindex="-1"{{end}}>Off</button></form>
+      </div>
+      <p class="hint">{{if $watch}}{{if $watch.LastError}}The last one was not sent. {{$watch.LastError}}{{else}}A DM once someone has left their join or leave alone for a minute, with a button to give a place to anyone who joined the waitlist.{{end}}{{else}}Only you: each organiser chooses for themselves.{{end}}</p>
+    </div>
     <div class="side-actions">
       {{if .EventUnderway}}
       <form method="post" action="/events/{{$ev.ID}}/end" data-async

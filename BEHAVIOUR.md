@@ -78,6 +78,17 @@ them — as a post in the event's forum thread that mentions each of them, which
 pings them, or as a DM to each. At most two per event in any ten minutes,
 whoever sends them, so the page cannot be used to ping a roster over and over.
 
+**An organiser can be told who joins and leaves.** A switch on the event
+page, *Tell me who joins and leaves*, which each organiser sets for
+themselves. Once a person has left their join or leave alone for a minute,
+the organiser gets a DM saying who joined, who went on the waitlist and who
+left, with the count now. Changes within that minute are one change: Join
+then Leave is nothing. Only what people do themselves is told — not an
+organiser's adds or removals, moving up off the waitlist, or a date rolling
+over. Under each person who joined the waitlist and is still on it is a
+**Give … a place** button, which does what the page's button does; the press
+is checked against who may edit the event, read from Discord.
+
 **Replies to the bot's DMs are shown on the event page.** Every DM sent
 about an event — an organiser's message, an invite, being put on a list or
 given a place — says replies reach the organisers, and is remembered with its

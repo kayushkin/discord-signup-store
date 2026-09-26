@@ -402,3 +402,20 @@ CREATE TABLE IF NOT EXISTS event_dm_replies (
 );
 
 CREATE INDEX IF NOT EXISTS idx_event_dm_replies_event ON event_dm_replies(event_id, at);
+
+-- roster_watchers: organisers who asked, on an event's page, to be told by DM
+-- when people join or leave it. One row per organiser per event; turning it
+-- off deletes the row. A join or leave is told only once the person has left
+-- it alone for a minute, so someone who presses Join and then Leave is not
+-- reported. reported_through is the time up to which changes have been
+-- considered; watching_since is when it was turned on, and nothing before it
+-- is told. last_error is why the last DM could not be sent, '' when it was.
+CREATE TABLE IF NOT EXISTS roster_watchers (
+    event_id         INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    discord_user_id  TEXT NOT NULL,
+    watching_since   INTEGER NOT NULL,
+    reported_through INTEGER NOT NULL,
+    last_sent_at     INTEGER NOT NULL DEFAULT 0,
+    last_error       TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (event_id, discord_user_id)
+);

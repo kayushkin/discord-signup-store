@@ -225,6 +225,10 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		s.handleTableAction(w, in, action)
 		return
 	}
+	if strings.HasPrefix(action, giveAPlaceActionPrefix) {
+		s.handleGiveAPlaceButton(w, in, action, eventID)
+		return
+	}
 
 	userID, displayName := in.actor()
 	if userID == "" {

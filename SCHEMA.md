@@ -355,6 +355,14 @@ count; the files stay in the DM), `replied_to` (our DM's id when they used
 Reply), `matched` (`reply`, or `latest` for a plain message put with the
 latest DM in the last 14 days), `at`.
 
+## `roster_watchers` — organisers told by DM who joins and leaves, new 2026-09-26
+
+One row per organiser per event, from the switch on the event's page; turning
+it off deletes the row. `event_id`, `discord_user_id` (the organiser),
+`watching_since` (nothing before it is told), `reported_through` (changes up to
+this time have been told), `last_sent_at`, and `last_error` (why the last DM
+was not sent, `''` when it was). Key `(event_id, discord_user_id)`.
+
 ## `event_table_rows` — **dropped 2026-09-02**
 
 A one-message-per-event table from before the consolidated table was paged,

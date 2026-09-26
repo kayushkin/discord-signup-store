@@ -352,6 +352,9 @@ type Role struct {
 	Name     string `json:"name"`
 	Position int    `json:"position"`
 	Managed  bool   `json:"managed"`
+	// Permissions is the role's permission bit field, as a decimal string:
+	// it exceeds what a JSON number holds exactly.
+	Permissions string `json:"permissions"`
 }
 
 // ListGuildRoles returns a guild's roles, ordered highest first.

@@ -84,6 +84,9 @@ type pageData struct {
 	MessagesNextAt                                                     int64
 	// Replies are what people wrote back to the event's DMs, newest first.
 	Replies []DMReply
+	// RosterWatch is the viewer's own roster notices on this event; nil
+	// when they have not turned them on.
+	RosterWatch *RosterWatcher
 	// InvitedIDs are the people invited who have not answered, space
 	// separated, so a person picked in Add someone can say so.
 	InvitedIDs string
