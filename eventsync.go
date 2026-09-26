@@ -271,7 +271,8 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 //	32 the Repeat button says how a repeating event repeats
 //	33 the management table's web link is 🌐↗ by each name, and Advanced
 //	   Settings under Create an event
-const publishFormatVersion = 33
+//	34 that link is "🌐 [→](…)": Discord will not link text holding an emoji
+const publishFormatVersion = 34
 
 // eventPublishSignature covers everything that feeds a surface Discord stores.
 //

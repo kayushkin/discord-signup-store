@@ -180,9 +180,9 @@ func TestTheRepeatButtonSaysHowAnEventRepeats(t *testing.T) {
 // page, and Advanced Settings under Create an event.
 func TestTheManagementTableLinksTheWebPages(t *testing.T) {
 	ev := &Event{ID: 7, Name: "Board games", Status: StatusOpen, StartsAt: 4102444800}
-	link := func(*Event) string { return "[🌐↗](https://example.test/events/7)" }
+	link := func(*Event) string { return "🌐 [→](https://example.test/events/7)" }
 	block := buildEventTableBlock(ev, nil, true, managementButtons, link)
-	if first := strings.SplitN(block.text, "\n", 2)[0]; !strings.Contains(first, "Board games") || !strings.Contains(first, "[🌐↗](https://example.test/events/7)") {
+	if first := strings.SplitN(block.text, "\n", 2)[0]; !strings.Contains(first, "Board games") || !strings.Contains(first, "🌐 [→](https://example.test/events/7)") {
 		t.Errorf("first line %q, want the name with the link beside it", first)
 	}
 	rows := managementTrailing("https://example.test")
