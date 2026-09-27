@@ -834,8 +834,8 @@ func strPtr(s string) *string { return &s }
 // member lookup failed.
 //
 // Runs on the detail page rather than as a sweep because that is where the ids
-// are actually read, and it writes what it finds, so any given person costs one
-// Discord call once and never again. A failure is logged and skipped: a roster
+// are actually read, and it writes what it finds — a name, or that they have
+// left — so any given person costs one Discord call once and never again. A failure is logged and skipped: a roster
 // showing a snowflake is worse than one showing a name, and far better than a
 // page that will not load because Discord is slow.
 func (s *Server) backfillDisplayNames(ev *Event) {
@@ -847,15 +847,23 @@ func (s *Server) backfillDisplayNames(ev *Event) {
 		log.Printf("[discord-signup] find missing names for %d: %v", ev.ID, err)
 		return
 	}
+	if len(missing) == 0 {
+		return
+	}
+	known, err := s.store.MemberNames(ev.GuildID)
+	if err != nil {
+		log.Printf("[discord-signup] read names for %d: %v", ev.ID, err)
+		return
+	}
 	for _, userID := range missing {
-		name, err := s.discord.GuildMemberDisplayName(ev.GuildID, userID)
-		if err != nil {
-			// Most often this is someone who has left the server. Their id is
-			// all that is left of them and the history must still show it.
-			log.Printf("[discord-signup] no member record for %s in %s: %v", userID, ev.GuildID, err)
+		// Someone who left before anyone read their name has none to give.
+		// Their id is all that is left of them and the history must still
+		// show it.
+		member := s.memberNameFor(ev.GuildID, userID, known)
+		if member.DisplayName == "" {
 			continue
 		}
-		if err := s.store.SetDisplayName(ev.ID, userID, name); err != nil {
+		if err := s.store.SetDisplayName(ev.ID, userID, member.DisplayName); err != nil {
 			log.Printf("[discord-signup] store display name for %s: %v", userID, err)
 		}
 	}

@@ -32,8 +32,9 @@ func actorUserID(actor string) (userID, via string) {
 
 // historyActorNames maps each actor in a history that is a person to who
 // they are: their short name, if one is set, and their name in the event's
-// server. An actor Discord cannot name and nobody gave a short name —
-// someone who has left — is left out, and the page shows it raw.
+// server from member_names, asking Discord only about someone with no row. An
+// actor with no name recorded and no short name — someone who left before
+// anyone read their name — is left out, and the page shows it raw.
 func (s *Server) historyActorNames(guildID string, actors []string) map[string]actorName {
 	names := map[string]actorName{}
 	readable := map[string]string{}
@@ -44,7 +45,11 @@ func (s *Server) historyActorNames(guildID string, actors []string) map[string]a
 			readable[n.DiscordUserID] = n.ReadableName
 		}
 	}
-	byID := map[string]string{}
+	known, err := s.store.MemberNames(guildID)
+	if err != nil {
+		log.Printf("[discord-signup] read names for a history: %v", err)
+		known = map[string]memberName{}
+	}
 	for _, actor := range actors {
 		if _, done := names[actor]; done {
 			continue
@@ -53,15 +58,8 @@ func (s *Server) historyActorNames(guildID string, actors []string) map[string]a
 		if userID == "" {
 			continue
 		}
-		display, seen := byID[userID]
-		if !seen && s.discord != nil {
-			looked, err := s.discord.GuildMemberDisplayName(guildID, userID)
-			if err != nil {
-				log.Printf("[discord-signup] name history actor %s in %s: %v", userID, guildID, err)
-			}
-			display = looked
-			byID[userID] = display
-		}
+		// Someone who has left keeps the last name seen for them.
+		display := s.memberNameFor(guildID, userID, known).DisplayName
 		if display == "" && readable[userID] == "" {
 			continue
 		}

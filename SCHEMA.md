@@ -381,6 +381,16 @@ allows one call a second — three on one home page load was two seconds of 429s
 A person's roles are still read from Discord each time, so taking a role away
 takes effect at once.
 
+## `member_names` — what people are called in each server, new 2026-09-27
+
+Key `(guild_id, discord_user_id)`; `display_name` (the last name Discord
+gave), `left_guild` (1 when Discord says they are no longer in the server; the
+name stays), `updated_at`. An event page reads it for the people in its
+history and roster, and asks Discord only about someone with no row, recording
+the answer. It used to ask about every person on every load, one call after
+another. The ten-minute sync looks everyone in it up again, so a new nickname,
+a departure or a return shows within ten minutes.
+
 ## `event_table_rows` — **dropped 2026-09-02**
 
 A one-message-per-event table from before the consolidated table was paged,

@@ -124,9 +124,11 @@ func (s *Store) RenameInGuild(guildID, userID, name string) (int64, error) {
 	return total, nil
 }
 
-// RefreshDisplayNames looks up everyone on a server's live events in Discord
-// and records the name each goes by now. It returns how many people's names
-// changed. Someone who has left keeps the last name recorded.
+// RefreshDisplayNames looks up in Discord everyone on a server's live events
+// and everyone in its member_names rows, and records the name each goes by
+// now, or that they have left. It returns how many people's names changed on
+// rosters, invites and regulars. Someone who has left keeps the last name
+// recorded.
 func (s *Server) RefreshDisplayNames(guildID string) (int, error) {
 	if s.discord == nil {
 		return 0, nil
@@ -135,16 +137,35 @@ func (s *Server) RefreshDisplayNames(guildID string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	known, err := s.store.MemberNames(guildID)
+	if err != nil {
+		return 0, err
+	}
+	onLiveEvents := map[string]bool{}
+	for _, userID := range people {
+		onLiveEvents[userID] = true
+	}
+	for userID := range known {
+		if !onLiveEvents[userID] {
+			people = append(people, userID)
+		}
+	}
 	renamed := 0
 	var problems []string
 	for _, userID := range people {
 		member, err := s.discord.GuildMember(guildID, userID)
 		if errors.Is(err, ErrUnknownMember) {
+			if err := s.store.RecordMemberLeft(guildID, userID); err != nil {
+				return renamed, err
+			}
 			continue
 		}
 		if err != nil {
 			problems = append(problems, userID+": "+err.Error())
 			continue
+		}
+		if err := s.store.RecordMemberName(guildID, userID, member.DisplayName); err != nil {
+			return renamed, err
 		}
 		n, err := s.store.RenameInGuild(guildID, userID, member.DisplayName)
 		if err != nil {

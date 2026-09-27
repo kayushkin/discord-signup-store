@@ -448,3 +448,19 @@ CREATE TABLE IF NOT EXISTS bot_guilds (
     owner_id   TEXT NOT NULL DEFAULT '',
     updated_at INTEGER NOT NULL
 );
+
+-- member_names: what each person is called in a server, as Discord last said,
+-- for the people this service shows — anyone named in an event's history or on
+-- a roster. left = 1 is someone Discord no longer has in the server; the row
+-- keeps the last name seen. A page reads this instead of asking Discord for
+-- each person on every load, and asks only for someone with no row yet; the
+-- ten-minute sync looks everyone up again, so a new nickname, a departure or a
+-- return shows within ten minutes.
+CREATE TABLE IF NOT EXISTS member_names (
+    guild_id        TEXT NOT NULL,
+    discord_user_id TEXT NOT NULL,
+    display_name    TEXT NOT NULL DEFAULT '',
+    left_guild      INTEGER NOT NULL DEFAULT 0,
+    updated_at      INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, discord_user_id)
+);
