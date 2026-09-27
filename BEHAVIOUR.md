@@ -79,6 +79,13 @@ pings them, or as a DM to each. DMs are limited to two per event in any ten
 minutes, whoever sends them, so the page cannot be used to fill people's DMs;
 a forum post is not limited.
 
+**Joining follows the forum post.** Going or waitlisted, by any of the
+ways above, makes you a member of the event's forum thread, as pressing
+Follow does, so a question asked there reaches everyone coming — the host
+too, from the moment the post opens. Maybe does not. Leaving does not
+unfollow: someone may have followed it themselves, and nothing records
+which.
+
 **An organiser can be told who joins and leaves.** A switch on the event
 page, *Tell me who joins and leaves*, which each organiser sets for
 themselves. Once a person has left their join or leave alone for a minute,

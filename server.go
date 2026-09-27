@@ -173,6 +173,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/republish", s.handleRepublish)
 	mux.HandleFunc("POST /api/reminders", s.handleSendReminders)
 	mux.HandleFunc("POST /api/roster-notices", s.handleSendRosterNotices)
+	mux.HandleFunc("POST /api/forum-posts/follow", s.handleFollowAllForumPosts)
 	mux.HandleFunc("POST /api/guilds/{guildID}/table/rebuild", s.handleRebuildGuildTable)
 	mux.HandleFunc("POST /api/tables/rebuild", s.handleRebuildAllTables)
 
@@ -414,6 +415,17 @@ func (s *Server) handleSendRosterNotices(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"sent": sent})
+}
+
+// handleFollowAllForumPosts makes everyone going or waiting on a live event
+// follow its forum post. Joining does it; this is for those who joined before.
+func (s *Server) handleFollowAllForumPosts(w http.ResponseWriter, r *http.Request) {
+	followed, failed, err := s.FollowAllForumPosts()
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"followed": followed, "failed": failed})
 }
 
 // handleRebuildAllTables reposts every guild's table.

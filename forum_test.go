@@ -366,3 +366,40 @@ func TestALiveEventsPostArchivedForQuietIsReopenedBeforeItsCardIsEdited(t *testi
 		t.Errorf("refresh = %v, want the post reopened and the card edited", err)
 	}
 }
+
+// TestJoiningFollowsTheForumPost: whoever is on the event when its post
+// opens follows it, and so does everyone who joins after; Maybe does not.
+func TestJoiningFollowsTheForumPost(t *testing.T) {
+	fake, store, srv := forumFake(t)
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Games",
+		Capacity: 1, StartsAt: time.Now().Add(24 * time.Hour).Unix()})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := store.Join(ev.ID, "host", "Host", JoinedViaOrganiser); err != nil {
+		t.Fatalf("host join: %v", err)
+	}
+	if err := srv.refreshForumPost(ev, true); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	for _, j := range []struct{ id, state string }{{"ann", StateWaitlisted}, {"bob", StateMaybe}} {
+		var err error
+		if j.state == StateMaybe {
+			_, err = store.MarkMaybe(ev.ID, j.id, j.id, JoinedViaButton)
+		} else {
+			_, err = store.Join(ev.ID, j.id, j.id, JoinedViaButton)
+		}
+		if err != nil {
+			t.Fatalf("%s: %v", j.id, err)
+		}
+		srv.syncAfterChange(ev.ID, []stateChange{{UserID: j.id, State: j.state}})
+	}
+	for _, who := range []string{"host", "ann"} {
+		if len(callsTo(fake, http.MethodPut, "/channels/msg-1/thread-members/"+who)) == 0 {
+			t.Errorf("%s does not follow the post", who)
+		}
+	}
+	if len(callsTo(fake, http.MethodPut, "/channels/msg-1/thread-members/bob")) != 0 {
+		t.Error("bob, on Maybe, was made to follow the post")
+	}
+}
