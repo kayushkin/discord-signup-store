@@ -54,10 +54,9 @@ func getPage(t *testing.T, mux http.Handler, token, path string) *httptest.Respo
 // TestTheHomePageRemembersWhichServer, per user, and every server again when
 // it is cleared.
 func TestTheHomePageRemembersWhichServer(t *testing.T) {
-	_, store, fake, mux, _ := webTestServer(t)
-	fake.on(http.MethodGet, "/users/@me/guilds", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`[{"id":"g1","name":"One"},{"id":"g2","name":"Two"}]`))
-	})
+	_, store, _, mux, _ := webTestServer(t)
+	recordBotGuild(t, store, "g1", "One", "")
+	recordBotGuild(t, store, "g2", "Two", "")
 	store.CreateEvent(Event{GuildID: "g1", ChannelID: "c", Name: "First server night", Status: StatusOpen, StartsAt: 4102444800})
 	store.CreateEvent(Event{GuildID: "g2", ChannelID: "c", Name: "Second server night", Status: StatusOpen, StartsAt: 4102444800})
 	both, _ := store.CreateWebSession("u-both", "Both", "", map[string]uint64{"g1": permissionManageEvents, "g2": permissionManageEvents})

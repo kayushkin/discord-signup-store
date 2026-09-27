@@ -61,16 +61,13 @@ func (s *Store) PeopleOnListsIn(guildIDs []string) ([]namedPerson, error) {
 // guildsWhereMayName is every server the bot is in for a site admin, and
 // for anyone else the ones they own.
 func (s *Server) guildsWhereMayName(session *WebSession) ([]Guild, error) {
-	if s.discord == nil {
-		return nil, errors.New("no discord client configured")
-	}
 	admin, err := s.store.IsSiteAdmin(session.DiscordUserID)
 	if err != nil {
 		return nil, err
 	}
-	botGuilds, err := s.discord.ListBotGuilds()
+	botGuilds, err := s.store.BotGuilds()
 	if err != nil {
-		return nil, fmt.Errorf("list bot guilds: %w", err)
+		return nil, err
 	}
 	var out []Guild
 	for _, g := range botGuilds {
@@ -83,9 +80,9 @@ func (s *Server) guildsWhereMayName(session *WebSession) ([]Guild, error) {
 		if !session.IsMemberOf(g.ID) || session.GuildPermissions[g.ID]&permissionAdministrator == 0 {
 			continue
 		}
-		ownerID, err := s.discord.GuildOwnerID(g.ID)
+		ownerID, err := s.store.BotGuildOwnerID(g.ID)
 		if err != nil {
-			return nil, fmt.Errorf("read the owner of %s: %w", g.Name, err)
+			return nil, err
 		}
 		if ownerID == session.DiscordUserID {
 			out = append(out, g)

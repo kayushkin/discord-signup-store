@@ -72,11 +72,10 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver, notifyDiscon
 	session.AddHandler(listener.onScheduledEventDeleted)
 	session.AddHandler(listener.onScheduledEventChanged)
 	session.AddHandler(listener.onGuildCreate)
+	session.AddHandler(listener.onGuildUpdate)
+	session.AddHandler(listener.onGuildDelete)
 	session.AddHandler(listener.onDirectMessage)
-	session.AddHandler(func(_ *discordgo.Session, r *discordgo.Ready) {
-		log.Printf("[discord-signup] gateway ready as %s#%s, %d guild(s)",
-			r.User.Username, r.User.Discriminator, len(r.Guilds))
-	})
+	session.AddHandler(listener.onReady)
 	session.AddHandler(func(_ *discordgo.Session, _ *discordgo.Resumed) {
 		log.Print("[discord-signup] gateway resumed; events from the gap were replayed")
 	})
@@ -294,20 +293,55 @@ func (g *GatewayListener) onScheduledEventDeleted(_ *discordgo.Session, e *disco
 	}
 }
 
-// onGuildCreate sets a server up the moment the bot is added to it. Discord
-// also sends GUILD_CREATE for every server on every connect, so this asks the
-// store first and does nothing for a server already set up — a reconnect must
-// not redraw every table in every server.
+// onGuildCreate records a server in bot_guilds and sets it up the moment the
+// bot is added to it. Discord also sends GUILD_CREATE for every server on
+// every connect, so setup asks the store first and does nothing for a server
+// already set up — a reconnect must not redraw every table in every server.
 func (g *GatewayListener) onGuildCreate(_ *discordgo.Session, e *discordgo.GuildCreate) {
 	if e.Guild == nil || e.Unavailable {
 		return
 	}
+	g.server.recordGatewayGuild(e.ID, e.Name, e.OwnerID)
 	if ch, err := g.server.store.GuildChannels(e.ID); err != nil || ch.Board != "" {
 		return
 	}
 	log.Printf("[discord-signup] joined %q (%s); setting it up", e.Name, e.ID)
 	if _, err := g.server.SetUpGuild(e.ID); err != nil {
 		log.Printf("[discord-signup] set up guild %s: %v", e.ID, err)
+	}
+}
+
+// onReady forgets the servers the bot left while it was not connected. READY
+// lists every server the bot is in, each marked unavailable until its own
+// GUILD_CREATE follows and records it.
+func (g *GatewayListener) onReady(_ *discordgo.Session, r *discordgo.Ready) {
+	log.Printf("[discord-signup] gateway ready as %s#%s, %d guild(s)",
+		r.User.Username, r.User.Discriminator, len(r.Guilds))
+	ids := make([]string, 0, len(r.Guilds))
+	for _, guild := range r.Guilds {
+		ids = append(ids, guild.ID)
+	}
+	if err := g.server.store.KeepOnlyBotGuilds(ids); err != nil {
+		log.Printf("[discord-signup] %v", err)
+	}
+}
+
+// onGuildUpdate records a server's new name or owner.
+func (g *GatewayListener) onGuildUpdate(_ *discordgo.Session, e *discordgo.GuildUpdate) {
+	if e.Guild == nil {
+		return
+	}
+	g.server.recordGatewayGuild(e.ID, e.Name, e.OwnerID)
+}
+
+// onGuildDelete forgets a server the bot was removed from. An unavailable
+// server is in an outage, not gone, and keeps its row.
+func (g *GatewayListener) onGuildDelete(_ *discordgo.Session, e *discordgo.GuildDelete) {
+	if e.Guild == nil || e.Unavailable {
+		return
+	}
+	if err := g.server.store.RemoveBotGuild(e.ID); err != nil {
+		log.Printf("[discord-signup] %v", err)
 	}
 }
 

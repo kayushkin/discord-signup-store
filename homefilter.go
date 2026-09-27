@@ -41,12 +41,9 @@ func (s *Store) SetHomeGuild(discordUserID, guildID string) error {
 // viewableGuilds is the servers the bot is in that this viewer may see — the
 // home page filter's choices.
 func (s *Server) viewableGuilds(session *WebSession) ([]Guild, error) {
-	if s.discord == nil {
-		return nil, errors.New("no discord client configured")
-	}
-	botGuilds, err := s.discord.ListBotGuilds()
+	botGuilds, err := s.store.BotGuilds()
 	if err != nil {
-		return nil, fmt.Errorf("list the bot's servers: %w", err)
+		return nil, err
 	}
 	var out []Guild
 	for _, g := range botGuilds {

@@ -12,9 +12,7 @@ import (
 func namesPageServer(t *testing.T) (*Store, *fakeDiscord, http.Handler, string) {
 	t.Helper()
 	_, store, fake, mux, token := webTestServer(t)
-	fake.on(http.MethodGet, "/users/@me/guilds", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`[{"id":"g1","name":"Games club"}]`))
-	})
+	recordBotGuild(t, store, "g1", "Games club", "")
 	if _, err := store.AddSiteAdmin("manager"); err != nil {
 		t.Fatal(err)
 	}
@@ -25,13 +23,8 @@ func namesPageServer(t *testing.T) (*Store, *fakeDiscord, http.Handler, string) 
 // every server, so an organiser with Manage Events gets a 404 and no link,
 // and a server's owner gets the page.
 func TestOnlySiteAdminsAndServerOwnersSeeTheNamesPage(t *testing.T) {
-	_, store, fake, mux, organiser := webTestServer(t)
-	fake.on(http.MethodGet, "/users/@me/guilds", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`[{"id":"g1","name":"Games club"}]`))
-	})
-	fake.on(http.MethodGet, "/guilds/g1", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"id":"g1","owner_id":"owner"}`))
-	})
+	_, store, _, mux, organiser := webTestServer(t)
+	recordBotGuild(t, store, "g1", "Games club", "owner")
 	if rec := getPage(t, mux, organiser, "/names"); rec.Code != http.StatusNotFound {
 		t.Errorf("an organiser opening /names got %d, want 404", rec.Code)
 	}

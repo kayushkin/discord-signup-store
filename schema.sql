@@ -433,3 +433,18 @@ CREATE TABLE IF NOT EXISTS forum_post_follows (
     unfollowed_at   INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (event_id, discord_user_id)
 );
+
+-- bot_guilds: the servers the bot is in, with each one's name and owner. The
+-- gateway keeps it current — GUILD_CREATE for every server on each connect and
+-- on joining one, GUILD_UPDATE on a rename or a new owner, GUILD_DELETE on
+-- leaving — and the ten-minute sync refreshes it over REST, so it holds with
+-- the gateway off too. Read on every web page instead of asking Discord, whose
+-- list of the bot's servers allows one call a second: three of them on one
+-- page load cost two seconds of waiting on 429s. owner_id is '' until the
+-- gateway or a sync has read it.
+CREATE TABLE IF NOT EXISTS bot_guilds (
+    guild_id   TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    owner_id   TEXT NOT NULL DEFAULT '',
+    updated_at INTEGER NOT NULL
+);

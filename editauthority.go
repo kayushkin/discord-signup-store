@@ -122,9 +122,9 @@ func (s *Server) mayEditAllEventsIn(actor editActor) (bool, error) {
 	if slices.Contains(roles, rule.EditorRoleID) {
 		return true, nil
 	}
-	ownerID, err := s.discord.GuildOwnerID(actor.GuildID)
+	ownerID, err := s.store.BotGuildOwnerID(actor.GuildID)
 	if err != nil {
-		return false, fmt.Errorf("read the server's owner from Discord: %w", err)
+		return false, err
 	}
 	return ownerID == actor.UserID, nil
 }

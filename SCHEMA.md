@@ -369,6 +369,18 @@ was not sent, `''` when it was). Key `(event_id, discord_user_id)`.
 follow it). Key `(event_id, discord_user_id)`; following again resets the row.
 Only people in here are ever taken off a post.
 
+## `bot_guilds` — the servers the bot is in, new 2026-09-27
+
+`guild_id` (PK), `name`, `owner_id` (`''` until read), `updated_at`. The
+gateway writes it: `GUILD_CREATE` and `GUILD_UPDATE` save a server with its
+owner, `GUILD_DELETE` removes one (not during an outage), and `READY` drops any
+the bot left while disconnected. The ten-minute sync (`POST /api/sync`)
+rewrites it from REST, so it holds with the gateway off. The web pages and the
+owner checks read it instead of asking Discord, whose list of the bot's servers
+allows one call a second — three on one home page load was two seconds of 429s.
+A person's roles are still read from Discord each time, so taking a role away
+takes effect at once.
+
 ## `event_table_rows` — **dropped 2026-09-02**
 
 A one-message-per-event table from before the consolidated table was paged,

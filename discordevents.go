@@ -196,18 +196,19 @@ func (s *Server) SyncScheduledEvents(guildID string) (*SyncResult, error) {
 	return result, nil
 }
 
-// SyncAllGuilds pulls native events from every server the bot is in.
+// SyncAllGuilds refreshes bot_guilds from Discord, then pulls native events
+// from every server the bot is in.
 //
 // The guild list comes from Discord rather than from configuration, so adding
 // the bot to another server is all it takes — there is no list here to forget
 // to update, and no guild id written into a cron command.
 func (s *Server) SyncAllGuilds() (*SyncResult, error) {
-	if s.discord == nil {
-		return nil, errors.New("no discord client configured")
+	if err := s.RefreshBotGuilds(); err != nil {
+		return nil, err
 	}
-	guilds, err := s.discord.ListBotGuilds()
+	guilds, err := s.store.BotGuilds()
 	if err != nil {
-		return nil, fmt.Errorf("list bot guilds: %w", err)
+		return nil, err
 	}
 	total := &SyncResult{}
 	for _, g := range guilds {

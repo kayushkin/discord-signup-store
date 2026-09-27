@@ -422,9 +422,9 @@ func (s *Server) mayEditEventAsMember(ev *Event, userID string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("read the server's roles: %w", err)
 	}
-	ownerID, err := s.discord.GuildOwnerID(ev.GuildID)
+	ownerID, err := s.store.BotGuildOwnerID(ev.GuildID)
 	if err != nil {
-		return false, fmt.Errorf("read the server's owner: %w", err)
+		return false, err
 	}
 	held := map[string]bool{ev.GuildID: true} // @everyone's id is the server's
 	for _, id := range roleIDs {

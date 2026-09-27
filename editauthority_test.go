@@ -30,10 +30,8 @@ func pressBy(t *testing.T, userID string, bits uint64, roles ...string) *Interac
 func editorRoleServer(t *testing.T, anyoneMayCreate bool) (*Server, *Store, *fakeDiscord, *Event) {
 	t.Helper()
 	fake := newFakeDiscord(t)
-	fake.on(http.MethodGet, "/guilds/g1", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"id":"g1","owner_id":"u-owner"}`))
-	})
 	store := testStore(t)
+	recordBotGuild(t, store, "g1", "Games club", "u-owner")
 	srv := NewServer(store, nil, fake.client())
 	if _, err := store.SetGuildEditingRule(GuildEditingRule{GuildID: "g1", EditorRoleID: "role-mod",
 		AnyoneMayCreate: anyoneMayCreate}); err != nil {

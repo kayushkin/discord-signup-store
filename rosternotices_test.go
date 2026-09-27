@@ -142,9 +142,7 @@ func pressInDM(t *testing.T, srv *Server, userID, customID string) string {
 
 func TestTheNoticeButtonGivesAPlaceOnlyToWhoMayEdit(t *testing.T) {
 	fake, store, srv, ev := rosterNoticeFixture(t)
-	fake.on(http.MethodGet, "/guilds/g1", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"id":"g1","owner_id":"u-owner"}`))
-	})
+	recordBotGuild(t, store, "g1", "Games club", "u-owner")
 	fake.on(http.MethodGet, "/guilds/g1/roles", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `[{"id":"g1","permissions":"0"},{"id":"role-events","permissions":"%d"}]`, permissionManageEvents)
 	})

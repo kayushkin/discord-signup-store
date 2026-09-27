@@ -39,10 +39,9 @@ func TestASiteAdminMayEditAndCreateAnywhere(t *testing.T) {
 // TestASiteAdminSeesServersTheyAreNotIn, on the front page and an event's
 // page.
 func TestASiteAdminSeesServersTheyAreNotIn(t *testing.T) {
-	_, store, fake, mux, _ := webTestServer(t)
-	fake.on(http.MethodGet, "/users/@me/guilds", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`[{"id":"g1","name":"One"},{"id":"g-other","name":"Other"}]`))
-	})
+	_, store, _, mux, _ := webTestServer(t)
+	recordBotGuild(t, store, "g1", "One", "")
+	recordBotGuild(t, store, "g-other", "Other", "")
 	elsewhere, err := store.CreateEvent(Event{GuildID: "g-other", ChannelID: "c", Name: "Elsewhere night",
 		Status: StatusOpen, StartsAt: time.Now().Add(48 * time.Hour).Unix()})
 	if err != nil {

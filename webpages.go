@@ -2,7 +2,6 @@ package discordsignup
 
 import (
 	"embed"
-	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -256,10 +255,10 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 	// A site admin sees every server the bot is in, member or not.
 	if admin, err := s.store.IsSiteAdmin(session.DiscordUserID); err != nil {
 		data.Error = err.Error()
-	} else if admin && s.discord != nil {
-		botGuilds, err := s.discord.ListBotGuilds()
+	} else if admin {
+		botGuilds, err := s.store.BotGuilds()
 		if err != nil {
-			data.Error = "list the bot's servers: " + err.Error()
+			data.Error = err.Error()
 		}
 		for _, g := range botGuilds {
 			guildIDs[g.ID] = true
@@ -332,12 +331,9 @@ func (s *Server) handleWebNewEventForm(w http.ResponseWriter, r *http.Request) {
 // belongs to and passes allowed in. Both halves matter: the bot cannot post
 // to a server it is not in, and the user must have standing in it.
 func (s *Server) guildsWhere(session *WebSession, allowed func(editActor) (bool, error)) ([]Guild, error) {
-	if s.discord == nil {
-		return nil, errors.New("no discord client configured")
-	}
-	botGuilds, err := s.discord.ListBotGuilds()
+	botGuilds, err := s.store.BotGuilds()
 	if err != nil {
-		return nil, fmt.Errorf("list bot guilds: %w", err)
+		return nil, err
 	}
 	var out []Guild
 	for _, g := range botGuilds {
