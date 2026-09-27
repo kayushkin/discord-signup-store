@@ -327,6 +327,7 @@ func renderRosterNotice(ev *Event, changes []rosterChange, roster []Signup, orig
 	payload := map[string]any{
 		"content":          b.String(),
 		"allowed_mentions": map[string]any{"parse": []string{}},
+		"flags":            messageFlagSuppressEmbeds,
 	}
 	var rows []map[string]any
 	for i := 0; i < len(buttons); i += 5 {

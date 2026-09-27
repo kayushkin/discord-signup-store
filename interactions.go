@@ -42,6 +42,13 @@ const (
 // person who never learns they were waitlisted turns up expecting a place.
 const messageFlagEphemeral = 1 << 6
 
+// messageFlagSuppressEmbeds stops Discord previewing the links in a message.
+// A link to the web pages needs it: Discord fetches the link without logging
+// in, is sent on to Discord's own login page, and previews that — a card
+// larger than the message, reading "Discord - Group Chat That's All Fun &
+// Games".
+const messageFlagSuppressEmbeds = 1 << 2
+
 // customIDPrefix namespaces this service's buttons so a component from some
 // other bot on the same message can never be mistaken for one of ours.
 const customIDPrefix = "signup"

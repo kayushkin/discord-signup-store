@@ -109,6 +109,9 @@ func TestARosterNoticeTellsSettledJoinsOnce(t *testing.T) {
 	if strings.Contains(content, "Cal") {
 		t.Errorf("notice names Cal, who joined and left within the minute:\n%s", content)
 	}
+	if flags, _ := dms[0].Body["flags"].(float64); int(flags)&messageFlagSuppressEmbeds == 0 {
+		t.Errorf("flags = %v: the event page link would be previewed as Discord's login page", dms[0].Body["flags"])
+	}
 	raw, _ := json.Marshal(dms[0].Body["components"])
 	if !strings.Contains(string(raw), GiveAPlaceCustomID(ev.ID, "u2")) || strings.Contains(string(raw), "u1") {
 		t.Errorf("buttons = %s, want one to give Bea (u2) a place and none for Ann", raw)
