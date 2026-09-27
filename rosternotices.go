@@ -269,9 +269,9 @@ func rosterNoticeFailure(err error) string {
 	return "Discord refused the DM: " + err.Error()
 }
 
-// renderRosterNotice is the DM: who joined and who left, the count now, and
-// a button to give a place to each person who joined the waitlist and is
-// still on it.
+// renderRosterNotice is the DM: the event and its count, who joined and who
+// left, a button to give a place to each person who joined the waitlist and
+// is still on it, and one to turn these off.
 func renderRosterNotice(ev *Event, changes []rosterChange, roster []Signup, origin string) map[string]any {
 	now := map[string]Signup{}
 	going, waiting := 0, 0
@@ -285,7 +285,19 @@ func renderRosterNotice(ev *Event, changes []rosterChange, roster []Signup, orig
 		}
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "**%s**\n", ev.Name)
+	if origin != "" {
+		fmt.Fprintf(&b, "**[%s](%s/events/%d)**", ev.Name, origin, ev.ID)
+	} else {
+		fmt.Fprintf(&b, "**%s**", ev.Name)
+	}
+	if ev.Capacity > 0 {
+		fmt.Fprintf(&b, " · %d/%d going", going, ev.Capacity)
+	} else {
+		fmt.Fprintf(&b, " · %d going", going)
+	}
+	if waiting > 0 {
+		fmt.Fprintf(&b, ", %d waiting", waiting)
+	}
 	var buttons []map[string]any
 	for _, c := range changes {
 		sg, known := now[c.UserID]
@@ -294,16 +306,17 @@ func renderRosterNotice(ev *Event, changes []rosterChange, roster []Signup, orig
 			name = sg.NameOnDiscord()
 		}
 		switch {
-		case onTheRoster(c.To) && c.To == StateAttending:
-			fmt.Fprintf(&b, "✅ **%s** joined, going\n", name)
-		case onTheRoster(c.To):
-			fmt.Fprintf(&b, "⏳ **%s** joined the waitlist\n", name)
+		case c.To == StateAttending:
+			fmt.Fprintf(&b, "\n✅ %s joined", name)
+		case c.To == StateWaitlisted:
+			fmt.Fprintf(&b, "\n⏳ %s joined the waitlist", name)
 		case c.To == StateMaybe:
-			fmt.Fprintf(&b, "➖ **%s** left and is now Maybe\n", name)
+			fmt.Fprintf(&b, "\n➖ %s left, now Maybe", name)
 		default:
-			fmt.Fprintf(&b, "➖ **%s** left\n", name)
+			fmt.Fprintf(&b, "\n➖ %s left", name)
 		}
-		if known && sg.State == StateWaitlisted && c.To == StateWaitlisted && len(buttons) < maxNoticeButtons {
+		// One place is kept for the Turn off button.
+		if known && sg.State == StateWaitlisted && c.To == StateWaitlisted && len(buttons) < maxNoticeButtons-1 {
 			buttons = append(buttons, map[string]any{
 				"type": componentTypeButton, "style": buttonStylePrimary,
 				"label":     truncate("Give "+name+" a place", 80),
@@ -311,19 +324,10 @@ func renderRosterNotice(ev *Event, changes []rosterChange, roster []Signup, orig
 			})
 		}
 	}
-	if ev.Capacity > 0 {
-		fmt.Fprintf(&b, "Now %d/%d going", going, ev.Capacity)
-	} else {
-		fmt.Fprintf(&b, "Now %d going", going)
-	}
-	if waiting > 0 {
-		fmt.Fprintf(&b, ", %d waiting", waiting)
-	}
-	b.WriteString(".")
-	if origin != "" {
-		fmt.Fprintf(&b, " [Event page](%s/events/%d)", origin, ev.ID)
-	}
-	b.WriteString("\n-# You turned these on on the event's page, where you can turn them off.")
+	buttons = append(buttons, map[string]any{
+		"type": componentTypeButton, "style": buttonStyleSecondary,
+		"label": "Turn off", "custom_id": RosterNoticesOffCustomID(ev.ID),
+	})
 	payload := map[string]any{
 		"content":          b.String(),
 		"allowed_mentions": map[string]any{"parse": []string{}},
@@ -333,10 +337,33 @@ func renderRosterNotice(ev *Event, changes []rosterChange, roster []Signup, orig
 	for i := 0; i < len(buttons); i += 5 {
 		rows = append(rows, map[string]any{"type": componentTypeActionRow, "components": buttons[i:min(i+5, len(buttons))]})
 	}
-	if rows != nil {
-		payload["components"] = rows
-	}
+	payload["components"] = rows
 	return payload
+}
+
+// RosterNoticesOffCustomID is a roster notice's Turn off button.
+func RosterNoticesOffCustomID(eventID int64) string {
+	return fmt.Sprintf("%s:%s:%d", customIDPrefix, rosterNoticesOffAction, eventID)
+}
+
+// rosterNoticesOffAction is the Turn off button's action.
+const rosterNoticesOffAction = "roster-notices-off"
+
+// handleRosterNoticesOffButton turns off the presser's own roster notices
+// for the event. It needs no check: it changes nothing but what they get.
+func (s *Server) handleRosterNoticesOffButton(w http.ResponseWriter, in *Interaction, eventID int64) {
+	presser, _ := in.actor()
+	ev, err := s.store.GetEvent(eventID)
+	if err != nil {
+		s.replyEphemeral(w, "That event no longer exists.")
+		return
+	}
+	if err := s.store.UnwatchRoster(ev.ID, presser); err != nil {
+		log.Printf("[discord-signup] turn off roster notices for %s on %d: %v", presser, ev.ID, err)
+		s.replyEphemeral(w, "Nothing was changed: "+err.Error())
+		return
+	}
+	s.replyEphemeral(w, fmt.Sprintf("Turned off for **%s**.", ev.Name))
 }
 
 // GiveAPlaceCustomID is a roster notice's button that gives one waitlisted

@@ -88,7 +88,8 @@ then Leave is nothing. Only what people do themselves is told — not an
 organiser's adds or removals, moving up off the waitlist, or a date rolling
 over. Under each person who joined the waitlist and is still on it is a
 **Give … a place** button, which does what the page's button does; the press
-is checked against who may edit the event, read from Discord.
+is checked against who may edit the event, read from Discord. **Turn off**
+under it stops that organiser's notices for the event.
 
 **Replies to the bot's DMs are shown on the event page.** Every DM sent
 about an event — an organiser's message, an invite, being put on a list or

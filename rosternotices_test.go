@@ -101,7 +101,7 @@ func TestARosterNoticeTellsSettledJoinsOnce(t *testing.T) {
 		t.Fatalf("DMs posted = %d, want 1", len(dms))
 	}
 	content, _ := dms[0].Body["content"].(string)
-	for _, want := range []string{"**Ann** joined, going", "**Bea** joined the waitlist", "Now 1/1 going, 1 waiting"} {
+	for _, want := range []string{"**Board games** · 1/1 going, 1 waiting", "✅ Ann joined", "⏳ Bea joined the waitlist"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("notice lacks %q:\n%s", want, content)
 		}
@@ -115,6 +115,9 @@ func TestARosterNoticeTellsSettledJoinsOnce(t *testing.T) {
 	raw, _ := json.Marshal(dms[0].Body["components"])
 	if !strings.Contains(string(raw), GiveAPlaceCustomID(ev.ID, "u2")) || strings.Contains(string(raw), "u1") {
 		t.Errorf("buttons = %s, want one to give Bea (u2) a place and none for Ann", raw)
+	}
+	if !strings.Contains(string(raw), RosterNoticesOffCustomID(ev.ID)) {
+		t.Errorf("buttons = %s, want a Turn off button", raw)
 	}
 
 	if sent, err := srv.SendRosterNotices(); err != nil || sent != 0 {
@@ -173,5 +176,15 @@ func TestTheNoticeButtonGivesAPlaceOnlyToWhoMayEdit(t *testing.T) {
 	}
 	if reply := pressInDM(t, srv, "u-org", button); !strings.Contains(reply, "not on the waitlist") {
 		t.Errorf("a second press: reply %s, want that they are not waiting", reply)
+	}
+}
+
+func TestTheNoticeTurnOffButtonStopsThePressersNotices(t *testing.T) {
+	_, store, srv, ev := rosterNoticeFixture(t)
+	if reply := pressInDM(t, srv, "u-org", RosterNoticesOffCustomID(ev.ID)); !strings.Contains(reply, "Turned off") {
+		t.Fatalf("reply = %s", reply)
+	}
+	if w, err := store.RosterWatcherFor(ev.ID, "u-org"); err != nil || w != nil {
+		t.Errorf("watch after Turn off = %+v, %v; want none", w, err)
 	}
 }

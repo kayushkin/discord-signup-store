@@ -294,6 +294,8 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		// action." Routed explicitly now, and pinned by a test that presses it
 		// through the signed handler.
 		s.handleMyEventsButton(w, in)
+	case rosterNoticesOffAction:
+		s.handleRosterNoticesOffButton(w, in, eventID)
 	case "dash-join", "dash-leave":
 		s.handleDashboardAction(w, in, action, eventID)
 	default:
