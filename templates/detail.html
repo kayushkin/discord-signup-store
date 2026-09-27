@@ -380,13 +380,8 @@
         {{if not .MessagesLeft}}<span class="hint">DMs again at {{shortTime .MessagesNextAt}}</span>{{end}}
       </div>
     </form>
-  </section>
-  {{end}}
 
-  {{if $canManage}}
-  <section class="card" id="replies">
-    <div class="card-head"><h3>Replies</h3><span class="badge">{{len .Replies}}</span>
-</div>
+    <div class="card-head sub-head" id="replies"><h3>Replies</h3><span class="badge">{{len .Replies}}</span></div>
     {{if not .Replies}}<p class="empty">No replies yet.</p>{{end}}
     <ol class="replies">
       {{range .Replies}}
