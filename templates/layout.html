@@ -86,11 +86,23 @@ h2,h3{font-family:var(--display);font-weight:400;letter-spacing:.3px}
 @media (max-width:560px){
   .hero{flex-direction:column;text-align:center;gap:8px}
   .hero-art{width:170px;height:170px;margin:-6px 0 0}
-  .mascot{width:52px;height:52px}
+  /* The shorter header would otherwise put her feet on its bottom rules. */
+  .mascot{width:52px;height:52px;margin-bottom:-2px}
   header .kana{display:none}
-  header .btn{white-space:nowrap;padding:6px 10px;font-size:13px}
+  header .btn,header button{white-space:nowrap;padding:6px 10px;font-size:13px;min-height:0}
   header h1{font-size:20px}
   header{gap:10px}
+  /* The name gives way first: one line, cut short, never pushing Sign out
+     onto two lines. */
+  header .meta{min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  header form{flex:none}
+}
+/* Too narrow for the name to say anything; Sign out is enough. */
+@media (max-width:400px){
+  header .meta{display:none}
+  /* The server filter takes a line of its own, the word beside the box. */
+  .home-filter{flex:1 1 100%;margin:0!important;flex-wrap:nowrap}
+  .home-filter select{flex:1;min-width:0}
 }
 /* Home page cards: one link each, date block, what and where, and how full. */
 a.event-card{display:flex;align-items:center;gap:16px;background:var(--paper-light);border:2.5px solid var(--ink);
@@ -112,7 +124,8 @@ a.event-card:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 .ec-meta{color:var(--dim);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ec-meta .dot{margin:0 6px;color:var(--accent)}
 .ec-tags{display:flex;gap:6px;flex-wrap:wrap}
-.ec-tags:empty{display:none}
+/* :empty never matches: the template leaves whitespace between the tags. */
+.ec-tags:not(:has(.pill)){display:none}
 .ec-count{flex:none;width:112px;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
 .ec-num{font-family:var(--display);font-size:19px;font-variant-numeric:tabular-nums}
 .ec-sub{font-size:12px;color:var(--dim);text-align:right}
@@ -122,10 +135,15 @@ a.event-card:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 .bar-going{background:repeating-linear-gradient(135deg,var(--ok) 0 4px,color-mix(in srgb,var(--ok) 75%,#000) 4px 6px)}
 .bar-held{background:repeating-linear-gradient(135deg,var(--warn) 0 4px,color-mix(in srgb,var(--warn) 75%,#000) 4px 6px)}
 .chev{flex:none;color:var(--ink);transition:transform .12s}
+/* On a phone the count goes under the event's text, in the same column, and
+   the date block runs down the left of both: "1/3 going", then the bar. */
 @media (max-width:560px){
-  a.event-card{flex-wrap:wrap;gap:12px}
-  .ec-count{width:auto;flex-direction:row;align-items:center;gap:10px;order:3;flex-basis:100%;padding-left:74px}
-  .ec-count .bar{flex:1}
+  a.event-card{display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:8px;align-items:start}
+  a.event-card .datebox{grid-row:1 / span 2}
+  .ec-count{grid-column:2;width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:4px 8px}
+  .ec-num{font-size:17px}
+  .ec-sub{order:1;text-align:left;white-space:nowrap}
+  .ec-count .bar{order:2;flex:1 1 60px}
   .chev{display:none}
 }
 /* Archived cards stay legible but visibly done — faded like an old print,
