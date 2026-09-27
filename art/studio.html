@@ -17,4 +17,13 @@ window.paintedImages = Object.fromEntries(DRAWING.sizes.map(size => {
   ctx.drawImage(document.getElementById('print'), 0, 0, size, size * DRAWING.height / DRAWING.width);
   return [size, scaled.toDataURL('image/webp', .9)];
 }));
+// A drawing may also name a square close crop for the browser tab icon, which
+// is too small for the whole picture; PNG, since that is what browsers take.
+window.paintedIcons = Object.fromEntries((DRAWING.icon?.sizes ?? []).map(size => {
+  const [x, y, side] = DRAWING.icon.box;
+  const scaled = document.createElement('canvas'); scaled.width = scaled.height = size;
+  const ctx = scaled.getContext('2d'); ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(document.getElementById('print'), x, y, side, side, 0, 0, size, size);
+  return [size, scaled.toDataURL('image/png')];
+}));
 </script>

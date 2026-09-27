@@ -6,7 +6,10 @@ const DRAWING = {
   // Who this is, by the id Discord gave her; the name is only for reading.
   person: { discordUserId: '493904201101869067', name: 'Maleeha', role: 'server owner',
             server: { discordGuildId: '1451516687173156926', name: 'Reno 20s and 30s social group' } },
-  width: 800, height: 800, sizes: [720, 360, 128], paint() {
+  width: 800, height: 800, sizes: [720, 360, 128],
+  // Her face in the hood, for the browser tab and a phone's home screen.
+  icon: { box: [248, 296, 280], sizes: [32, 180], favicon: true },
+  paint() {
   const badge = [400, 440], badgeRadius = 300;
   part(ellipsePoints(badge[0] + 14, badge[1] + 14, badgeRadius, badgeRadius, 40), { fill: INK.black, line: 0, wobble: 1 });
   part(ellipsePoints(...badge, badgeRadius, badgeRadius, 40), { fill: INK.red, line: 7, wobble: 1,
