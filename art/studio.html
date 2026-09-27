@@ -17,13 +17,35 @@ window.paintedImages = Object.fromEntries(DRAWING.sizes.map(size => {
   ctx.drawImage(document.getElementById('print'), 0, 0, size, size * DRAWING.height / DRAWING.width);
   return [size, scaled.toDataURL('image/webp', .9)];
 }));
-// A drawing may also name a square close crop for the browser tab icon, which
-// is too small for the whole picture; PNG, since that is what browsers take.
-window.paintedIcons = Object.fromEntries((DRAWING.icon?.sizes ?? []).map(size => {
-  const [x, y, side] = DRAWING.icon.box;
-  const scaled = document.createElement('canvas'); scaled.width = scaled.height = size;
-  const ctx = scaled.getContext('2d'); ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(document.getElementById('print'), x, y, side, side, 0, 0, size, size);
-  return [size, scaled.toDataURL('image/png')];
-}));
+// A drawing may also have a tab icon: its head printed alone, cut out along
+// its own outline on a transparent square. PNG, since that is what browsers take.
+window.paintedIcons = {};
+if (DRAWING.icon) {
+  const head = document.createElement('canvas');
+  printDrawing(head, DRAWING, { headOnly: true });
+  // The box around every pixel with ink on it.
+  const { data } = head.getContext('2d').getImageData(0, 0, head.width, head.height);
+  let left = head.width, top = head.height, right = 0, bottom = 0;
+  for (let y = 0; y < head.height; y++) for (let x = 0; x < head.width; x++) if (data[(y * head.width + x) * 4 + 3] > 24) {
+    left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
+  }
+  const width = right - left + 1, height = bottom - top + 1;
+  for (const size of DRAWING.icon.sizes) {
+    const scaled = document.createElement('canvas'); scaled.width = scaled.height = size;
+    const ctx = scaled.getContext('2d'); ctx.imageSmoothingQuality = 'high';
+    if ((DRAWING.icon.onPaper ?? []).includes(size)) { ctx.fillStyle = INK.paperLight; ctx.fillRect(0, 0, size, size); }
+    const fit = size * (1 - 2 * DRAWING.icon.margin) / Math.max(width, height);
+    const at = [(size - width * fit) / 2, (size - height * fit) / 2, width * fit, height * fit];
+    // A black edge all round the cut-out, so it holds on a light or dark tab.
+    const edge = document.createElement('canvas'); edge.width = edge.height = size;
+    const edgeCtx = edge.getContext('2d'); edgeCtx.imageSmoothingQuality = 'high';
+    const thickness = Math.max(1, size / 64) * (DRAWING.icon.outline ?? 0);
+    for (let a = 0; a < 16; a++) edgeCtx.drawImage(head, left, top, width, height,
+      at[0] + Math.cos(a / 8 * Math.PI) * thickness, at[1] + Math.sin(a / 8 * Math.PI) * thickness, at[2], at[3]);
+    edgeCtx.globalCompositeOperation = 'source-in'; edgeCtx.fillStyle = INK.black; edgeCtx.fillRect(0, 0, size, size);
+    ctx.drawImage(edge, 0, 0);
+    ctx.drawImage(head, left, top, width, height, ...at);
+    window.paintedIcons[size] = scaled.toDataURL('image/png');
+  }
+}
 </script>

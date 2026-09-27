@@ -99,11 +99,11 @@ function harlequin(ctx, box, size, angle, offset = 0) {
   ctx.restore();
 }
 
-function printDrawing(canvas, drawing) {
+function printDrawing(canvas, drawing, paintOptions) {
   const { width, height } = drawing;
   canvas.width = width; canvas.height = height;
   PARTS = [];
-  drawing.paint();
+  drawing.paint(paintOptions);
   const layer = () => { const c = document.createElement('canvas'); c.width = width; c.height = height; return c; };
   const colourLayer = layer(), blackLayer = layer();
   const colour = colourLayer.getContext('2d'), black = blackLayer.getContext('2d');
