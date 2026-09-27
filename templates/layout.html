@@ -4,9 +4,19 @@
 <title>{{.Title}} · Events</title>
 <link rel="icon" type="image/png" sizes="32x32" href="/art/maleeha-icon-32.png">
 <link rel="apple-touch-icon" href="/art/maleeha-icon-180.png">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="preload" href="/fonts/ZenKakuGothicNew-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/ZenKakuGothicNew-Bold.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/DelaGothicOne-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+/* The fonts are served from here, cut down to the characters the pages use by
+   fonts/subset.sh: Google's stylesheet for them was 146 KB of Japanese
+   subsets and held up the first paint by a round trip to another site.
+   fallback hides text for at most 100 ms, so it rarely jumps when they land. */
+@font-face{font-family:"Zen Kaku Gothic New";font-weight:400;font-display:fallback;src:url(/fonts/ZenKakuGothicNew-Regular.woff2) format("woff2")}
+@font-face{font-family:"Zen Kaku Gothic New";font-weight:500;font-display:fallback;src:url(/fonts/ZenKakuGothicNew-Medium.woff2) format("woff2")}
+@font-face{font-family:"Zen Kaku Gothic New";font-weight:700;font-display:fallback;src:url(/fonts/ZenKakuGothicNew-Bold.woff2) format("woff2")}
+@font-face{font-family:"Zen Kaku Gothic New";font-weight:900;font-display:fallback;src:url(/fonts/ZenKakuGothicNew-Black.woff2) format("woff2")}
+@font-face{font-family:"Dela Gothic One";font-weight:400;font-display:fallback;src:url(/fonts/DelaGothicOne-Regular.woff2) format("woff2")}
 /* Look: a 1970s Japanese screen-print poster. Cream paper, black ink, and
    three spot inks — red for actions, teal for "going", mustard for "waiting".
    Grain and halftone dots sit on top; the layout rules below are unchanged. */

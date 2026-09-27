@@ -58,6 +58,7 @@ service's, and proxying any other route publishes roster editing to the world.
 | GET | `/` | The events you may edit: those you created, and all events in servers where you may edit every event. |
 | GET | `/login` · `/auth/callback` · POST `/logout` | Discord OAuth2, scopes `identify guilds`. |
 | GET | `/art/{file}` · `/favicon.ico` | A drawing the pages show, or the tab icon (`static/art/`, painted by `art/render.mjs`). No login. |
+| GET | `/fonts/{file}` | A web font, cut down to the characters the pages use, or its licence (`static/fonts/`, built by `fonts/subset.sh`). No login. |
 | GET · POST | `/events/new` | Create, with a real date picker and an IANA timezone. |
 | GET | `/events/{id}` | 404 unless you may edit it. The event, its roster, invites and log (signups, edits and invites, newest first). For an organiser the fields are the edit form. |
 | POST | `/events/{id}` | Save fields. **Only the fields the request carries change**; the page sends one field, or one group (starts, ends and timezone together), at a time. With `Accept: application/json` every event-page route answers `{"notice":…}` or `{"error":…}` instead of redirecting, and the page's script redraws in place. `waitlist` is `on` or `off`; `status` is honoured if sent but the page no longer sends it. A failed save shows the page again with what was typed. |

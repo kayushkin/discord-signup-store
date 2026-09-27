@@ -182,6 +182,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /", s.handleWebIndex)
 	mux.HandleFunc("GET /login", s.handleLogin)
 	mux.Handle("GET /art/{file}", s.handleArt())
+	mux.Handle("GET /fonts/{file}", s.handleFonts())
 	mux.HandleFunc("GET /favicon.ico", s.handleFavicon)
 	mux.HandleFunc("GET /auth/callback", s.handleOAuthCallback)
 	mux.HandleFunc("POST /logout", s.handleLogout)
