@@ -61,6 +61,25 @@ h2,h3{font-family:var(--display);font-weight:400;letter-spacing:.3px}
 .pill.closed{color:var(--ink);background:var(--warn)}
 .pill.cancelled{color:var(--paper-light);background:var(--bad)}
 .pill.completed{color:var(--dim);border-color:var(--dim);background:transparent}
+/* Maleeha, the mascot: a sticker in the masthead that tips when pointed at,
+   and a larger drawing beside the words on the sign-in and empty pages. */
+.mascot{display:block;width:64px;height:64px;margin:-6px -4px -10px -6px;filter:drop-shadow(2px 2px 0 var(--ink));transition:transform .15s}
+.mascot-link:hover .mascot{transform:rotate(-8deg) scale(1.06)}
+.hero{display:flex;align-items:center;gap:22px}
+.hero-art{flex:none;width:200px;height:200px;margin:-8px -6px -12px -10px}
+.hero-art.small{width:130px;height:130px}
+.hero h3{font-size:22px;margin-bottom:6px}
+.hero p{margin:0 0 12px}
+.hero p:last-child{margin-bottom:0}
+@media (max-width:560px){
+  .hero{flex-direction:column;text-align:center;gap:8px}
+  .hero-art{width:170px;height:170px;margin:-6px 0 0}
+  .mascot{width:52px;height:52px}
+  header .kana{display:none}
+  header .btn{white-space:nowrap;padding:6px 10px;font-size:13px}
+  header h1{font-size:20px}
+  header{gap:10px}
+}
 /* Home page cards: one link each, date block, what and where, and how full. */
 a.event-card{display:flex;align-items:center;gap:16px;background:var(--paper-light);border:2.5px solid var(--ink);
   border-radius:3px;padding:14px 16px;margin-bottom:14px;color:var(--ink);text-decoration:none;box-shadow:var(--shadow);
@@ -480,6 +499,7 @@ dialog.dialog label{margin:14px 0 0}
 .toast.is-error{border-left-color:var(--bad)}
 </style></head><body>
 <header>
+  <a href="/" class="mascot-link" aria-hidden="true" tabindex="-1"><img class="mascot" src="/art/maleeha-128.webp" alt="" width="64" height="64"></a>
   <h1><a href="/">Events</a></h1>
   <span class="kana" aria-hidden="true">イベント</span>
   <span class="spacer"></span>

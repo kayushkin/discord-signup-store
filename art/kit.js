@@ -151,5 +151,4 @@ function printDrawing(canvas, drawing) {
     d[i + 3] = Math.round(d[i + 3] * (1 - .12 * blotch - (speck > .93 ? .5 : 0)));
   }
   out.putImageData(image, 0, 0);
-  return canvas.toDataURL('image/png');
 }

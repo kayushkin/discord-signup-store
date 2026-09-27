@@ -9,5 +9,12 @@ const drawingName = new URLSearchParams(location.search).get('drawing');
 document.write(`<script src="drawings/${drawingName}.js"><\/script>`);
 </script>
 <script>
-window.paintedPNG = printDrawing(document.getElementById('print'), DRAWING);
+printDrawing(document.getElementById('print'), DRAWING);
+// Each size the pages use, scaled down from the full print, as WebP.
+window.paintedImages = Object.fromEntries(DRAWING.sizes.map(size => {
+  const scaled = document.createElement('canvas'); scaled.width = scaled.height = size;
+  const ctx = scaled.getContext('2d'); ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(document.getElementById('print'), 0, 0, size, size * DRAWING.height / DRAWING.width);
+  return [size, scaled.toDataURL('image/webp', .9)];
+}));
 </script>

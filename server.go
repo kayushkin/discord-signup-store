@@ -181,6 +181,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	// Browser surface — session-gated.
 	mux.HandleFunc("GET /", s.handleWebIndex)
 	mux.HandleFunc("GET /login", s.handleLogin)
+	mux.Handle("GET /art/{file}", s.handleArt())
 	mux.HandleFunc("GET /auth/callback", s.handleOAuthCallback)
 	mux.HandleFunc("POST /logout", s.handleLogout)
 	mux.HandleFunc("GET /events/new", s.handleWebNewEventForm)

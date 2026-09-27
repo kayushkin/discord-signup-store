@@ -1,6 +1,12 @@
-// The mascot: a cheeky jester, tongue out, in a harlequin hood with five points, a lace
-// ruff and clown make-up, waving from in front of a red sun badge.
-const DRAWING = { width: 800, height: 800, paint() {
+// The mascot: Maleeha, who owns the Reno 20s and 30s social group server, in
+// her jester costume — a harlequin hood with five points, a lace ruff, clown
+// make-up and her tongue out — waving from in front of a red sun badge.
+// Drawn from photos she is in; the photos are not kept here.
+const DRAWING = {
+  // Who this is, by the id Discord gave her; the name is only for reading.
+  person: { discordUserId: '493904201101869067', name: 'Maleeha', role: 'server owner',
+            server: { discordGuildId: '1451516687173156926', name: 'Reno 20s and 30s social group' } },
+  width: 800, height: 800, sizes: [720, 360, 128], paint() {
   const badge = [400, 440], badgeRadius = 300;
   part(ellipsePoints(badge[0] + 14, badge[1] + 14, badgeRadius, badgeRadius, 40), { fill: INK.black, line: 0, wobble: 1 });
   part(ellipsePoints(...badge, badgeRadius, badgeRadius, 40), { fill: INK.red, line: 7, wobble: 1,
