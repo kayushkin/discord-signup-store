@@ -43,9 +43,18 @@ function ellipsePoints(cx, cy, rx, ry, steps = 24, rotation = 0) {
 // The two passes. Colour: flat fills and colour halftones. Black: outlines,
 // black patterns and black halftones. A part hides the black of the parts
 // behind it, so lines never show through something in front.
-let PARTS = [];
-function part(points, options) { PARTS.push({ points, ...options }); }
-function stroke(points, options) { PARTS.push({ points, openStroke: true, ...options }); }
+let PARTS = [], TILT = null;
+// Parts drawn while a tilt is set turn with it: tilt(angle, [x, y]) … tilt(null).
+function tilt(angle, pivot) { TILT = angle === null ? null : { angle, pivot }; }
+function part(points, options) { PARTS.push({ points, tilt: TILT, ...options }); }
+function stroke(points, options) { PARTS.push({ points, tilt: TILT, openStroke: true, ...options }); }
+// A thick rounded bar from a to b, for arms and fingers.
+function capsule(a, b, width) {
+  const angle = Math.atan2(b[1] - a[1], b[0] - a[0]), r = width / 2, points = [];
+  for (let i = 0; i <= 8; i++) { const t = angle + Math.PI / 2 + i / 8 * Math.PI; points.push([a[0] + Math.cos(t) * r, a[1] + Math.sin(t) * r]); }
+  for (let i = 0; i <= 8; i++) { const t = angle - Math.PI / 2 + i / 8 * Math.PI; points.push([b[0] + Math.cos(t) * r, b[1] + Math.sin(t) * r]); }
+  return points;
+}
 
 // A line that swells in the middle and tapers at the ends, like a brush pen.
 function taperedStroke(ctx, points, width) {
@@ -99,6 +108,14 @@ function printDrawing(canvas, drawing) {
   const colourLayer = layer(), blackLayer = layer();
   const colour = colourLayer.getContext('2d'), black = blackLayer.getContext('2d');
   PARTS.forEach((p, index) => {
+    for (const ctx of [colour, black]) {
+      ctx.save();
+      if (p.tilt) { ctx.translate(...p.tilt.pivot); ctx.rotate(p.tilt.angle); ctx.translate(-p.tilt.pivot[0], -p.tilt.pivot[1]); }
+    }
+    printPart(p, index, colour, black);
+    colour.restore(); black.restore();
+  });
+  function printPart(p, index, colour, black) {
     const seed = index * 97;
     if (p.openStroke) {
       const pts = resample(wobble(p.points, p.wobble ?? 2, seed), p.smooth !== false);
@@ -120,7 +137,7 @@ function printDrawing(canvas, drawing) {
       black.strokeStyle = INK.black; black.lineWidth = p.line ?? 5; black.lineJoin = 'round'; black.lineCap = 'round';
       black.stroke(shape);
     }
-  });
+  }
   const out = canvas.getContext('2d');
   // The colour drum sits a little out of register with the black one.
   const [dx, dy] = drawing.misregister ?? [3, 2];
