@@ -1,4 +1,4 @@
-// The mascot: a cheerful jester in a harlequin hood with five points, a lace
+// The mascot: a cheeky jester, tongue out, in a harlequin hood with five points, a lace
 // ruff and clown make-up, waving from in front of a red sun badge.
 const DRAWING = { width: 800, height: 800, paint() {
   const badge = [400, 440], badgeRadius = 300;
@@ -110,36 +110,33 @@ const DRAWING = { width: 800, height: 800, paint() {
     part(ellipsePoints(400 + Math.cos(r) * 104, 432 + Math.sin(r) * 112, 12, 12, 10), { fill: INK.white, line: 2.5, wobble: 1 });
   }
 
-  // Clown diamonds under the eyes, short and bright.
-  for (const x of [350, 450]) part([[x, 452], [x + 9, 470], [x, 490], [x - 9, 470]], { fill: INK.red, line: 2.5, wobble: .8 });
-  // Left eye open wide with two sparkles.
-  const left = [350, 428];
-  part(ellipsePoints(...left, 28, 26, 18), { fill: INK.white, line: 3, wobble: 1 });
-  part(ellipsePoints(left[0] + 2, left[1] + 3, 19, 21, 16), { blackFill: true, line: 0, wobble: .5 });
-  part(ellipsePoints(left[0] - 5, left[1] - 5, 6.5, 6.5, 10), { fill: INK.white, line: 0, wobble: .3 });
-  part(ellipsePoints(left[0] + 8, left[1] + 11, 3.5, 3.5, 8), { fill: INK.white, line: 0, wobble: .3 });
-  stroke([[left[0] - 32, left[1] - 4], [left[0] - 16, left[1] - 26], [left[0] + 8, left[1] - 28], [left[0] + 30, left[1] - 12]], { width: 8, wobble: .8 });
-  stroke([[left[0] - 30, left[1] - 10], [left[0] - 44, left[1] - 20]], { width: 5, wobble: .4 });
-  stroke([[left[0] - 30, left[1] - 58], [left[0] - 4, left[1] - 70], [left[0] + 24, left[1] - 62]], { width: 5, wobble: .5 });
-  // Right eye winking: a happy upward curve with lashes.
-  const right = [450, 432];
-  stroke([[right[0] - 30, right[1] + 4], [right[0] - 12, right[1] - 12], [right[0] + 12, right[1] - 12], [right[0] + 30, right[1] + 4]], { width: 8, wobble: .8 });
-  stroke([[right[0] + 26, right[1] - 2], [right[0] + 42, right[1] - 10]], { width: 5, wobble: .4 });
-  stroke([[right[0] + 18, right[1] - 8], [right[0] + 28, right[1] - 22]], { width: 4, wobble: .4 });
-  stroke([[right[0] - 26, right[1] - 58], [right[0] + 2, right[1] - 70], [right[0] + 28, right[1] - 60]], { width: 5, wobble: .5 });
-  // Round pink cheeks with a red dot screen, a pink button nose.
-  for (const x of [332, 468]) part(ellipsePoints(x, 480, 28, 22, 16), { fill: INK.pink, line: 0, wobble: 1,
-    colourDetail(ctx) { halftone(ctx, [x - 32, 452, x + 32, 508], 6, 2.1, INK.red, (px, py) => 1 - Math.hypot(px - x, py - 480) / 28); } });
-  part(ellipsePoints(400, 468, 8, 7, 10), { fill: INK.pink, line: 2.5, wobble: .5 });
-  // A big open smile: dark lips, teeth, and a pink tongue.
-  const smile = [[362, 496], [380, 500], [400, 501], [420, 500], [438, 496], [430, 520], [414, 534], [400, 537], [386, 534], [370, 520]];
-  part(smile, { fill: INK.plum, line: 4, wobble: .8,
-    colourDetail(ctx) {
-      ctx.fillStyle = INK.white; ctx.fillRect(360, 494, 80, 11);
-      ctx.fillStyle = INK.pink; ctx.beginPath(); ctx.ellipse(402, 533, 20, 13, 0, 0, Math.PI * 2); ctx.fill();
-    } });
-  stroke([[356, 492], [362, 497]], { width: 3.5, wobble: .3 });
-  stroke([[444, 492], [438, 497]], { width: 3.5, wobble: .3 });
+  // Dark hair falling down both sides of the face, under the hood.
+  part([[300, 380], [322, 372], [318, 430], [308, 490], [322, 528], [296, 500], [288, 440]], { blackFill: true, line: 3, wobble: 1.2 });
+  part([[500, 380], [478, 372], [482, 430], [492, 490], [478, 528], [504, 500], [512, 440]], { blackFill: true, line: 3, wobble: 1.2 });
+  // Clown marks: a red diamond on the forehead, short red drops under the eyes.
+  part([[400, 398], [407, 410], [400, 424], [393, 410]], { fill: INK.red, line: 2, wobble: .4 });
+  for (const x of [352, 448]) for (const dx of [-8, 8]) stroke([[x + dx, 462], [x + dx * 1.2, 474]], { colour: INK.red, width: 4.5, taper: false, wobble: .3 });
+  // Both eyes open wide, looking straight out, lined in black.
+  for (const [x, y, side] of [[352, 432, -1], [448, 432, 1]]) {
+    part(ellipsePoints(x, y, 29, 22, 18), { fill: INK.white, line: 3, wobble: .8 });
+    part(ellipsePoints(x, y + 2, 17, 19, 16), { blackFill: true, line: 0, wobble: .4 });
+    part(ellipsePoints(x - 6, y - 5, 5.5, 5.5, 10), { fill: INK.white, line: 0, wobble: .3 });
+    part(ellipsePoints(x + 6, y + 9, 2.5, 2.5, 8), { fill: INK.white, line: 0, wobble: .2 });
+    stroke([[x - 32, y - 3], [x - 14, y - 21], [x + 14, y - 21], [x + 32, y - 3]], { width: 7, wobble: .6 });
+    stroke([[x + side * 30, y - 6], [x + side * 44, y - 14]], { width: 5, wobble: .3 });
+    stroke([[x - 22, y + 16], [x, y + 22], [x + 22, y + 16]], { width: 2.5, wobble: .4 });
+  }
+  // Round pink cheeks with a dot screen and a red dot in the middle; pink nose.
+  for (const x of [334, 466]) {
+    part(ellipsePoints(x, 486, 27, 22, 16), { fill: INK.pink, line: 0, wobble: 1,
+      colourDetail(ctx) { halftone(ctx, [x - 32, 460, x + 32, 512], 6, 2.1, INK.red, (px, py) => 1 - Math.hypot(px - x, py - 486) / 27); } });
+    part(ellipsePoints(x, 486, 5, 5, 10), { fill: INK.red, line: 0, wobble: .3 });
+  }
+  part(ellipsePoints(400, 470, 9, 7, 10), { fill: INK.pink, line: 2.5, wobble: .5 });
+  // Lips pushed out and the tongue poking down and to one side.
+  part([[398, 516], [410, 530], [412, 548], [400, 558], [388, 552], [384, 534]], { fill: INK.pink, line: 3.5, wobble: .6,
+    blackDetail(ctx) { ctx.strokeStyle = INK.black; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(397, 526); ctx.quadraticCurveTo(399, 540, 398, 550); ctx.stroke(); } });
+  part([[376, 512], [388, 504], [400, 508], [412, 504], [424, 512], [412, 522], [400, 520], [388, 522]], { fill: INK.plum, line: 3, wobble: .6 });
   tilt(null);
 
   // The ruff: a pleated ring around the neck, seen from the front, in two
