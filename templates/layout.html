@@ -322,14 +322,21 @@ table.log td{vertical-align:top}
   .facts dd{grid-column:1}
   .field-view{justify-content:space-between}
   .field-view > span:first-child{flex:1}
-  ol.people{grid-template-columns:26px minmax(0,1fr) auto auto;column-gap:8px}
+  /* The time goes under the name, so the name keeps the width the buttons
+     leave and the time is never dropped. */
+  ol.people{grid-template-columns:26px minmax(0,1fr) auto;column-gap:8px}
+  ol.people.no-place{grid-template-columns:minmax(0,1fr) auto}
+  .person{grid-template-rows:auto auto;row-gap:1px}
+  .person .place{grid-row:1 / span 2}
+  .person .who{grid-column:2;grid-row:1;align-self:end}
+  .person .when{grid-column:2;grid-row:2;align-self:start}
+  ol.people.no-place .person .who,ol.people.no-place .person .when{grid-column:1}
+  .person .row-actions{grid-column:-2;grid-row:1 / span 2}
   .person .place{min-width:0}
   /* Buttons are their icons; the words are the tooltip and the label. */
   .person .btn-sm .btn-text{display:none}
   .person .btn-sm{padding:0;width:38px;min-width:0;min-height:38px;justify-content:center}
   .person .row-actions{gap:4px}
-  /* The waitlist's order is its number; the time would crowd the arrows. */
-  .person.waiting .when{display:none}
   .choice-title{font-size:15px}
   .segmented{align-self:stretch}
   .segmented .seg{flex:1}
@@ -440,10 +447,8 @@ dialog.dialog label{margin:14px 0 0}
     el.querySelector(".db-mon").textContent = mon.format(when);
     el.title = fmt.format(when);
   });
-  // On a phone a list's times are the date alone; the full one is the tooltip.
-  var short = window.matchMedia("(max-width: 600px)").matches
-    ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" })
-    : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  // A list's times are the date and the clock; the full one is the tooltip.
+  var short = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   document.querySelectorAll("time.ts-short").forEach(function (el) {
     var when = new Date(el.getAttribute("datetime"));
     if (isNaN(when.getTime())) return;
