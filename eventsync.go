@@ -194,17 +194,11 @@ func (s *Server) publishEventToDiscord(eventID int64, changes []stateChange) {
 		log.Printf("[discord-signup] refresh forum post for event %d: %v", ev.ID, err)
 		published = false
 	}
-	// Joining follows the forum post, so a question asked there reaches
-	// everyone coming. After the refresh, which reopens an archived post.
-	// Leaving does not unfollow: they may have followed it themselves.
+	// Getting a place follows the forum post, so a question asked there
+	// reaches everyone going; leaving unfollows it. After the refresh, which
+	// reopens an archived post.
 	if ev.ForumPostID != "" {
-		var joined []Signup
-		for _, change := range changes {
-			if onTheRoster(change.State) {
-				joined = append(joined, Signup{DiscordUserID: change.UserID, State: change.State})
-			}
-		}
-		s.followForumPost(ev, joined)
+		s.settleForumFollows(ev, roster, changes)
 	}
 	if err := s.refreshNewEventsMessage(ev, roster); err != nil {
 		log.Printf("[discord-signup] refresh new-events message for event %d: %v", ev.ID, err)

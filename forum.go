@@ -265,9 +265,15 @@ func (s *Server) refreshForumPost(ev *Event, rename bool) error {
 			log.Printf("[discord-signup] seed ✅ on post %s: %v", postID, err)
 		}
 		log.Printf("[discord-signup] opened forum post %s for event %d (%q)", postID, ev.ID, ev.Name)
-		// Whoever is on it already — the host, at least — follows it now;
-		// everyone after follows as they join.
-		s.followForumPost(ev, roster)
+		// Whoever is going already — the host, at least — follows it now;
+		// everyone after follows as they get a place.
+		var going []string
+		for _, sg := range roster {
+			if sg.State == StateAttending {
+				going = append(going, sg.DiscordUserID)
+			}
+		}
+		s.followForumPost(ev, going)
 		return nil
 	}
 
@@ -390,55 +396,12 @@ func (c *DiscordClient) AddThreadMember(threadID, userID string) error {
 	return err
 }
 
-// followForumPost makes everyone going or waiting follow the event's forum
-// post, so a question asked there reaches them. A failure is logged and
-// counted, and the rest are still tried; adding someone already following
-// changes nothing.
-func (s *Server) followForumPost(ev *Event, roster []Signup) (followed, failed int) {
-	for _, sg := range roster {
-		if !onTheRoster(sg.State) {
-			continue
-		}
-		if err := s.discord.AddThreadMember(ev.ForumPostID, sg.DiscordUserID); err != nil {
-			log.Printf("[discord-signup] %s follow forum post %s of event %d: %v", sg.DiscordUserID, ev.ForumPostID, ev.ID, err)
-			failed++
-			continue
-		}
-		followed++
-	}
-	return followed, failed
-}
-
-// FollowAllForumPosts makes everyone going or waiting on every live event
-// follow its forum post: for people who joined before joining did it.
-func (s *Server) FollowAllForumPosts() (followed, failed int, err error) {
-	if s.discord == nil {
-		return 0, 0, errors.New("following a forum post needs a Discord client")
-	}
-	for _, status := range []string{StatusOpen, StatusClosed} {
-		events, err := s.store.ListEvents("", status, 500)
-		if err != nil {
-			return followed, failed, err
-		}
-		for i := range events {
-			ev := &events[i]
-			if ev.ForumPostID == "" {
-				continue
-			}
-			// A quiet post is archived, and an archived thread takes no new
-			// members; the same patch the card refresh sends reopens it.
-			if err := s.discord.ModifyThread(ev.ForumPostID, map[string]any{"archived": false}); err != nil {
-				log.Printf("[discord-signup] reopen forum post %s of event %d: %v", ev.ForumPostID, ev.ID, err)
-			}
-			roster, err := s.store.Roster(ev.ID, false)
-			if err != nil {
-				return followed, failed, err
-			}
-			f, x := s.followForumPost(ev, roster)
-			followed, failed = followed+f, failed+x
-		}
-	}
-	return followed, failed, nil
+// RemoveThreadMember takes someone out of a thread. The thread must not be
+// archived. Discord leaves a "removed … from the thread" line in it.
+func (c *DiscordClient) RemoveThreadMember(threadID, userID string) error {
+	_, err := c.do(http.MethodDelete,
+		"/channels/"+escapePathSegment(threadID)+"/thread-members/"+escapePathSegment(userID), nil)
+	return err
 }
 
 // RemoveUserReaction takes one person's reaction off, so the ✅ state keeps

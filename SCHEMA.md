@@ -363,6 +363,12 @@ it off deletes the row. `event_id`, `discord_user_id` (the organiser),
 this time have been told), `last_sent_at`, and `last_error` (why the last DM
 was not sent, `''` when it was). Key `(event_id, discord_user_id)`.
 
+## `forum_post_follows` — people this service made follow a forum post, new 2026-09-27
+
+`event_id`, `discord_user_id`, `followed_at`, `unfollowed_at` (0 while they
+follow it). Key `(event_id, discord_user_id)`; following again resets the row.
+Only people in here are ever taken off a post.
+
 ## `event_table_rows` — **dropped 2026-09-02**
 
 A one-message-per-event table from before the consolidated table was paged,

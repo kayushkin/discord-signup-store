@@ -79,12 +79,17 @@ pings them, or as a DM to each. DMs are limited to two per event in any ten
 minutes, whoever sends them, so the page cannot be used to fill people's DMs;
 a forum post is not limited.
 
-**Joining follows the forum post.** Going or waitlisted, by any of the
-ways above, makes you a member of the event's forum thread, as pressing
-Follow does, so a question asked there reaches everyone coming — the host
-too, from the moment the post opens. Maybe does not. Leaving does not
-unfollow: someone may have followed it themselves, and nothing records
-which.
+**A place follows the forum post.** Going, by any of the ways above, makes
+you a member of the event's forum thread, as pressing Follow does, so a
+question asked there reaches everyone coming — the host too, from the moment
+the post opens. The waitlist and Maybe do not; moving up into a place does.
+Leaving, or dropping to Maybe, takes you off the post at once. A day after
+the event ends, or is cancelled, everyone is taken off; on a repeating event,
+a day after the date you were on rolls over, unless you are going again.
+Only people this service added are ever taken off (`forum_post_follows`), so
+someone who followed a post themselves stays, and posts of events that had
+ended before this began are left alone. Each add and each removal leaves a
+line in the post that nobody can delete.
 
 **An organiser can be told who joins and leaves.** A switch on the event
 page, *Tell me who joins and leaves*, which each organiser sets for

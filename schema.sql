@@ -419,3 +419,17 @@ CREATE TABLE IF NOT EXISTS roster_watchers (
     last_error       TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (event_id, discord_user_id)
 );
+
+-- forum_post_follows: people this service made follow an event's forum post
+-- (a thread member). Getting a place adds a row; leaving takes them off the
+-- post at once, and everyone is taken off a day after the event ends — or,
+-- on a repeating event, a day after the date they were on rolls over. Only
+-- people in this table are ever taken off, so someone who followed a post
+-- by themselves is left alone. A live row has unfollowed_at 0.
+CREATE TABLE IF NOT EXISTS forum_post_follows (
+    event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    followed_at     INTEGER NOT NULL,
+    unfollowed_at   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (event_id, discord_user_id)
+);

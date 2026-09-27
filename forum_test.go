@@ -367,12 +367,13 @@ func TestALiveEventsPostArchivedForQuietIsReopenedBeforeItsCardIsEdited(t *testi
 	}
 }
 
-// TestJoiningFollowsTheForumPost: whoever is on the event when its post
-// opens follows it, and so does everyone who joins after; Maybe does not.
-func TestJoiningFollowsTheForumPost(t *testing.T) {
+// TestAPlaceFollowsTheForumPost: whoever is going when the post opens
+// follows it, and so does everyone who gets a place after; the waitlist and
+// Maybe do not, and leaving unfollows at once.
+func TestAPlaceFollowsTheForumPost(t *testing.T) {
 	fake, store, srv := forumFake(t)
 	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Games",
-		Capacity: 1, StartsAt: time.Now().Add(24 * time.Hour).Unix()})
+		Capacity: 2, StartsAt: time.Now().Add(24 * time.Hour).Unix()})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -382,24 +383,98 @@ func TestJoiningFollowsTheForumPost(t *testing.T) {
 	if err := srv.refreshForumPost(ev, true); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
-	for _, j := range []struct{ id, state string }{{"ann", StateWaitlisted}, {"bob", StateMaybe}} {
-		var err error
-		if j.state == StateMaybe {
-			_, err = store.MarkMaybe(ev.ID, j.id, j.id, JoinedViaButton)
-		} else {
-			_, err = store.Join(ev.ID, j.id, j.id, JoinedViaButton)
-		}
+	join := func(id string) {
+		t.Helper()
+		r, err := store.Join(ev.ID, id, id, JoinedViaButton)
 		if err != nil {
-			t.Fatalf("%s: %v", j.id, err)
+			t.Fatalf("%s: %v", id, err)
 		}
-		srv.syncAfterChange(ev.ID, []stateChange{{UserID: j.id, State: j.state}})
+		srv.syncAfterChange(ev.ID, []stateChange{{UserID: id, State: r.Signup.State}})
 	}
+	join("ann")
+	join("wes") // full: the waitlist
+	if _, err := store.MarkMaybe(ev.ID, "bob", "bob", JoinedViaButton); err != nil {
+		t.Fatalf("maybe: %v", err)
+	}
+	srv.syncAfterChange(ev.ID, []stateChange{{UserID: "bob", State: StateMaybe}})
+	member := "/channels/msg-1/thread-members/"
 	for _, who := range []string{"host", "ann"} {
-		if len(callsTo(fake, http.MethodPut, "/channels/msg-1/thread-members/"+who)) == 0 {
+		if len(callsTo(fake, http.MethodPut, member+who)) == 0 {
 			t.Errorf("%s does not follow the post", who)
 		}
 	}
-	if len(callsTo(fake, http.MethodPut, "/channels/msg-1/thread-members/bob")) != 0 {
-		t.Error("bob, on Maybe, was made to follow the post")
+	for _, who := range []string{"wes", "bob"} {
+		if len(callsTo(fake, http.MethodPut, member+who)) != 0 {
+			t.Errorf("%s, not going, was made to follow the post", who)
+		}
+	}
+
+	if _, err := store.Leave(ev.ID, "ann", ""); err != nil {
+		t.Fatalf("leave: %v", err)
+	}
+	srv.syncAfterChange(ev.ID, []stateChange{{UserID: "ann", State: StateWithdrawn}, {UserID: "wes", State: StateAttending}})
+	if len(callsTo(fake, http.MethodDelete, member+"ann")) != 1 {
+		t.Error("ann left and still follows the post")
+	}
+	if len(callsTo(fake, http.MethodPut, member+"wes")) == 0 {
+		t.Error("wes moved up into a place and does not follow the post")
+	}
+}
+
+// TestFollowersComeOffADayAfterTheEventEnds: nobody is taken off before the
+// day is up, everyone this service added is taken off after it, with the
+// archived post reopened for it, and nobody it did not add is touched.
+func TestFollowersComeOffADayAfterTheEventEnds(t *testing.T) {
+	fake, store, srv := forumFake(t)
+	ev, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Games",
+		StartsAt: time.Now().Add(-3 * time.Hour).Unix(), EndsAt: time.Now().Add(-2 * time.Hour).Unix()})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := store.Join(ev.ID, "ann", "Ann", JoinedViaButton); err != nil {
+		t.Fatalf("join: %v", err)
+	}
+	if err := srv.refreshForumPost(ev, true); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if _, err := store.CompleteFinishedEvents(); err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	member := "/channels/msg-1/thread-members/"
+	if removed, _, err := srv.UnfollowDueForumPosts(); err != nil || removed != 0 {
+		t.Fatalf("two hours after the end: removed %d, %v; want 0", removed, err)
+	}
+	if _, err := store.db.Exec(`UPDATE events SET ends_at = ends_at - 86400, starts_at = starts_at - 86400`); err != nil {
+		t.Fatalf("age the event: %v", err)
+	}
+	if removed, failed, err := srv.UnfollowDueForumPosts(); err != nil || removed != 1 || failed != 0 {
+		t.Fatalf("a day after the end: removed %d, failed %d, %v; want 1", removed, failed, err)
+	}
+	if len(callsTo(fake, http.MethodDelete, member+"ann")) != 1 {
+		t.Error("ann was not taken off the post")
+	}
+	patches := callsTo(fake, http.MethodPatch, "/channels/msg-1")
+	if len(patches) < 2 || patches[len(patches)-2].Body["archived"] != false || patches[len(patches)-1].Body["archived"] != true {
+		t.Errorf("the post was not reopened and archived again around the removal: %v", patches)
+	}
+	if removed, _, _ := srv.UnfollowDueForumPosts(); removed != 0 {
+		t.Errorf("a second sweep removed %d; want 0", removed)
+	}
+}
+
+// TestARolledOverDateWaitsADay: on a repeating event, someone the date
+// rolled off stays on the post for a day, then comes off.
+func TestARolledOverDateWaitsADay(t *testing.T) {
+	ev := &Event{Status: StatusOpen}
+	rolled := &SignupUpdate{Actor: ActorRecurrence, ToState: StateWithdrawn, At: 1000}
+	if due := forumUnfollowDue(ev, StateWithdrawn, rolled, 2000); due != 1000+86400 {
+		t.Errorf("rolled over: due %d, want a day after", due)
+	}
+	left := &SignupUpdate{Actor: ActorUser, ToState: StateWithdrawn, At: 1000}
+	if due := forumUnfollowDue(ev, StateWithdrawn, left, 2000); due != 2000 {
+		t.Errorf("left: due %d, want now", due)
+	}
+	if due := forumUnfollowDue(ev, StateAttending, rolled, 2000); due != 0 {
+		t.Errorf("going again: due %d, want never", due)
 	}
 }
