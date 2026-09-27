@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>body{margin:0;background:transparent}</style>
+<canvas id="print"></canvas>
+<script src="kit.js"></script>
+<script>
+// The drawing named in ?drawing= defines DRAWING = {width, height, paint()}.
+const drawingName = new URLSearchParams(location.search).get('drawing');
+document.write(`<script src="drawings/${drawingName}.js"><\/script>`);
+</script>
+<script>
+window.paintedPNG = printDrawing(document.getElementById('print'), DRAWING);
+</script>
