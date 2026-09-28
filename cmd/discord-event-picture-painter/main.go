@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -72,6 +73,7 @@ func main() {
 	flag.DurationVar(&p.turn.Timeout, "turn-timeout", 15*time.Minute, "how long one Claude Code turn may take")
 	flag.IntVar(&p.correctionTurns, "correction-turns", 1, "how many times Claude Code sees its prints and corrects the scene")
 	runFor := flag.Duration("run-for", 10*time.Minute, "write no new scene after this long; the scheduler kills a run after its timeout")
+	onlyEvent := flag.Int64("event-id", 0, "paint this event alone, if it is due, ahead of the others; 0 paints every event due")
 	flag.Parse()
 	for name, value := range map[string]string{"-store-url": *storeURL, "-art-directory": p.artDirectory, "-chrome": p.chromePath} {
 		if value == "" {
@@ -88,6 +90,9 @@ func main() {
 	}
 	started, failed := time.Now(), 0
 	for _, pic := range due.Pictures {
+		if *onlyEvent != 0 && pic.EventID != *onlyEvent {
+			continue
+		}
 		if pic.NeedsScene && time.Since(started) > *runFor {
 			log.Printf("event %d: its scene waits for the next run", pic.EventID)
 			continue
@@ -98,6 +103,9 @@ func main() {
 			log.Printf("event %d: %v", pic.EventID, err)
 			failed++
 		}
+	}
+	if *onlyEvent != 0 && !slices.ContainsFunc(due.Pictures, func(pic picture) bool { return pic.EventID == *onlyEvent }) {
+		log.Printf("event %d has no picture due", *onlyEvent)
 	}
 	if failed > 0 {
 		os.Exit(1)
