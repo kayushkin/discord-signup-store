@@ -2,13 +2,13 @@ package discordsignup
 
 import (
 	"bytes"
-	"net/url"
 	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
