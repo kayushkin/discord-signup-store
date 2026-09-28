@@ -115,6 +115,15 @@ type pageData struct {
 	NameableGuilds []Guild
 	// NamePeople is the names page's rows.
 	NamePeople []namedPerson
+	// AvatarUserIDs are the people whose approved avatar the page may show
+	// beside their name.
+	AvatarUserIDs map[string]bool
+	// Avatar is the viewer's own avatar on the avatar page, nil when they
+	// have none; AvatarMayUpload whether they may upload a photo, and
+	// AvatarDrawingsLeft how many more drawings they may ask for today.
+	Avatar                                   *Avatar
+	AvatarMayUpload                          bool
+	AvatarDrawingsLeft, AvatarDrawingsPerDay int
 
 	StartsLocal       string
 	EndsLocal         string
@@ -160,6 +169,9 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 	// person shows someone by their short name with their Discord name
 	// behind it.
 	"person": personHTML,
+	// avatar is a person's approved avatar, for beside their name, or
+	// nothing when they have none.
+	"avatar": avatarHTML,
 	// toggleSubject is what the Open/Close button opens or closes: the
 	// waitlist, on a full event that has one, or signups.
 	"toggleSubject": closeToggleSubject,

@@ -1,0 +1,55 @@
+{{define "content"}}
+<div class="card">
+  <h3>Your avatar</h3>
+  <p class="meta">A drawing of you in this site's print style, made from a photo you upload.
+    Once you approve it, it shows beside your name on event pages, and pictures of who is
+    going to an event can include you. You can remove it at any time.</p>
+
+  {{with .Avatar}}
+  <div class="avatar-status">
+    {{if or (eq .State "waiting_for_drawing") (eq .State "drawing")}}
+      <p><span class="pill">being drawn</span> Your avatar is being drawn from your photo, which
+        takes up to half an hour. Reload this page to see it.</p>
+    {{else if eq .State "drawing_failed"}}
+      <p><span class="pill cancelled">not drawn</span> The drawing did not come out: {{.Failure}}</p>
+    {{else if .HasImage}}
+      <img class="avatar-preview" src="/avatar/drawing.webp?v={{.UpdatedAt}}" alt="Your avatar" width="256" height="256">
+      {{if eq .State "approved"}}
+        <p><span class="pill open">in use</span> This shows beside your name. Your photo is deleted.</p>
+      {{else}}
+        <p>Only you can see this until you approve it. Approving it deletes your photo.</p>
+      {{end}}
+    {{end}}
+    <div class="row">
+      {{if eq .State "ready_for_approval"}}
+      <form method="post" action="/avatar/approve" style="margin:0"><button>Use this avatar</button></form>
+      {{end}}
+      {{if and (or (eq .State "ready_for_approval") (eq .State "drawing_failed")) $.AvatarDrawingsLeft}}
+      <form method="post" action="/avatar/redraw" style="margin:0"><button class="ghost">Draw it again</button></form>
+      {{end}}
+      <form method="post" action="/avatar/remove" style="margin:0"
+            data-confirm="Delete your avatar{{if .PhotoFileID}} and your photo{{end}}? It stops showing beside your name.">
+        <button class="danger">Remove my avatar{{if .PhotoFileID}} and photo{{end}}</button></form>
+    </div>
+  </div>
+  {{end}}
+
+  {{if .AvatarMayUpload}}
+  <form method="post" action="/avatar/photo" enctype="multipart/form-data" class="avatar-upload">
+    <label for="avatar-photo">{{if .Avatar}}Start again from a new photo{{else}}Your photo{{end}}</label>
+    <input id="avatar-photo" type="file" name="photo" accept="image/jpeg,image/png,image/webp" required>
+    <p class="hint">A clear photo of your face and shoulders works best. JPEG, PNG or WebP.
+      {{if .Avatar}}A new photo replaces your avatar.{{end}}</p>
+    <label class="check"><input type="checkbox" name="consent" value="yes" required>
+      Draw an avatar of me from this photo. Once I approve it, show it beside my Discord name on
+      these pages and in pictures of who is going to events.</label>
+    <p class="hint">An AI model on this site's server looks at your photo to draw you. The photo is kept
+      until you approve the drawing or remove it, then deleted. You may ask for
+      {{.AvatarDrawingsPerDay}} drawings a day; {{.AvatarDrawingsLeft}} left today.</p>
+    <button{{if not .AvatarDrawingsLeft}} disabled{{end}}>Upload and draw my avatar</button>
+  </form>
+  {{else if not .Error}}
+  <p class="meta">Avatars are for members of a server this bot is in.</p>
+  {{end}}
+</div>
+{{end}}

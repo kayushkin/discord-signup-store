@@ -464,3 +464,38 @@ CREATE TABLE IF NOT EXISTS member_names (
     updated_at      INTEGER NOT NULL,
     PRIMARY KEY (guild_id, discord_user_id)
 );
+
+-- avatars: a drawing of a person, made from a photo they uploaded and shown
+-- beside their name once they approve it. One row per person, keyed on the
+-- Discord user id. The row exists only because they asked: uploading is the
+-- consent, consented_at records when, and removing the avatar deletes the row.
+-- state is one of avatarStates (avatars.go). photo_file_id is the upload's
+-- file-store id, '' once the photo is purged — on approval and on removal, so
+-- no photo outlives the reason it was kept. drawing_code is the drawing as
+-- code in the art kit's form, kept so a picture of who is going can draw the
+-- person again; image_webp is that drawing printed, what the pages show.
+CREATE TABLE IF NOT EXISTS avatars (
+    discord_user_id    TEXT PRIMARY KEY,
+    state              TEXT NOT NULL,
+    photo_file_id      TEXT NOT NULL DEFAULT '',
+    drawing_code       TEXT NOT NULL DEFAULT '',
+    image_webp         BLOB,
+    failure            TEXT NOT NULL DEFAULT '',
+    consented_at       INTEGER NOT NULL,
+    drawing_started_at INTEGER NOT NULL DEFAULT 0,
+    drawn_at           INTEGER NOT NULL DEFAULT 0,
+    approved_at        INTEGER NOT NULL DEFAULT 0,
+    updated_at         INTEGER NOT NULL
+);
+
+-- avatar_updates: what happened to each person's avatar, append-only, and
+-- kept after the avatar is removed. It is how the page counts the drawings a
+-- person asked for today, and the record of who consented when.
+CREATE TABLE IF NOT EXISTS avatar_updates (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_user_id TEXT NOT NULL,
+    action          TEXT NOT NULL,
+    detail          TEXT NOT NULL DEFAULT '',
+    at              INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS avatar_updates_by_person ON avatar_updates (discord_user_id, at);

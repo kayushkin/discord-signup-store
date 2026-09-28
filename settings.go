@@ -39,6 +39,8 @@ const (
 	SettingOAuthRedirectURL                   = "oauth_redirect_url"
 	SettingDefaultTimezone                    = "default_timezone"
 	SettingGatewayDisabled                    = "gateway_disabled"
+	SettingFileStoreURL                       = "file_store_url"
+	SettingFileStoreServiceToken              = "file_store_service_token"
 )
 
 // DefaultListenAddress is where the service listens with nothing set. Loopback,
@@ -91,6 +93,10 @@ func SettingDefinitions() []servicesettings.Definition {
 			Description: "The IANA zone a time typed into a Discord form is read in, such as America/Los_Angeles. Unset reads times as UTC and says so at start. A name that is not a zone stops the start."},
 		{Key: SettingGatewayDisabled, EnvironmentVariable: "DISCORD_GATEWAY_DISABLED", Kind: msg.ServiceSettingKindBehaviour, ValueType: msg.ServiceSettingValueTypeBoolean, Default: "false",
 			Description: "true stops the service from opening Discord's gateway socket. Without it, Discord's own Interested button no longer feeds the roster; buttons, rosters and the API keep working."},
+		{Key: SettingFileStoreURL, EnvironmentVariable: "FILE_STORE_URL", Kind: msg.ServiceSettingKindWiring, ValueType: msg.ServiceSettingValueTypeString,
+			Description: "Where file-store keeps the photos people upload for their avatars until the drawing is approved. Unset, or with no token, turns avatar uploads off; everything else keeps working. Set in a host-local drop-in with the token."},
+		{Key: SettingFileStoreServiceToken, EnvironmentVariable: "FILE_STORE_SERVICE_TOKEN", Kind: msg.ServiceSettingKindSecret, ValueType: msg.ServiceSettingValueTypeString,
+			Description: "file-store's service token. It reads every file file-store holds, so it comes from ~/.config/file-store-tokens.env through a host-local drop-in, never the tracked unit."},
 	}
 }
 

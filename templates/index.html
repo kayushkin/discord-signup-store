@@ -36,6 +36,7 @@
   <div class="row" style="margin-bottom:18px">
     <a class="btn" href="/events/new">New event</a>
     {{if .MayName}}<a class="btn ghost" href="/names">Names</a>{{end}}
+    <a class="btn ghost" href="/avatar">Your avatar</a>
     {{if gt (len .HomeGuildChoices) 1}}
     <form method="post" action="/preferences/home-server" style="margin:0 0 0 auto" class="row home-filter">
       <label for="home-server" class="meta" style="margin:0">Show</label>

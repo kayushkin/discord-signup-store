@@ -58,6 +58,9 @@ type Server struct {
 	// gatewayStatus reads the gateway supervisor's state for /healthz. Nil
 	// means no supervisor was started, which /healthz reports as "disabled".
 	gatewayStatus func() GatewayStatus
+	// files keeps the photos people upload for their avatars. Nil until
+	// EnableAvatars; the avatar pages then say they are not set up.
+	files *FileStoreClient
 }
 
 // ReportGatewayStatus makes /healthz report the gateway's state from status.
@@ -177,6 +180,14 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/forum-posts/unfollow-due", s.handleUnfollowDueForumPosts)
 	mux.HandleFunc("POST /api/guilds/{guildID}/table/rebuild", s.handleRebuildGuildTable)
 	mux.HandleFunc("POST /api/tables/rebuild", s.handleRebuildAllTables)
+	mux.HandleFunc("GET /api/avatars", s.handleListAvatars)
+	mux.HandleFunc("GET /api/avatars/to-draw", s.handleAvatarsToDraw)
+	mux.HandleFunc("GET /api/avatars/{userID}", s.handleGetAvatar)
+	mux.HandleFunc("GET /api/avatars/{userID}/photo", s.handleAvatarPhoto)
+	mux.HandleFunc("GET /api/avatars/{userID}/image", s.handleAvatarImageForMachines)
+	mux.HandleFunc("POST /api/avatars/{userID}/drawing-started", s.handleAvatarDrawingStarted)
+	mux.HandleFunc("PUT /api/avatars/{userID}/drawing", s.handleSaveAvatarDrawing)
+	mux.HandleFunc("POST /api/avatars/{userID}/drawing-failed", s.handleAvatarDrawingFailed)
 
 	// Browser surface — session-gated.
 	mux.HandleFunc("GET /", s.handleWebIndex)
@@ -209,6 +220,13 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /names", s.handleWebNames)
 	mux.HandleFunc("GET /names/members", s.handleWebNameSearch)
 	mux.HandleFunc("POST /names", s.handleWebSetName)
+	mux.HandleFunc("GET /avatar", s.handleWebAvatar)
+	mux.HandleFunc("POST /avatar/photo", s.handleWebAvatarPhoto)
+	mux.HandleFunc("POST /avatar/approve", s.handleWebAvatarApprove)
+	mux.HandleFunc("POST /avatar/redraw", s.handleWebAvatarRedraw)
+	mux.HandleFunc("POST /avatar/remove", s.handleWebAvatarRemove)
+	mux.HandleFunc("GET /avatar/drawing.webp", s.handleWebOwnAvatarImage)
+	mux.HandleFunc("GET /avatars/{file}", s.handleAvatarImage)
 }
 
 // handleSetGuildManagement points a guild's management table at a channel and

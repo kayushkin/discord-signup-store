@@ -527,6 +527,17 @@ dialog.dialog label{margin:14px 0 0}
   background:var(--paper-light);border:2.5px solid var(--ink);border-left:10px solid var(--ok);border-radius:2px;
   padding:10px 14px;box-shadow:var(--shadow);font-size:14px;font-weight:700}
 .toast.is-error{border-left-color:var(--bad)}
+/* Avatars: a person's approved drawing beside their name, and their own page. */
+.avatar{width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);background:var(--paper);
+  vertical-align:middle;margin-right:7px;object-fit:cover}
+.avatar-status{margin:14px 0 18px}
+.avatar-preview{display:block;width:256px;max-width:100%;height:auto;border:2.5px solid var(--ink);border-radius:3px;
+  box-shadow:var(--shadow);background:var(--paper);margin-bottom:10px}
+.avatar-upload{margin-top:14px;display:grid;gap:8px;max-width:560px}
+.avatar-upload label{margin:0}
+.avatar-upload label.check{display:flex;gap:9px;align-items:flex-start;text-transform:none;letter-spacing:normal;font-weight:500;font-size:14px;margin-top:6px}
+.avatar-upload label.check input{width:18px;height:18px;margin:1px 0 0;flex:none;accent-color:var(--ink)}
+.avatar-upload .hint{margin:0}
 </style></head><body>
 <header>
   <a href="/" class="mascot-link" aria-hidden="true" tabindex="-1"><img class="mascot" src="/art/maleeha-128.webp" alt="" width="64" height="64"></a>

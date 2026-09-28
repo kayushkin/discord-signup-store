@@ -210,6 +210,7 @@ because Discord has none to give.
 | **Web — detail** | whoever may edit | One event. For an organiser its fields are the edit form, with Open/Close signups, the waitlist switch, End and Cancel beside them; then the roster, **Add people** (Send invite, or Add now to a list), the invites and how each was answered, and one log of signups, edits and invites, newest first. People are shown by their short name, with their Discord name on hover or tap. |
 | **Web — form** | organisers | Create, with the fields a Discord form has no room for. Editing is on the detail page. |
 | **Web — names** | site admins, server owners | The short name each person is shown by, everywhere. A 404 for anyone else, and not linked for them. |
+| **Web — your avatar** | just you | Upload a photo, and a model draws you in the site's print style. You see the drawing first; once you approve it, it shows beside your name on the event pages, and the photo is deleted. You can ask for it to be drawn again, or remove it and the photo, at any time. Not shown anywhere until you approve it. |
 
 ## 5. Who may do what
 
@@ -220,6 +221,7 @@ because Discord has none to give.
 | **Edit an event** | **Administrator (which the server owner always has), Manage Events, or whoever created it** |
 | Add or remove someone else, invite someone | the same as Edit |
 | Set short names | a site admin, or a server's owner for the people in it |
+| Upload, approve or remove an avatar | the person themselves, if they are a member of a server the bot is in; nobody else |
 | Rebuild the table | Administrator or Manage Events |
 
 Checked when the button is pressed, not when it is drawn: Discord cannot show a

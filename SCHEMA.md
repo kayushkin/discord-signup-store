@@ -249,6 +249,25 @@ No row means Discord's default: `MANAGE_EVENTS` or `ADMINISTRATOR` edits every e
 
 No row means their Discord display name is shown. Read by `Roster` with a LEFT JOIN, into `Signup.ReadableName`.
 
+### `avatars` — a drawing of a person, new 2026-09-28
+
+| Column | Type | Meaning |
+|---|---|---|
+| `discord_user_id` | TEXT PK | The person. Only they create, approve or remove the row, from `/avatar`. |
+| `state` | TEXT | `waiting_for_drawing` → `drawing` → `ready_for_approval` → `approved`; `drawing_failed` instead of `ready_for_approval` when the drawing does not come out. A redraw goes back to `waiting_for_drawing`. |
+| `photo_file_id` | TEXT | The uploaded photo's file-store id (`owner_service` `discord-signup-store`, `owner_ref` `avatar:<user id>`). `''` once purged: on approval, on removal, and when a new photo replaces it. |
+| `drawing_code` | TEXT | The drawing as code in `art/kit.js`'s form, defining `DRAWING`. Kept so a picture of who is going can draw the person again. |
+| `image_webp` | BLOB | The drawing printed at 256 pixels. NULL until drawn. |
+| `failure` | TEXT | Why the last drawing did not come out. |
+| `consented_at` | INTEGER | When they ticked the consent box with their latest photo. |
+| `drawing_started_at`, `drawn_at`, `approved_at`, `updated_at` | INTEGER | Unix seconds; 0 until it happens. |
+
+Removing an avatar deletes the row. `avatar_updates` keeps the history.
+
+### `avatar_updates` — what happened to each avatar, append-only
+
+`id`, `discord_user_id`, `action` (`photo_uploaded`, `drawing_started`, `drawing_saved`, `drawing_failed`, `redraw_asked`, `approved`, `removed`), `detail` (the file id of an upload, the reason for a failure) and `at`. Kept after the avatar is removed. `/avatar` counts `photo_uploaded` and `redraw_asked` in the last 24 hours to hold each person to 4 drawings a day.
+
 ### `site_admins` — whoever runs the bot
 
 | Column | Type | Meaning |

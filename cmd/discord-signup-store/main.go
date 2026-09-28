@@ -92,6 +92,16 @@ func main() {
 			),
 		})
 		log.Printf("web surface enabled, callback %s", redirect)
+		// Avatars keep the photos people upload in file-store until the
+		// drawing is approved. Without file-store the avatar page says so.
+		if files := discordsignup.NewFileStoreClient(
+			settings.String(discordsignup.SettingFileStoreURL),
+			settings.String(discordsignup.SettingFileStoreServiceToken),
+		); files != nil {
+			srvAPI.EnableAvatars(files)
+		} else {
+			log.Print("avatar uploads disabled (FILE_STORE_URL or FILE_STORE_SERVICE_TOKEN unset)")
+		}
 	} else {
 		log.Print("web surface disabled (DISCORD_OAUTH_REDIRECT_URL unset)")
 	}

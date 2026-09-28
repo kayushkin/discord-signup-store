@@ -215,6 +215,10 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	}
 	data.MessagesLeft, data.MessagesNextAt = messageAllowance(messages, now())
 	data.MessageLimit, data.MessageWindowMinutes, data.MessageBodyLimit = messageLimit, int(messageWindow/time.Minute), messageBodyLimit
+	if data.AvatarUserIDs, err = s.store.ApprovedAvatarUserIDs(); err != nil {
+		log.Printf("[discord-signup] approved avatars: %v", err)
+		data.Error = strings.TrimSpace(data.Error + " Could not read who has an avatar: " + err.Error())
+	}
 	data.RegularIDs = map[string]bool{}
 	going := map[string]bool{}
 	for _, sg := range roster {

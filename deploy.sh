@@ -59,6 +59,12 @@ step "Building $BINARY…"
 go build -o "$BINARY" ./cmd/discord-signup-store
 echo "    built: $(ls -lh "$BINARY" | awk '{print $5}')"
 
+# The avatar drawer runs from the scheduler, reads art/kit.js and prints with
+# art/render-avatar.mjs, whose playwright-core lives in art/node_modules.
+step "Building discord-avatar-drawer and installing the art kit's modules…"
+go build -o discord-avatar-drawer ./cmd/discord-avatar-drawer
+( cd art && npm ci --silent )
+
 # A set DISCORD_ variable that settings.go does not declare, or a missing public
 # key, stops the new binary at boot. Ask before the old one is stopped: build the
 # registry from the running service's own environment. The test prints a
@@ -81,6 +87,7 @@ systemctl --user stop "$SERVICE" 2>/dev/null || true
 step "Installing binary to $BIN_DIR…"
 mkdir -p "$BIN_DIR"
 cp "$BINARY" "$BIN_DIR/$BINARY"
+cp discord-avatar-drawer "$BIN_DIR/discord-avatar-drawer"
 
 step "Starting $SERVICE…"
 systemctl --user daemon-reload
@@ -125,6 +132,13 @@ if [ "$CODE" != "401" ]; then
   exit 1
 fi
 echo "    unsigned request refused with 401, as Discord requires"
+
+# Avatar uploads need file-store, whose token comes from a host-local drop-in.
+# Without it the service runs and the avatar page says it is not set up.
+if ! systemctl --user show "$SERVICE" -p Environment --value | tr ' ' '\n' | grep -q '^FILE_STORE_URL=.'; then
+  echo "WARNING: FILE_STORE_URL is not set on $SERVICE, so avatar uploads are off." >&2
+  echo "         Install ~/.config/systemd/user/$SERVICE.d/file-store.conf (see AGENTS.md)." >&2
+fi
 
 printf '\n==> Deployed.\n'
 echo "    Interactions Endpoint URL for the Developer Portal:"

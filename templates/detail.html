@@ -158,7 +158,7 @@
       {{range $i, $s := .Going}}
       <li class="person">
         <span class="place">{{add $i 1}}</span>
-        <span class="who">{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}{{if index $.RegularIDs $s.DiscordUserID}} <span class="regular-mark" title="A regular: a place on every date">{{template "regular"}}</span>{{end}}</span>
+        <span class="who">{{avatar $.AvatarUserIDs $s.DiscordUserID}}{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}{{if index $.RegularIDs $s.DiscordUserID}} <span class="regular-mark" title="A regular: a place on every date">{{template "regular"}}</span>{{end}}</span>
         <span class="when">{{shortTime $s.SignedUpAt}}</span>
         {{if $canManage}}<span class="row-actions">
           {{if $ev.RecurrenceRule}}{{$regular := index $.RegularIDs $s.DiscordUserID}}
@@ -193,7 +193,7 @@
       {{range .Waiting}}
       <li class="person waiting">
         <span class="place wait" title="Number {{.WaitlistPlace}} in line">#{{.WaitlistPlace}}</span>
-        <span class="who">{{person .ReadableName .DisplayName .DiscordUserID}}</span>
+        <span class="who">{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}</span>
         <span class="when">{{shortTime .SignedUpAt}}</span>
         {{if $canManage}}<span class="row-actions">
           <span class="mover">
@@ -227,7 +227,7 @@
       {{range .Maybes}}
       <li class="person">
         <span class="place muted">?</span>
-        <span class="who">{{person .ReadableName .DisplayName .DiscordUserID}}</span>
+        <span class="who">{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}</span>
         <span class="when">{{shortTime .StateChangedAt}}</span>
         {{if $canManage}}<span class="row-actions">
           <form method="post" action="/events/{{$ev.ID}}/roster/promote" data-async
@@ -328,7 +328,7 @@
     <ol class="people no-place">
       {{range .Invites}}
       <li class="person">
-        <span class="who">{{person .ReadableName .DisplayName .DiscordUserID}}</span>
+        <span class="who">{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}</span>
         <span class="when">{{shortTime .At}}</span>
         <span class="row-actions">
           {{if and .HoldsPlace (not .HoldEndedAt)}}
@@ -387,7 +387,7 @@
       {{range .Replies}}
       <li class="reply">
         <div class="reply-head">
-          <span class="who">{{person .ReadableName .DisplayName .DiscordUserID}}</span>
+          <span class="who">{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}</span>
           <span class="when">{{shortTime .At}}</span>
         </div>
         <div class="reply-to">{{if eq .Matched "reply"}}replying to{{else}}after{{end}}

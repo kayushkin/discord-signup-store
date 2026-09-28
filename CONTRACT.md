@@ -49,6 +49,14 @@ service's, and proxying any other route publishes roster editing to the world.
 | GET | `/api/guilds/{guildID}/channels` | The guild's row back: table, management and the three channels. |
 | GET | `/api/guilds/{guildID}/editing` | The server's editing rule: `{"guild_id","editor_role_id","anyone_may_create","updated_at"}`. A server with none answers the default (`""`, `false`). |
 | PUT | `/api/guilds/{guildID}/editing` | Replace it. Both `editor_role_id` (`""` for the default) and `anyone_may_create` are required; an unknown field, or a role that is not one of the server's, is **400**. |
+| GET | `/api/avatars?state=` | Every avatar, or those in one state: `{"avatars":[{"discord_user_id","state","photo_file_id","drawing_code","has_image","failure","consented_at","drawing_started_at","drawn_at","approved_at","updated_at"}]}`. States: `waiting_for_drawing`, `drawing`, `ready_for_approval`, `approved`, `drawing_failed`. |
+| GET | `/api/avatars/to-draw` | What `discord-avatar-drawer` should draw: avatars waiting, and drawings started over an hour ago (their run is gone), oldest first. |
+| GET | `/api/avatars/{userID}` | One avatar, with its `drawing_code`. 404 when they have none. |
+| GET | `/api/avatars/{userID}/image` | The printed drawing, WebP, approved or not — what a picture of who is going reads. |
+| GET | `/api/avatars/{userID}/photo` | The uploaded photo, relayed from file-store, **only while a drawing is under way** (409 otherwise). |
+| POST | `/api/avatars/{userID}/drawing-started` | Claim a drawing. 409 unless it is waiting (or its drawing is over an hour old), so two drawers cannot both draw one. |
+| PUT | `/api/avatars/{userID}/drawing` | `{"drawing_code":"…","image_webp":"<base64>"}`: the finished drawing, for the person to approve. The image must be WebP, at most 2 MB. 409 unless a drawing is under way. |
+| POST | `/api/avatars/{userID}/drawing-failed` | `{"reason":"…"}`: the drawing did not come out. The page shows the reason and offers a redraw. 409 unless a drawing is under way. |
 | POST | `/api/events/complete-finished` | Archive events whose time has passed and strip the buttons off their cards. Also runs on a five-minute ticker. |
 
 ## Browser surface (YOUR_DOMAIN — Discord login required)
@@ -78,6 +86,11 @@ service's, and proxying any other route publishes roster editing to the world.
 | POST | `/events/{id}/publish` | Create a native Discord event linked to this roster. |
 | POST | `/events/{id}/end` | End an underway event now: the same finishing as its end time passing, and the native Discord event is ended too. A recurring event ends this date and moves to its next. Offered on the page only while the event is underway. |
 | GET · POST | `/names` | The names page, for site admins (every server the bot is in) and server owners (their own server): everyone going, maybe or waitlisted on any event there, each with a box for the short name they are shown by. POST `discord_user_id` and `readable_name` saves one; an empty name removes it. Anyone else's id is 403, and anyone who is neither gets a 404. |
+| GET | `/avatar` | Your avatar: its state, the drawing once there is one, and the upload form. Anyone signed in may open it; only a member of a server the bot is in may upload. |
+| POST | `/avatar/photo` | Multipart `photo` (JPEG, PNG or WebP by its bytes, at most 15 MB) and `consent=yes`, which is required. The photo goes to file-store, any earlier photo is purged, and the avatar waits for a drawing. At most 4 drawings (uploads and redraws) per person in any 24 hours. |
+| POST | `/avatar/approve` · `/avatar/redraw` · `/avatar/remove` | Approve the drawing (the photo is purged from file-store first, and the avatar then shows beside your name), ask for another drawing of the same photo, or delete the avatar and the photo. Each acts on the signed-in person's own avatar only. |
+| GET | `/avatar/drawing.webp` | Your own drawing, approved or not. `private, no-store`. |
+| GET | `/avatars/{userID}.webp` | An **approved** avatar, to anyone, no login; 404 for anything else. The event pages show it beside the person's name. |
 | POST | `/preferences/home-server` | Save which server the home page shows (`guild_id`, `""` for every server). Kept per Discord user in `user_preferences`, so it holds across logins. |
 | GET | `/names/members?guild_id=&q=` | The names page's search: members of one server where you may name people, each with the short name set for them. |
 
