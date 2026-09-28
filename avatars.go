@@ -1279,6 +1279,50 @@ func (s *Server) handleAvatarRequestFailed(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleRequestAvatarByOperator is POST /api/avatars/{userID}/requests: a
+// drawing asked for on the person's behalf — "fix my hat" said to whoever
+// runs the site — from their kept photo or as a change to one of their
+// drawings. It lands in their gallery like any other; they choose whether
+// to show it. Not held to the daily limit, and the reason is recorded.
+func (s *Server) handleRequestAvatarByOperator(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Kind          string `json:"kind"`
+		BaseDrawingID int64  `json:"base_drawing_id"`
+		Comment       string `json:"comment"`
+		Reason        string `json:"reason"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "malformed body: " + err.Error()})
+		return
+	}
+	switch {
+	case strings.TrimSpace(body.Reason) == "":
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "reason is required"})
+		return
+	case body.Kind == AvatarRequestNewPhoto:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "only the person can upload a photo"})
+		return
+	case utf8.RuneCountInString(body.Comment) > avatarCommentMaximumCharacters:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("comment is over %d characters", avatarCommentMaximumCharacters)})
+		return
+	}
+	userID := r.PathValue("userID")
+	if _, err := s.store.AvatarPersonOf(userID); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	requestID, _, err := s.store.RequestAvatarDrawing(userID, avatarRequestAsked{Kind: body.Kind,
+		BaseDrawingID: body.BaseDrawingID, Comment: strings.TrimSpace(body.Comment)})
+	if err != nil {
+		writeAvatarError(w, err)
+		return
+	}
+	log.Printf("[discord-signup] avatar %s asked for %s by an operator: %s", body.Kind, userID, body.Reason)
+	writeJSON(w, http.StatusOK, map[string]int64{"request_id": requestID})
+}
+
 // handleSetAvatarByOperator is PUT /api/avatars/{userID}: a drawing made
 // outside the requests, added to the person's gallery and shown, with the
 // reason recorded.

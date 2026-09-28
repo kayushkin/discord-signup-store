@@ -29,6 +29,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/kayushkin/discord-signup-store/internal/restrictedclaude"
 )
 
 type drawer struct {
@@ -61,10 +63,10 @@ func main() {
 	flag.StringVar(&d.nodePath, "node", "node", "the node that runs render-avatar.mjs")
 	flag.StringVar(&d.claudePath, "claude", "claude", "the Claude Code command")
 	flag.StringVar(&d.model, "model", "", "the model Claude Code draws with; empty takes Claude Code's own default")
-	flag.StringVar(&d.maximumBudget, "max-budget-usd", "3", "the most one Claude Code turn may spend, in dollars")
-	flag.IntVar(&d.correctionTurns, "correction-turns", 1, "how many times Claude Code sees its print and corrects the drawing")
+	flag.StringVar(&d.maximumBudget, "max-budget-usd", "10", "the most one Claude Code turn may spend, in dollars")
+	flag.IntVar(&d.correctionTurns, "correction-turns", 2, "how many times Claude Code sees its print and corrects the drawing")
 	flag.DurationVar(&d.turnTimeout, "turn-timeout", 10*time.Minute, "how long one Claude Code turn may take")
-	limit := flag.Int("limit", 1, "the most avatars one run draws; the scheduler kills a run after its timeout")
+	runFor := flag.Duration("run-for", 20*time.Minute, "start no new drawing after this long; the scheduler kills a run after its timeout")
 	flag.Parse()
 	for name, value := range map[string]string{"-store-url": d.storeURL, "-art-directory": d.artDirectory, "-chrome": d.chromePath} {
 		if value == "" {
@@ -73,20 +75,31 @@ func main() {
 	}
 	d.storeURL = strings.TrimRight(d.storeURL, "/")
 
-	var waiting struct {
-		Requests []request `json:"requests"`
-	}
-	if err := d.call(http.MethodGet, "/api/avatar-requests/to-draw", nil, &waiting); err != nil {
-		log.Fatalf("list avatar requests to draw: %v", err)
-	}
-	failed := 0
-	for i, r := range waiting.Requests {
-		if i == *limit {
-			log.Printf("%d more requests wait for the next run", len(waiting.Requests)-i)
+	// Draw until nothing waits, asking again after each drawing: the
+	// scheduler drops its next tick while this run is going, so a request
+	// made meanwhile is this run's to pick up.
+	started, failed := time.Now(), 0
+	tried := map[int64]bool{}
+	for time.Since(started) < *runFor {
+		var waiting struct {
+			Requests []request `json:"requests"`
+		}
+		if err := d.call(http.MethodGet, "/api/avatar-requests/to-draw", nil, &waiting); err != nil {
+			log.Fatalf("list avatar requests to draw: %v", err)
+		}
+		var next *request
+		for i := range waiting.Requests {
+			if !tried[waiting.Requests[i].ID] {
+				next = &waiting.Requests[i]
+				break
+			}
+		}
+		if next == nil {
 			break
 		}
-		if err := d.drawOne(r); err != nil {
-			log.Printf("request %d of %s: %v", r.ID, r.DiscordUserID, err)
+		tried[next.ID] = true
+		if err := d.drawOne(*next); err != nil {
+			log.Printf("request %d of %s: %v", next.ID, next.DiscordUserID, err)
 			failed++
 		}
 	}
@@ -214,24 +227,8 @@ func (d *drawer) print(folder, prefix string, size int) error {
 
 // claudeTurn runs one Claude Code turn in the folder, confined to it.
 func (d *drawer) claudeTurn(folder, prompt string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), d.turnTimeout)
-	defer cancel()
-	arguments := []string{"-p", "--restricted", "--tools", "Read,Write,Edit", "--strict-mcp-config",
-		"--permission-mode", "acceptEdits", "--no-session-persistence", "--max-budget-usd", d.maximumBudget}
-	if d.model != "" {
-		arguments = append(arguments, "--model", d.model)
-	}
-	command := exec.CommandContext(ctx, d.claudePath, append(arguments, prompt)...)
-	command.Dir = folder
-	output, err := command.CombinedOutput()
-	if err != nil {
-		tail := strings.TrimSpace(string(output))
-		if len(tail) > 400 {
-			tail = "…" + tail[len(tail)-400:]
-		}
-		return fmt.Errorf("Claude Code failed: %v: %s", err, tail)
-	}
-	return nil
+	return restrictedclaude.Turn{ClaudePath: d.claudePath, Model: d.model, MaximumBudgetUSD: d.maximumBudget,
+		Timeout: d.turnTimeout}.Run(folder, prompt)
 }
 
 // drawingBrief is what every turn is told. photoName is "" when there is no
@@ -265,26 +262,36 @@ handed. It runs in a browser page with no network and no files. You may add colo
 clothes that INK lacks, as hex in a constant of your own, in the same muted print palette; do not
 change kit.js.
 
-What to draw: their head and shoulders, facing the viewer, on a round badge of flat colour that fills
-the square, cropped the way a profile picture is cropped to a circle. Keep the face inside the middle
-70% so a round crop never cuts it. Make it recognisably them: hair shape, length, parting and colour,
-face shape, skin tone, eyebrows, glasses, facial hair, earrings, and the neckline and colour of what
-they wear. A friendly, flattering cartoon: never exaggerate weight, age, or anything a person might be
-self-conscious about, whatever request.txt says. It must read at 28 pixels wide, so use bold shapes and
-few small details. Comment each part plainly (hair, face, shirt). Do not describe the person beyond what
-the drawing needs.
+What to draw: their head and shoulders, facing the viewer, on a round badge that fills the square,
+cropped the way a profile picture is cropped to a circle. Keep the face, and anything they wear on their
+head, inside the middle 80% so a round crop never cuts it. Make it recognisably them, and recognisably
+this photo: hair shape, length, parting and colour, face shape, skin tone, eyebrows, glasses, facial
+hair, earrings, and everything about what they wear — every point of a hat, every layer of a collar,
+trims, patterns, badges, decorations, in their colours. A costume or an outfit is the point of the
+picture: draw it in full. The badge behind them can nod to where the photo was taken. A friendly,
+flattering cartoon: never exaggerate weight, age, or anything a person might be self-conscious about,
+whatever request.txt says. Bold overall shapes, so it reads at 28 pixels wide, with the finer detail
+drawn in so it rewards a look at full size; example-maleeha.js shows the level of detail to aim for.
+Comment each part plainly (hair, face, collar). Do not describe the person beyond what the drawing needs.
 
 `)
 	return b.String()
 }
 
-// firstTurn is the first thing asked, by the kind of request.
+// firstTurn is the first thing asked, by the kind of request. It starts by
+// listing what to draw, because a drawing made straight from a glance loses
+// the second point of a hat and the ruffles under a collar.
 func firstTurn(kind string) string {
+	notes := `First look closely at everything you have and write notes.txt: every detail you will draw, one per
+line. Count what can be counted (points on a hat, layers of a ruffle, buttons, stripes) and write the
+number. Name the colours, patterns, trims, textures and accessories, and anything in the background worth
+a nod. Then draw every line of notes.txt.
+`
 	if kind == "edit_drawing" {
-		return `avatar.js holds a drawing of them already. Change it as request.txt asks, keeping everything it
+		return notes + `avatar.js holds a drawing of them already. Change it as request.txt asks, keeping everything it
 does not ask to change as it is.`
 	}
-	return `Write avatar.js now.`
+	return notes + `Write avatar.js.`
 }
 
 func correctionTurn(photoName string, hasComment bool, printProblem string) string {
@@ -299,10 +306,11 @@ func correctionTurn(photoName string, hasComment bool, printProblem string) stri
 	if hasComment {
 		against += " and what request.txt asks for"
 	}
-	return `avatar.js already holds a drawing, and print-512.webp is it printed. Look at the print, and check it against ` + against + `.
-Fix what is wrong by editing avatar.js: anything that does not look like the person or what they asked for,
-parts out of place, shapes overlapping in the wrong order, outlines crossing the face, or a face too small
-or too busy to read at 28 pixels. If it already looks right, leave it as it is.`
+	return `avatar.js already holds a drawing, and print-512.webp is it printed. Look at the print closely, and check it
+against ` + against + `, and against notes.txt line by line: is each detail there, with the right count and
+colour? Fix what is wrong by editing avatar.js: anything missing from notes.txt, anything that does not
+look like the person or what they asked for, parts out of place or cut off by the round crop, shapes
+overlapping in the wrong order, outlines crossing the face, or a face too small to read at 28 pixels.`
 }
 
 // call sends a JSON request to the store and decodes a JSON answer into out.

@@ -21,7 +21,7 @@
 {{$page := .AvatarPage}}
 {{$chosen := 0}}{{with $page.Person}}{{$chosen = .ChosenDrawingID}}{{end}}
 <div class="card">
-  <h3>Your avatar</h3>
+  <h3>{{if .ViewerHasAvatar}}Your avatar{{else}}Add an avatar{{end}}</h3>
   <p class="meta">Drawings of you in this site's print style, made from a photo you upload. Every drawing
     is kept here. Choose one to show beside your name on event pages and in pictures of who is going.</p>
 

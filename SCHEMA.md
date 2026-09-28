@@ -261,9 +261,13 @@ Drawings of a person, kept in a gallery; they choose which shows beside their na
 
 **`avatar_updates`** — append-only: `id`, `discord_user_id`, `action` (`requested_<kind>`, `drawing_started`, `drawing_saved`, `drawing_failed`, `chose`, `deleted_drawing`, `deleted_photo`, `removed`, `set_by_operator`), `detail` and `at`. Kept after everything else is removed.
 
+### `event_scenes` — the scene an event's picture is set in, new 2026-09-28
+
+`event_id` PK; `details_signature`, the name, description, place, weekday and time and repeat rule it was written from (`eventDetailsSignature`); `scene_code`, the scene in `art/SCENE.md`'s form; `failure`, `failed_details_signature` and `failed_at`, the last scene that did not come out and from which details, tried again an hour later; `updated_at`. A model writes it; a change to the details asks for a new one, a change to who is going does not.
+
 ### `event_pictures` — a picture of who is going, new 2026-09-28
 
-`event_id` PK; `signature`, which people and which drawing of each it shows (`eventPictureSignature`); `image_webp`, 960 by 300; `painted_at`. A page shows it only while the signature matches who is going now, so someone who left never lingers in it.
+`event_id` PK; `signature`, which scene, which people and which drawing of each it shows (`eventPictureSignature`); `image_webp`, 1200 by 400; `painted_at`. A page shows it only while the signature matches who is going now, so someone who left never lingers in it.
 
 ### `site_admins` — whoever runs the bot
 

@@ -65,51 +65,78 @@ func TestAMemberJoinsAndLeavesFromTheHomePage(t *testing.T) {
 	}
 }
 
-// TestAnEventPictureShowsOnlyWhileItShowsWhoIsGoing: the painter is told
-// what to paint, a picture painted for an old roster is refused, and the home
-// page shows the picture until the roster changes.
-func TestAnEventPictureShowsOnlyWhileItShowsWhoIsGoing(t *testing.T) {
+// TestAnEventPictureIsItsSceneWithWhoIsGoing: the painter is asked for a
+// scene first, one written from old details is refused, a picture shows only
+// while it matches the scene and who is going, and a roster change prints the
+// same scene again without asking for a new one.
+func TestAnEventPictureIsItsSceneWithWhoIsGoing(t *testing.T) {
 	_, store, _, mux, _ := webTestServer(t)
 	ev := publishedEvent(t, store, 5, "ann", "bob")
 	member, _ := store.CreateWebSession("ann", "Ann", "", map[string]uint64{"g1": 0})
 	if _, err := store.SetAvatarByOperator("ann", "const DRAWING = {}", testWebP, "test"); err != nil {
 		t.Fatal(err)
 	}
-
-	var due struct {
-		Pictures []eventPictureDue `json:"pictures"`
+	due := func() []eventPictureDue {
+		var body struct {
+			Pictures []eventPictureDue `json:"pictures"`
+		}
+		json.Unmarshal(callAPI(mux, http.MethodGet, "/api/event-pictures/due", "").Body.Bytes(), &body)
+		return body.Pictures
 	}
-	json.Unmarshal(callAPI(mux, http.MethodGet, "/api/event-pictures/due", "").Body.Bytes(), &due)
-	if len(due.Pictures) != 1 || due.Pictures[0].EventID != ev.ID || len(due.Pictures[0].People) != 1 ||
-		due.Pictures[0].People[0].DrawingCode != "const DRAWING = {}" {
-		t.Fatalf("due = %+v", due.Pictures)
+	first := due()
+	if len(first) != 1 || !first[0].NeedsScene || first[0].Details.Name != "Games" || len(first[0].People) != 1 {
+		t.Fatalf("due = %+v", first)
 	}
-	stale, _ := json.Marshal(map[string]any{"signature": "old", "image_webp": testWebP})
-	if rec := callAPI(mux, http.MethodPut, fmt.Sprintf("/api/events/%d/picture", ev.ID), string(stale)); rec.Code != http.StatusConflict {
-		t.Errorf("a picture of an old roster = %d, want 409", rec.Code)
+	stale, _ := json.Marshal(map[string]string{"details_signature": "old", "scene_code": "const SCENE = {}"})
+	scenePath := fmt.Sprintf("/api/events/%d/scene", ev.ID)
+	if rec := callAPI(mux, http.MethodPut, scenePath, string(stale)); rec.Code != http.StatusConflict {
+		t.Errorf("a scene from old details = %d, want 409", rec.Code)
 	}
-	fresh, _ := json.Marshal(map[string]any{"signature": due.Pictures[0].Signature, "image_webp": testWebP})
+	scene, _ := json.Marshal(map[string]string{"details_signature": first[0].DetailsSignature, "scene_code": "const SCENE = {}"})
+	rec := callAPI(mux, http.MethodPut, scenePath, string(scene))
+	var saved struct {
+		Signature string `json:"signature"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &saved)
+	if rec.Code != http.StatusOK || saved.Signature == "" {
+		t.Fatalf("save scene = %d %s", rec.Code, rec.Body.String())
+	}
+	if next := due(); len(next) != 1 || next[0].NeedsScene || next[0].SceneCode != "const SCENE = {}" {
+		t.Fatalf("after the scene, due = %+v", next)
+	}
+	fresh, _ := json.Marshal(map[string]any{"signature": saved.Signature, "image_webp": testWebP})
 	if rec := callAPI(mux, http.MethodPut, fmt.Sprintf("/api/events/%d/picture", ev.ID), string(fresh)); rec.Code != http.StatusNoContent {
 		t.Fatalf("save picture = %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := callAPI(mux, http.MethodGet, "/api/event-pictures/due", ""); strings.Contains(rec.Body.String(), `"event_id"`) {
-		t.Errorf("a current picture is still due: %s", rec.Body.String())
+	if next := due(); len(next) != 0 {
+		t.Errorf("a current picture is still due: %+v", next)
 	}
 	picturePath := fmt.Sprintf("/events/%d/picture.webp", ev.ID)
 	if home := getPage(t, mux, member.Token, "/").Body.String(); !strings.Contains(home, picturePath) {
 		t.Error("the home page does not show the picture")
-	}
-	if rec := getPage(t, mux, member.Token, picturePath); rec.Code != http.StatusOK {
-		t.Errorf("picture = %d", rec.Code)
 	}
 	stranger, _ := store.CreateWebSession("x", "X", "", map[string]uint64{"elsewhere": 0})
 	if rec := getPage(t, mux, stranger.Token, picturePath); rec.Code != http.StatusNotFound {
 		t.Errorf("someone outside the server got the picture: %d", rec.Code)
 	}
 
-	store.Leave(ev.ID, "ann", ActorUser)
+	// Someone else with an avatar joins: the same scene, printed again.
+	store.SetAvatarByOperator("bob", "const DRAWING = {}", testWebP, "test")
+	if next := due(); len(next) != 1 || next[0].NeedsScene || len(next[0].People) != 2 {
+		t.Errorf("after bob's avatar, due = %+v", next)
+	}
 	if home := getPage(t, mux, member.Token, "/").Body.String(); strings.Contains(home, picturePath) {
-		t.Error("the picture still shows after the only person in it left")
+		t.Error("the picture still shows though it lacks bob")
+	}
+	// The details change: a new scene is asked for.
+	store.db.Exec(`UPDATE events SET description = 'Now with pizza' WHERE id = ?`, ev.ID)
+	if next := due(); len(next) != 1 || !next[0].NeedsScene {
+		t.Errorf("after a new description, due = %+v", next)
+	}
+	failed, _ := json.Marshal(map[string]string{"details_signature": due()[0].DetailsSignature, "reason": "no"})
+	callAPI(mux, http.MethodPost, fmt.Sprintf("/api/events/%d/scene-failed", ev.ID), string(failed))
+	if next := due(); len(next) != 1 || next[0].NeedsScene || next[0].SceneCode != "const SCENE = {}" {
+		t.Errorf("after a failed scene, due = %+v; want the old scene printed, not a new one asked for", next)
 	}
 }
 

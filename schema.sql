@@ -531,11 +531,30 @@ CREATE TABLE IF NOT EXISTS avatar_updates (
 );
 CREATE INDEX IF NOT EXISTS avatar_updates_by_person ON avatar_updates (discord_user_id, at);
 
--- event_pictures: a picture of the people going to an event, painted from
--- their chosen avatars by cmd/discord-event-picture-painter and shown on
--- the home page. signature names who was painted and which drawing of each
--- (eventPictureSignature, eventpictures.go); a page shows the picture only
--- while it matches who is going now, so someone who left never lingers.
+-- event_scenes: the scene an event's picture is set in, written as drawing
+-- code by a model from the event's name, description, place and time, with a
+-- place for each person going. details_signature names the details it was
+-- written from (eventDetailsSignature, eventpictures.go); a change to them
+-- asks for a new scene, and a change to who is going only prints this one
+-- again. failure, failed_details_signature and failed_at record the last
+-- scene that did not come out, and from which details, so a failing event is
+-- tried again an hour later rather than every minute; the scene already there
+-- stays in use meanwhile.
+CREATE TABLE IF NOT EXISTS event_scenes (
+    event_id                 INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+    details_signature        TEXT NOT NULL,
+    scene_code               TEXT NOT NULL DEFAULT '',
+    failure                  TEXT NOT NULL DEFAULT '',
+    failed_details_signature TEXT NOT NULL DEFAULT '',
+    failed_at                INTEGER NOT NULL DEFAULT 0,
+    updated_at               INTEGER NOT NULL
+);
+
+-- event_pictures: a picture of the people going to an event, their chosen
+-- avatars printed into the event's scene by cmd/discord-event-picture-painter
+-- and shown on the home page. signature names the scene, who was painted and
+-- which drawing of each (eventPictureSignature, eventpictures.go); a page
+-- shows the picture only while it matches, so someone who left never lingers.
 CREATE TABLE IF NOT EXISTS event_pictures (
     event_id   INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
     signature  TEXT NOT NULL,

@@ -11,15 +11,20 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
-// Event pictures: the people going to an event, drawn together from their
-// chosen avatars, for the home page. The painting needs a browser, so
-// cmd/discord-event-picture-painter does it on the scheduler: it asks which
-// events' pictures are out of date, paints each from the avatars' drawing
-// code with art/render-event-picture.mjs, and hands the print back. No model
-// is involved, so a roster change costs a few seconds of Chrome and nothing
-// else.
+// Event pictures: the people going to an event, drawn into a scene made for
+// that event, for the home page. Two steps, both done by
+// cmd/discord-event-picture-painter on the scheduler:
+//
+//   - The scene. A model reads the event's name, description, place and time,
+//     decides what the picture should be, and writes it as drawing code in
+//     art/kit.js's form, with a place for each person. It is written again only
+//     when those details change, so its cost is paid once per event.
+//   - The picture. The scene is printed with each person's chosen avatar in
+//     their place, by art/render-event-picture.mjs. No model: someone joining
+//     or leaving costs a few seconds of Chrome.
 
 // eventPictureMaximumPeople is the most people one picture shows: the first
 // to sign up among those going with an avatar.
@@ -27,6 +32,13 @@ const eventPictureMaximumPeople = 12
 
 // eventPictureMaximumBytes bounds a painted picture handed back.
 const eventPictureMaximumBytes = 3 << 20
+
+// eventSceneMaximumBytes bounds a scene's code handed back.
+const eventSceneMaximumBytes = 256 << 10
+
+// eventSceneRetryAfter is how long a scene that did not come out waits before
+// it is tried again for the same details.
+const eventSceneRetryAfter = time.Hour
 
 // eventPictureSubject is one person in a picture.
 type eventPictureSubject struct {
@@ -37,17 +49,65 @@ type eventPictureSubject struct {
 	drawingID int64
 }
 
-// eventPictureSignature names who a picture shows and which drawing of each.
-// "" for nobody, which is no picture.
-func eventPictureSignature(subjects []eventPictureSubject) string {
-	if len(subjects) == 0 {
-		return ""
-	}
+// eventScene is the scene an event's picture is set in.
+type eventScene struct {
+	DetailsSignature string `json:"details_signature"`
+	SceneCode        string `json:"scene_code"`
+	Failure          string `json:"failure,omitempty"`
+	// FailedDetailsSignature names the details the last failed scene was
+	// written from.
+	FailedDetailsSignature string `json:"failed_details_signature,omitempty"`
+	FailedAt               int64  `json:"failed_at"`
+	UpdatedAt              int64  `json:"updated_at"`
+}
+
+// eventSceneDetails are what a scene is made from.
+type eventSceneDetails struct {
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Location       string `json:"location"`
+	StartsAt       int64  `json:"starts_at"`
+	EndsAt         int64  `json:"ends_at"`
+	Timezone       string `json:"timezone"`
+	RecurrenceRule string `json:"recurrence_rule"`
+}
+
+func sceneDetailsOf(ev Event) eventSceneDetails {
+	return eventSceneDetails{Name: ev.Name, Description: ev.Description, Location: ev.Location,
+		StartsAt: ev.StartsAt, EndsAt: ev.EndsAt, Timezone: ev.Timezone, RecurrenceRule: ev.RecurrenceRule}
+}
+
+func shortHash(parts ...string) string {
 	hash := sha256.New()
-	for _, s := range subjects {
-		fmt.Fprintf(hash, "%s:%d\n", s.DiscordUserID, s.drawingID)
+	for _, p := range parts {
+		fmt.Fprintf(hash, "%d:%s\n", len(p), p)
 	}
 	return hex.EncodeToString(hash.Sum(nil))[:24]
+}
+
+// eventDetailsSignature names the details a scene is made from. The date
+// counts only as far as its day and time of day, so a repeating event's
+// scene lasts from one date to the next.
+func eventDetailsSignature(ev Event) string {
+	d := sceneDetailsOf(ev)
+	when := ""
+	if zone, err := time.LoadLocation(d.Timezone); err == nil && d.StartsAt != 0 {
+		when = time.Unix(d.StartsAt, 0).In(zone).Format("Monday 15:04")
+	}
+	return shortHash(d.Name, d.Description, d.Location, when, d.RecurrenceRule)
+}
+
+// eventPictureSignature names what a picture shows: the scene and who is in
+// it. "" for nobody or no scene, which is no picture.
+func eventPictureSignature(scene *eventScene, subjects []eventPictureSubject) string {
+	if len(subjects) == 0 || scene == nil || scene.SceneCode == "" {
+		return ""
+	}
+	parts := []string{scene.DetailsSignature, strconv.FormatInt(scene.UpdatedAt, 10)}
+	for _, s := range subjects {
+		parts = append(parts, s.DiscordUserID+":"+strconv.FormatInt(s.drawingID, 10))
+	}
+	return shortHash(parts...)
 }
 
 func int64Placeholders(ids []int64) (string, []any) {
@@ -58,8 +118,8 @@ func int64Placeholders(ids []int64) (string, []any) {
 	return strings.TrimSuffix(strings.Repeat("?,", len(ids)), ","), args
 }
 
-// EventPictureSubjects is, for each event, the people going who have an
-// chosen avatar, in sign-up order, at most eventPictureMaximumPeople.
+// EventPictureSubjects is, for each event, the people going who chose an
+// avatar, in sign-up order, at most eventPictureMaximumPeople.
 func (s *Store) EventPictureSubjects(eventIDs []int64) (map[int64][]eventPictureSubject, error) {
 	out := map[int64][]eventPictureSubject{}
 	if len(eventIDs) == 0 {
@@ -88,6 +148,55 @@ func (s *Store) EventPictureSubjects(eventIDs []int64) (map[int64][]eventPicture
 		}
 	}
 	return out, rows.Err()
+}
+
+// EventScenes is each event's scene, where it has one.
+func (s *Store) EventScenes(eventIDs []int64) (map[int64]*eventScene, error) {
+	out := map[int64]*eventScene{}
+	if len(eventIDs) == 0 {
+		return out, nil
+	}
+	placeholders, args := int64Placeholders(eventIDs)
+	rows, err := s.db.Query(`SELECT event_id, details_signature, scene_code, failure, failed_details_signature, failed_at, updated_at
+		FROM event_scenes WHERE event_id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("read event scenes: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var eventID int64
+		var scene eventScene
+		if err := rows.Scan(&eventID, &scene.DetailsSignature, &scene.SceneCode, &scene.Failure, &scene.FailedDetailsSignature, &scene.FailedAt, &scene.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan event scene: %w", err)
+		}
+		out[eventID] = &scene
+	}
+	return out, rows.Err()
+}
+
+// SaveEventScene stores a scene written from the given details.
+func (s *Store) SaveEventScene(eventID int64, detailsSignature, sceneCode string) error {
+	_, err := s.db.Exec(`INSERT INTO event_scenes (event_id, details_signature, scene_code, updated_at) VALUES (?, ?, ?, ?)
+		ON CONFLICT(event_id) DO UPDATE SET details_signature = excluded.details_signature, scene_code = excluded.scene_code,
+			failure = '', failed_details_signature = '', failed_at = 0, updated_at = excluded.updated_at`, eventID, detailsSignature, sceneCode, now())
+	if err != nil {
+		return fmt.Errorf("store event scene: %w", err)
+	}
+	return nil
+}
+
+// FailEventScene records a scene that did not come out. A scene already
+// there stays, and is printed until a new one comes out.
+func (s *Store) FailEventScene(eventID int64, detailsSignature, reason string) error {
+	_, err := s.db.Exec(`INSERT INTO event_scenes (event_id, details_signature, failure, failed_details_signature, failed_at, updated_at)
+		VALUES (?, '', ?, ?, ?, ?)
+		ON CONFLICT(event_id) DO UPDATE SET failure = excluded.failure,
+			failed_details_signature = excluded.failed_details_signature, failed_at = excluded.failed_at`,
+		eventID, reason, detailsSignature, now(), now())
+	if err != nil {
+		return fmt.Errorf("record event scene failure: %w", err)
+	}
+	return nil
 }
 
 // EventPictureSignatures is the signature of each stored picture.
@@ -138,73 +247,194 @@ func (s *Store) EventPicture(eventID int64) ([]byte, string, error) {
 	return image, signature, nil
 }
 
-// currentEventPictures is, for each event whose stored picture shows who is
-// going now, that picture's signature — for the page's image address, so a
-// repainted picture is fetched again. An event missing here shows none.
+// eventPictureState is, for a set of events, who each picture should show,
+// the scene it is set in, and the picture stored.
+type eventPictureState struct {
+	subjects map[int64][]eventPictureSubject
+	scenes   map[int64]*eventScene
+	stored   map[int64]string
+}
+
+func (s *Store) eventPictureStateOf(eventIDs []int64) (*eventPictureState, error) {
+	subjects, err := s.EventPictureSubjects(eventIDs)
+	if err != nil {
+		return nil, err
+	}
+	scenes, err := s.EventScenes(eventIDs)
+	if err != nil {
+		return nil, err
+	}
+	stored, err := s.EventPictureSignatures(eventIDs)
+	if err != nil {
+		return nil, err
+	}
+	return &eventPictureState{subjects: subjects, scenes: scenes, stored: stored}, nil
+}
+
+// currentEventPictures is, for each event whose stored picture shows its
+// scene and who is going now, that picture's signature — for the page's image
+// address, so a repainted picture is fetched again. An event missing here
+// shows none.
 func (s *Store) currentEventPictures(events []Event) (map[int64]string, error) {
 	ids := make([]int64, len(events))
 	for i, ev := range events {
 		ids[i] = ev.ID
 	}
-	subjects, err := s.EventPictureSubjects(ids)
-	if err != nil {
-		return nil, err
-	}
-	stored, err := s.EventPictureSignatures(ids)
+	state, err := s.eventPictureStateOf(ids)
 	if err != nil {
 		return nil, err
 	}
 	out := map[int64]string{}
 	for _, id := range ids {
-		if want := eventPictureSignature(subjects[id]); want != "" && stored[id] == want {
+		if want := eventPictureSignature(state.scenes[id], state.subjects[id]); want != "" && state.stored[id] == want {
 			out[id] = want
 		}
 	}
 	return out, nil
 }
 
-// eventPictureDue is one picture the painter should paint.
+// eventPictureDue is one event whose picture the painter should paint, and
+// whose scene it should write first when Scene says so.
 type eventPictureDue struct {
-	EventID   int64                 `json:"event_id"`
-	Signature string                `json:"signature"`
-	People    []eventPictureSubject `json:"people"`
+	EventID int64                 `json:"event_id"`
+	People  []eventPictureSubject `json:"people"`
+	// NeedsScene says the scene must be written, from Details, before the
+	// picture can be printed; DetailsSignature goes back with it.
+	NeedsScene       bool              `json:"needs_scene"`
+	Details          eventSceneDetails `json:"details"`
+	DetailsSignature string            `json:"details_signature"`
+	// SceneCode is the scene to print the people into, when it needs no new
+	// one; Signature is the picture's, to send back with it.
+	SceneCode string `json:"scene_code,omitempty"`
+	Signature string `json:"signature,omitempty"`
 }
 
-// handleEventPicturesDue lists every event not yet over whose picture does
-// not show who is going now, with the drawings to paint it from.
+// handleEventPicturesDue lists every event not yet over, with someone going
+// who chose an avatar, whose picture does not show its scene and who is going
+// now — and whether its scene must be written first.
 func (s *Server) handleEventPicturesDue(w http.ResponseWriter, r *http.Request) {
 	events, err := s.store.ListEvents("", "", 500)
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
-	var live []int64
+	live := map[int64]Event{}
+	var ids []int64
 	for _, ev := range events {
 		if !IsArchived(ev.Status) {
-			live = append(live, ev.ID)
+			live[ev.ID] = ev
+			ids = append(ids, ev.ID)
 		}
 	}
-	subjects, err := s.store.EventPictureSubjects(live)
-	if err != nil {
-		writeStoreError(w, err)
-		return
-	}
-	stored, err := s.store.EventPictureSignatures(live)
+	state, err := s.store.eventPictureStateOf(ids)
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
 	due := []eventPictureDue{}
-	for _, id := range live {
-		if want := eventPictureSignature(subjects[id]); want != "" && stored[id] != want {
-			due = append(due, eventPictureDue{EventID: id, Signature: want, People: subjects[id]})
+	for _, id := range ids {
+		people := state.subjects[id]
+		if len(people) == 0 {
+			continue
+		}
+		ev, scene := live[id], state.scenes[id]
+		details := eventDetailsSignature(ev)
+		item := eventPictureDue{EventID: id, People: people, Details: sceneDetailsOf(ev), DetailsSignature: details}
+		if scene == nil || scene.DetailsSignature != details || scene.SceneCode == "" {
+			recentlyFailed := scene != nil && scene.FailedDetailsSignature == details &&
+				scene.FailedAt > now()-int64(eventSceneRetryAfter/time.Second)
+			switch {
+			case !recentlyFailed:
+				item.NeedsScene = true
+				due = append(due, item)
+			case scene.SceneCode != "":
+				// The new scene failed of late: print the one there is, so
+				// who is going stays right meanwhile.
+				if want := eventPictureSignature(scene, people); state.stored[id] != want {
+					item.SceneCode, item.Signature = scene.SceneCode, want
+					due = append(due, item)
+				}
+			}
+			continue
+		}
+		if want := eventPictureSignature(scene, people); state.stored[id] != want {
+			item.SceneCode, item.Signature = scene.SceneCode, want
+			due = append(due, item)
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"pictures": due})
 }
 
-// handleSaveEventPicture takes a painted picture. One painted for a roster
-// that has changed since is refused, and the next run paints it again.
+// handleSaveEventScene takes a scene written for an event. One written from
+// details that have changed since is refused, and the next run writes it
+// again. It answers the picture signature to print it with.
+func (s *Server) handleSaveEventScene(w http.ResponseWriter, r *http.Request) {
+	eventID, err := pathID(r, "id")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad event id"})
+		return
+	}
+	var body struct {
+		DetailsSignature string `json:"details_signature"`
+		SceneCode        string `json:"scene_code"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, eventSceneMaximumBytes))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil || strings.TrimSpace(body.SceneCode) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "a body {\"details_signature\", \"scene_code\"} is required"})
+		return
+	}
+	ev, err := s.store.GetEvent(eventID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if current := eventDetailsSignature(*ev); body.DetailsSignature != current {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "the event's details have changed since this scene was written"})
+		return
+	}
+	if err := s.store.SaveEventScene(eventID, body.DetailsSignature, body.SceneCode); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	state, err := s.store.eventPictureStateOf([]int64{eventID})
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"signature": eventPictureSignature(state.scenes[eventID], state.subjects[eventID])})
+}
+
+// handleEventSceneFailed records a scene that did not come out.
+func (s *Server) handleEventSceneFailed(w http.ResponseWriter, r *http.Request) {
+	eventID, err := pathID(r, "id")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad event id"})
+		return
+	}
+	var body struct {
+		DetailsSignature string `json:"details_signature"`
+		Reason           string `json:"reason"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil || strings.TrimSpace(body.Reason) == "" || body.DetailsSignature == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "a body {\"details_signature\", \"reason\"} is required"})
+		return
+	}
+	if _, err := s.store.GetEvent(eventID); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if err := s.store.FailEventScene(eventID, body.DetailsSignature, body.Reason); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSaveEventPicture takes a painted picture. One painted for a scene or
+// roster that has changed since is refused, and the next run paints it again.
 func (s *Server) handleSaveEventPicture(w http.ResponseWriter, r *http.Request) {
 	eventID, err := pathID(r, "id")
 	if err != nil {
@@ -229,13 +459,14 @@ func (s *Server) handleSaveEventPicture(w http.ResponseWriter, r *http.Request) 
 		writeStoreError(w, err)
 		return
 	}
-	subjects, err := s.store.EventPictureSubjects([]int64{eventID})
+	state, err := s.store.eventPictureStateOf([]int64{eventID})
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
-	if current := eventPictureSignature(subjects[eventID]); body.Signature != current {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "who is going has changed since this was painted", "signature": current})
+	current := eventPictureSignature(state.scenes[eventID], state.subjects[eventID])
+	if current == "" || body.Signature != current {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "the scene or who is going has changed since this was painted", "signature": current})
 		return
 	}
 	if err := s.store.SaveEventPicture(eventID, body.Signature, body.ImageWebP); err != nil {

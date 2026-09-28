@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="card">
   <h3>New event</h3>
-  <form method="post" action="/events/new">
+  <form method="post" action="/events/new" class="add-form" data-member-search="/events/new/members">
 
     <label>Name</label>
     <input name="name" required maxlength="100" value="">
@@ -65,8 +65,35 @@
       on its own scheduled events, so one rule drives both.</div>
 
 
+    <label>People</label>
+    {{/* The event page's Add someone picker. Picking a person adds their user
+         id under the box; what happens to them is chosen below, and done once
+         the event exists. The search looks in the server picked above. */}}
+    <input type="hidden" data-picker-id>
+    <div class="picker-wrap search">
+      <svg class="search-icon" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m13 13 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <input class="member-name" autocomplete="off" role="combobox" aria-autocomplete="list"
+             aria-expanded="false" aria-label="Find a member" placeholder="Find someone by name">
+      <ul class="picker" role="listbox" hidden></ul>
+    </div>
+    <p class="hint" data-empty-hint>Optional. Invite people, or put them on the event, as it is made.</p>
+    <ul class="picked-list" data-picked-list aria-label="Picked"></ul>
+    <div data-actions hidden>
+      <div class="create-people-actions">
+        <label class="check"><input type="radio" name="people_action" value="invite" data-choice="invite" checked>
+          <span>Ask <span data-them>them</span> by <span data-invites>invite</span>: they decide</span></label>
+        <label class="check"><input type="radio" name="people_action" value="attending">
+          <span>Add <span data-them>them</span> as going, without asking</span></label>
+        <label class="check"><input type="radio" name="people_action" value="maybe">
+          <span>Add <span data-them>them</span> as maybe, without asking</span></label>
+      </div>
+      <p class="hint">Each gets a DM from the bot saying so.</p>
+      <p class="choice-note" data-ask-note hidden></p>
+      <p class="choice-note" data-force-note hidden></p>
+    </div>
+
     <p class="form-actions"><button>Create</button>
-      <a class="btn" style="background:transparent;border:1px solid var(--line)" href="/">Cancel</a></p>
+      <a class="btn" style="background:transparent;border:1px solid var(--line);color:var(--ink)" href="/">Cancel</a></p>
   </form>
 </div>
 {{end}}

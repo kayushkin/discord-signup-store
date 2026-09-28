@@ -506,6 +506,10 @@ func (s *Server) handleWebCreateEvent(w http.ResponseWriter, r *http.Request) {
 		s.renderFormError(w, session, nil, err)
 		return
 	}
+	if notice := s.peopleOnCreate(r, ev, session); notice != "" {
+		s.redirectWithNotice(w, r, ev.ID, "Created. "+notice)
+		return
+	}
 	http.Redirect(w, r, fmt.Sprintf("/events/%d", ev.ID), http.StatusSeeOther)
 }
 
