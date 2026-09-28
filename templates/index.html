@@ -1,12 +1,17 @@
 {{define "eventcard"}}
-  {{/* The whole card is the link. The date sits in a block of its own, the
-       reader's own zone once the page script has run. */}}
-  <a class="event-card{{if isArchived .Status}} faded{{end}}" href="/events/{{.ID}}">
+  {{/* Everyone in the server sees the card; only whoever may edit the event
+       can open it, and then the whole card is the link. The date sits in a
+       block of its own, the reader's own zone once the page script has run. */}}
+  <div class="event-card{{if isArchived .Status}} faded{{end}}{{if .MayOpen}} opens{{end}}">
+    <div class="ec-row">
     {{if .StartsAt}}{{dateBox .StartsAt}}{{else}}<span class="datebox none">no date</span>{{end}}
     <span class="ec-body">
-      <span class="ec-title">{{.Name}}</span>
+      <span class="ec-title">{{if .MayOpen}}<a class="ec-link" href="/events/{{.ID}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</span>
       <span class="ec-meta">{{if .StartsAt}}{{clockTime .StartsAt}}{{end}}{{if .Location}}<span class="dot">·</span>{{.Location}}{{end}}</span>
       <span class="ec-tags">
+        {{if eq .MyState "attending"}}<span class="pill open">you're going</span>
+        {{else if eq .MyState "waitlisted"}}<span class="pill held">you're waiting</span>
+        {{else if eq .MyState "maybe"}}<span class="pill">you're a maybe</span>{{end}}
         {{if ne .Status "open"}}<span class="pill {{.Status}}">{{if eq .Status "closed"}}signups closed{{else}}{{.Status}}{{end}}</span>{{end}}
         {{if .RecurrenceRule}}<span class="pill">🔁 {{repeats .RecurrenceRule}}</span>{{end}}
         {{if .WaitlistDisabled}}<span class="pill">no waitlist</span>{{end}}
@@ -17,8 +22,19 @@
       {{if .Capacity}}<span class="bar" aria-hidden="true"><span class="bar-going" style="width:{{percent .AttendingCount .Capacity}}%"></span><span class="bar-held" style="width:{{percent .HeldCount .Capacity}}%"></span></span>{{end}}
       <span class="ec-sub">going{{if .WaitlistCount}} · {{.WaitlistCount}} waiting{{end}}{{if .HeldCount}} · {{.HeldCount}} held{{end}}</span>
     </span>
-    <svg class="chev" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M7.5 4.5 13 10l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  </a>
+    {{if .MayJoin}}
+    <form method="post" class="ec-join" action="/events/{{.ID}}/{{if .MyState}}leave{{else}}join{{end}}">
+      {{if .MyState}}<button class="ghost">Leave</button>
+      {{else if and .Full .WaitlistDisabled}}<button disabled title="Full, and the waitlist is off">Full</button>
+      {{else if .Full}}<button>Join waitlist</button>
+      {{else}}<button>Join</button>{{end}}
+    </form>
+    {{end}}
+    {{if .MayOpen}}<svg class="chev" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M7.5 4.5 13 10l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
+    </div>
+    {{if .PictureSignature}}<img class="ec-picture" src="/events/{{.ID}}/picture.webp?v={{.PictureSignature}}"
+      alt="Drawings of the people going" width="960" height="300" loading="lazy">{{end}}
+  </div>
 {{end}}
 
 {{define "content"}}
@@ -49,21 +65,20 @@
     {{end}}
   </div>
 
-  {{if not .Events}}
+  {{if not .EventCards}}
     <div class="card hero"><img class="hero-art small" src="/art/maleeha-360.webp" alt="" width="130" height="130"><p class="meta">
-      {{if .Archived}}Nothing coming up. Finished events are in the archive below.
-      {{else}}No events for you to manage yet. This page lists the events you
-      created, and every event in a server where you may edit them all. To sign
-      up for an event, use its Join button in Discord.{{end}}
+      {{if .ArchivedCards}}Nothing coming up. Finished events are in the archive below.
+      {{else}}No events yet in your servers. This page lists every event in the
+      servers you are in; join one here or with its Join button in Discord.{{end}}
     </p></div>
   {{end}}
-  {{range .Events}}{{template "eventcard" .}}{{end}}
+  {{range .EventCards}}{{template "eventcard" .}}{{end}}
 
-  {{if .Archived}}
+  {{if .ArchivedCards}}
   <details class="archive">
-    <summary>Archive · {{len .Archived}} finished or cancelled</summary>
+    <summary>Archive · {{len .ArchivedCards}} finished or cancelled</summary>
     <div style="margin-top:12px">
-      {{range .Archived}}{{template "eventcard" .}}{{end}}
+      {{range .ArchivedCards}}{{template "eventcard" .}}{{end}}
     </div>
   </details>
   {{end}}

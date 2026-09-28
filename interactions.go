@@ -304,7 +304,7 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 }
 
 func (s *Server) handleJoin(w http.ResponseWriter, in *Interaction, eventID int64, userID, displayName string) {
-	result, err := s.store.Join(eventID, userID, displayName, JoinedViaButton)
+	result, err := s.joinAsThemselves(eventID, userID, displayName, JoinedViaButton)
 	if errors.Is(err, ErrNotFound) {
 		s.replyEphemeral(w, "That signup list no longer exists.")
 		return
@@ -333,16 +333,10 @@ func (s *Server) handleJoin(w http.ResponseWriter, in *Interaction, eventID int6
 		return
 	}
 	s.replyEphemeral(w, describeJoin(result, ev))
-
-	// Roles and the public roster message are both projections of what was just
-	// written. They happen after the reply because the person clicking must not
-	// wait on Discord's API for their answer, and because a failure to sync a
-	// role must not make a successful signup look failed.
-	s.inBackground(func() { s.syncAfterChange(ev.ID, []stateChange{{UserID: userID, State: result.Signup.State}}) })
 }
 
 func (s *Server) handleLeave(w http.ResponseWriter, in *Interaction, eventID int64, userID string) {
-	result, err := s.store.Leave(eventID, userID, ActorUser)
+	result, err := s.leaveAsThemselves(eventID, userID)
 	if errors.Is(err, ErrNotFound) {
 		// Not on the list, but maybe an invite held a place for them: this
 		// is its Can't go button, and the place goes back.
@@ -366,28 +360,18 @@ func (s *Server) handleLeave(w http.ResponseWriter, in *Interaction, eventID int
 		return
 	}
 
-	ev, err := s.store.GetEvent(eventID)
-	if err != nil {
-		log.Printf("[discord-signup] reload event=%d: %v", eventID, err)
-	}
+	s.replyEphemeral(w, describeLeave(result))
+}
+
+// describeLeave is what someone who left is told.
+func describeLeave(result *LeaveResult) string {
 	switch {
 	case result.FromState == StateMaybe:
-		s.replyEphemeral(w, "You are off the Maybe list.")
+		return "You are off the Maybe list."
 	case result.Promoted != nil:
-		s.replyEphemeral(w, "You are off the list. Your place has gone to the next person waiting.")
+		return "You are off the list. Your place has gone to the next person waiting."
 	default:
-		s.replyEphemeral(w, "You are off the list.")
-	}
-
-	changes := []stateChange{{UserID: userID, State: StateWithdrawn}}
-	if result.Promoted != nil {
-		changes = append(changes, stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
-	}
-	// Synced by id, so a failed reload above no longer costs the whole sync —
-	// the roster changed whether or not this process could read it back.
-	s.inBackground(func() { s.syncAfterChange(eventID, changes) })
-	if ev != nil && result.Promoted != nil {
-		s.inBackground(func() { s.notifyPromoted(ev, result.Promoted) })
+		return "You are off the list."
 	}
 }
 

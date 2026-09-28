@@ -49,21 +49,24 @@ service's, and proxying any other route publishes roster editing to the world.
 | GET | `/api/guilds/{guildID}/channels` | The guild's row back: table, management and the three channels. |
 | GET | `/api/guilds/{guildID}/editing` | The server's editing rule: `{"guild_id","editor_role_id","anyone_may_create","updated_at"}`. A server with none answers the default (`""`, `false`). |
 | PUT | `/api/guilds/{guildID}/editing` | Replace it. Both `editor_role_id` (`""` for the default) and `anyone_may_create` are required; an unknown field, or a role that is not one of the server's, is **400**. |
-| GET | `/api/avatars?state=` | Every avatar, or those in one state: `{"avatars":[{"discord_user_id","state","photo_file_id","drawing_code","has_image","failure","consented_at","drawing_started_at","drawn_at","approved_at","updated_at"}]}`. States: `waiting_for_drawing`, `drawing`, `ready_for_approval`, `approved`, `drawing_failed`. |
-| GET | `/api/avatars/to-draw` | What `discord-avatar-drawer` should draw: avatars waiting, and drawings started over an hour ago (their run is gone), oldest first. |
-| GET | `/api/avatars/{userID}` | One avatar, with its `drawing_code`. 404 when they have none. |
-| GET | `/api/avatars/{userID}/image` | The printed drawing, WebP, approved or not — what a picture of who is going reads. |
-| GET | `/api/avatars/{userID}/photo` | The uploaded photo, relayed from file-store, **only while a drawing is under way** (409 otherwise). |
-| POST | `/api/avatars/{userID}/drawing-started` | Claim a drawing. 409 unless it is waiting (or its drawing is over an hour old), so two drawers cannot both draw one. |
-| PUT | `/api/avatars/{userID}/drawing` | `{"drawing_code":"…","image_webp":"<base64>"}`: the finished drawing, for the person to approve. The image must be WebP, at most 2 MB. 409 unless a drawing is under way. |
-| POST | `/api/avatars/{userID}/drawing-failed` | `{"reason":"…"}`: the drawing did not come out. The page shows the reason and offers a redraw. 409 unless a drawing is under way. |
+| GET | `/api/avatars` | Everyone with avatars: `{"avatars":[{"discord_user_id","photo_file_id","photo_consented_at","chosen_drawing_id","updated_at"}]}`. `chosen_drawing_id` 0 shows none. |
+| GET | `/api/avatars/{userID}` | `{"person":{…},"drawings":[{"id","drawing_code","request_id","created_at","kind","comment"}]}`, newest first. 404 when they have none. |
+| GET | `/api/avatars/{userID}/image` | The chosen drawing's print, WebP. 404 when none is chosen. |
+| PUT | `/api/avatars/{userID}` | `{"drawing_code","image_webp":"<base64>","reason"}`, all required: add a drawing made outside the requests to their gallery and show it (the mascot's, for one). The reason goes in `avatar_updates`. Answers `{"drawing_id"}`. |
+| GET | `/api/avatar-requests/to-draw` | What `discord-avatar-drawer` should draw: requests waiting, and drawings started over an hour ago (their run is gone), oldest first, each with `kind`, `comment`, `has_photo` and, for `edit_drawing`, `base_drawing_code`. |
+| POST | `/api/avatar-requests/{id}/started` | Claim a request. 409 unless it is waiting (or its drawing is over an hour old), so two drawers cannot both draw one. |
+| GET | `/api/avatar-requests/{id}/photo` | The person's kept photo, relayed from file-store, **only while the request is being drawn** (409 otherwise; 404 when no photo is kept). |
+| PUT | `/api/avatar-requests/{id}/drawing` | `{"drawing_code","image_webp":"<base64>"}`: the finished drawing, added to their gallery, not shown until they choose it. WebP, at most 2 MB. 409 unless it is being drawn. Answers `{"drawing_id"}`. |
+| POST | `/api/avatar-requests/{id}/failed` | `{"reason":"…"}`: the drawing did not come out. The page shows the reason. 409 unless it is being drawn. |
+| GET | `/api/event-pictures/due` | What `discord-event-picture-painter` should paint: every event not over whose stored picture does not show who is going now, `{"pictures":[{"event_id","signature","people":[{"discord_user_id","drawing_code"}]}]}`. People are those going with a chosen avatar, in sign-up order, at most 12. |
+| PUT | `/api/events/{id}/picture` | `{"signature","image_webp":"<base64>"}`: a painted picture. 409 when the signature no longer matches who is going; the next run paints it again. |
 | POST | `/api/events/complete-finished` | Archive events whose time has passed and strip the buttons off their cards. Also runs on a five-minute ticker. |
 
 ## Browser surface (YOUR_DOMAIN — Discord login required)
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/` | The events you may edit: those you created, and all events in servers where you may edit every event. |
+| GET | `/` | Every event in the servers you are in (every server, for a site admin), each with your place on it, **Join** or **Leave** while signups are open, and the picture of who is going. Only the events you may edit — yours, or all in a server where you may edit every event — open. |
 | GET | `/login` · `/auth/callback` · POST `/logout` | Discord OAuth2, scopes `identify guilds`. |
 | GET | `/art/{file}` · `/favicon.ico` | A drawing the pages show, or the tab icon (`static/art/`, painted by `art/render.mjs`). No login. |
 | GET | `/fonts/{file}` | A web font, cut down to the characters the pages use, or its licence (`static/fonts/`, built by `fonts/subset.sh`). No login. |
@@ -86,11 +89,17 @@ service's, and proxying any other route publishes roster editing to the world.
 | POST | `/events/{id}/publish` | Create a native Discord event linked to this roster. |
 | POST | `/events/{id}/end` | End an underway event now: the same finishing as its end time passing, and the native Discord event is ended too. A recurring event ends this date and moves to its next. Offered on the page only while the event is underway. |
 | GET · POST | `/names` | The names page, for site admins (every server the bot is in) and server owners (their own server): everyone going, maybe or waitlisted on any event there, each with a box for the short name they are shown by. POST `discord_user_id` and `readable_name` saves one; an empty name removes it. Anyone else's id is 403, and anyone who is neither gets a 404. |
-| GET | `/avatar` | Your avatar: its state, the drawing once there is one, and the upload form. Anyone signed in may open it; only a member of a server the bot is in may upload. |
-| POST | `/avatar/photo` | Multipart `photo` (JPEG, PNG or WebP by its bytes, at most 15 MB) and `consent=yes`, which is required. The photo goes to file-store, any earlier photo is purged, and the avatar waits for a drawing. At most 4 drawings (uploads and redraws) per person in any 24 hours. |
-| POST | `/avatar/approve` · `/avatar/redraw` · `/avatar/remove` | Approve the drawing (the photo is purged from file-store first, and the avatar then shows beside your name), ask for another drawing of the same photo, or delete the avatar and the photo. Each acts on the signed-in person's own avatar only. |
-| GET | `/avatar/drawing.webp` | Your own drawing, approved or not. `private, no-store`. |
-| GET | `/avatars/{userID}.webp` | An **approved** avatar, to anyone, no login; 404 for anything else. The event pages show it beside the person's name. |
+| POST | `/events/{id}/join` · `/events/{id}/leave` | **Join** and **Leave** on the home page, for anyone in the event's server: the same as the Discord buttons, recorded as `joined_via = web` under the name Discord gives them in the server now (a 403 for anyone not in it). Redirects home with a notice. |
+| GET | `/events/{id}/picture.webp` | The picture of who is going, to anyone signed in who is in the event's server; 404 otherwise. The home page links it only while it shows who is going now. |
+| GET | `/avatar` | Your avatar: every drawing made for you, which one shows, the last request and how it went, and the request form. Anyone signed in may open it; only a member of a server the bot is in may ask for drawings. While a drawing is under way the page's script asks `/avatar/status` every few seconds and adds the drawing when it is done. |
+| GET | `/avatar/status` | `{"request":{…}}`: your newest request, for that script. 401 JSON when signed out. |
+| POST | `/avatar/requests` | Multipart. `kind` is `new_photo` (with `photo`, JPEG, PNG or WebP by its bytes, at most 15 MB, and `consent=yes`, required; it replaces any kept photo), `redraw_photo` (from the kept photo) or `edit_drawing` (with `base_drawing_id`, one of yours, and a `comment`, required). `comment`, at most 600 characters, says how it should look. One request at a time; at most 6 per person in any 24 hours. |
+| POST | `/avatar/choose` | `drawing_id`: show that drawing of yours beside your name; `0` shows none. |
+| POST | `/avatar/drawings/delete` | `drawing_id`: delete one of your drawings. |
+| POST | `/avatar/photo/delete` | Purge your kept photo from file-store. Drawings stay; changes to them still work. Refused while a drawing from the photo is under way. |
+| POST | `/avatar/remove` | Purge the photo, then delete every drawing and request. |
+| GET | `/avatar/drawings/{id}.webp` | One of your own drawings; anyone else's is a 404. |
+| GET | `/avatars/{userID}.webp` | The drawing a person chose to show, to anyone, no login; 404 when none is chosen. Shown beside their name on the event pages, the names page and the header. |
 | POST | `/preferences/home-server` | Save which server the home page shows (`guild_id`, `""` for every server). Kept per Discord user in `user_preferences`, so it holds across logins. |
 | GET | `/names/members?guild_id=&q=` | The names page's search: members of one server where you may name people, each with the short name set for them. |
 

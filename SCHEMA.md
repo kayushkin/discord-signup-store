@@ -85,7 +85,7 @@ computed at read time and never stored.
 | `state` | TEXT | `attending`, `waitlisted`, `maybe` or `withdrawn`. `maybe` holds no place and no spot in line. A withdrawn row is kept, not deleted, so rejoining is distinguishable from never having left. |
 | `signed_up_at` | INTEGER | Arrival, and **half the ordering key**: the roster is `ORDER BY signed_up_at, id`. Reset on a rejoin, which is what sends a rejoiner to the back. |
 | `state_changed_at` | INTEGER | Last move between states. |
-| `joined_via` | TEXT | How they got on: `button`, `interested`, `reaction`, `operator` or `organiser`. Not cosmetic — it is what makes an un-marked Interested readable as leaving rather than as noise. |
+| `joined_via` | TEXT | How they got on: `button`, `interested`, `reaction`, `operator`, `organiser`, `regular` or `web` (the home page's Join). Not cosmetic — it is what makes an un-marked Interested readable as leaving rather than as noise. |
 | `waitlist_rank` | INTEGER | A place in the waitlist an organiser set, 1 at the front; `0` means none. A move ranks the whole line, so everyone with a rank arrived before everyone without one, and the line is `(waitlist_rank = 0), waitlist_rank, signed_up_at, id` — `waitlistOrder` in `waitlistorder.go`, the one ORDER BY every "who is next" query uses. A rejoin is a new row, so it starts at `0`. `signed_up_at` is never rewritten by a move. |
 | `discord_interested` | INTEGER | Whether Discord currently lists them as Interested. Recorded even when the roster does not move, because without it un-marking and re-marking is indistinguishable from a duplicate event. |
 
@@ -249,24 +249,21 @@ No row means Discord's default: `MANAGE_EVENTS` or `ADMINISTRATOR` edits every e
 
 No row means their Discord display name is shown. Read by `Roster` with a LEFT JOIN, into `Signup.ReadableName`.
 
-### `avatars` — a drawing of a person, new 2026-09-28
+### Avatars, new 2026-09-28
 
-| Column | Type | Meaning |
-|---|---|---|
-| `discord_user_id` | TEXT PK | The person. Only they create, approve or remove the row, from `/avatar`. |
-| `state` | TEXT | `waiting_for_drawing` → `drawing` → `ready_for_approval` → `approved`; `drawing_failed` instead of `ready_for_approval` when the drawing does not come out. A redraw goes back to `waiting_for_drawing`. |
-| `photo_file_id` | TEXT | The uploaded photo's file-store id (`owner_service` `discord-signup-store`, `owner_ref` `avatar:<user id>`). `''` once purged: on approval, on removal, and when a new photo replaces it. |
-| `drawing_code` | TEXT | The drawing as code in `art/kit.js`'s form, defining `DRAWING`. Kept so a picture of who is going can draw the person again. |
-| `image_webp` | BLOB | The drawing printed at 256 pixels. NULL until drawn. |
-| `failure` | TEXT | Why the last drawing did not come out. |
-| `consented_at` | INTEGER | When they ticked the consent box with their latest photo. |
-| `drawing_started_at`, `drawn_at`, `approved_at`, `updated_at` | INTEGER | Unix seconds; 0 until it happens. |
+Drawings of a person, kept in a gallery; they choose which shows beside their name. The first shape, one row per person in a table named `avatars`, lasted an hour; `migrateSingleAvatarsTable` moves any such rows here at start and drops it.
 
-Removing an avatar deletes the row. `avatar_updates` keeps the history.
+**`avatar_people`** — `discord_user_id` PK; `photo_file_id`, the kept photo's file-store id (`owner_service` `discord-signup-store`, `owner_ref` `avatar:<user id>`), `''` once deleted; `photo_consented_at`, when they ticked consent with it; `chosen_drawing_id`, the drawing shown, 0 for none; `updated_at`.
 
-### `avatar_updates` — what happened to each avatar, append-only
+**`avatar_drawings`** — `id`; `discord_user_id`; `drawing_code`, the drawing in `art/kit.js`'s form, defining `DRAWING`; `image_webp`, it printed at 256 pixels; `request_id`, 0 for one an operator set; `created_at`. Kept until the person deletes it.
 
-`id`, `discord_user_id`, `action` (`photo_uploaded`, `drawing_started`, `drawing_saved`, `drawing_failed`, `redraw_asked`, `approved`, `removed`), `detail` (the file id of an upload, the reason for a failure) and `at`. Kept after the avatar is removed. `/avatar` counts `photo_uploaded` and `redraw_asked` in the last 24 hours to hold each person to 4 drawings a day.
+**`avatar_requests`** — `id`; `discord_user_id`; `kind` (`new_photo`, `redraw_photo`, `edit_drawing`); `base_drawing_id` for an edit; `comment`, in their words; `state` (`waiting`, `drawing`, `done`, `failed`), at most one `waiting` or `drawing` per person; `failure`; `requested_at`, `started_at`, `finished_at`; `drawing_id`, what it made. The six-a-day limit counts `requested_at`.
+
+**`avatar_updates`** — append-only: `id`, `discord_user_id`, `action` (`requested_<kind>`, `drawing_started`, `drawing_saved`, `drawing_failed`, `chose`, `deleted_drawing`, `deleted_photo`, `removed`, `set_by_operator`), `detail` and `at`. Kept after everything else is removed.
+
+### `event_pictures` — a picture of who is going, new 2026-09-28
+
+`event_id` PK; `signature`, which people and which drawing of each it shows (`eventPictureSignature`); `image_webp`, 960 by 300; `painted_at`. A page shows it only while the signature matches who is going now, so someone who left never lingers in it.
 
 ### `site_admins` — whoever runs the bot
 

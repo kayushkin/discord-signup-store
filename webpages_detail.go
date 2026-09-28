@@ -165,7 +165,12 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	for _, m := range messages {
 		actors = append(actors, m.SentBy)
 	}
-	names := eventLogNames{actors: s.historyActorNames(ev.GuildID, actors), people: map[string]actorName{}, roles: map[string]string{}}
+	avatars, avatarsErr := s.store.ChosenAvatarUserIDs()
+	if avatarsErr != nil {
+		log.Printf("[discord-signup] chosen avatars: %v", avatarsErr)
+	}
+	names := eventLogNames{actors: s.historyActorNames(ev.GuildID, actors), people: map[string]actorName{},
+		roles: map[string]string{}, avatars: avatars}
 	for actor, name := range names.actors {
 		if snowflake.MatchString(actor) {
 			names.people[actor] = name
@@ -215,9 +220,9 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	}
 	data.MessagesLeft, data.MessagesNextAt = messageAllowance(messages, now())
 	data.MessageLimit, data.MessageWindowMinutes, data.MessageBodyLimit = messageLimit, int(messageWindow/time.Minute), messageBodyLimit
-	if data.AvatarUserIDs, err = s.store.ApprovedAvatarUserIDs(); err != nil {
-		log.Printf("[discord-signup] approved avatars: %v", err)
-		data.Error = strings.TrimSpace(data.Error + " Could not read who has an avatar: " + err.Error())
+	data.AvatarUserIDs = avatars
+	if avatarsErr != nil {
+		data.Error = strings.TrimSpace(data.Error + " Could not read who has an avatar: " + avatarsErr.Error())
 	}
 	data.RegularIDs = map[string]bool{}
 	going := map[string]bool{}

@@ -206,11 +206,11 @@ because Discord has none to give.
 | **Details** | just you | A private reply: the description, when and where, the host, and the full roster by name in sign-up order, read-only, with Join / Maybe / Leave under it while signups are open. A message rather than a modal: a modal's only read-only text was refused by Discord every time, and its text box opened a keyboard. Pings nobody. |
 | **My events** | just you | The events *you* are on, with Join / Leave in place. |
 | **Discord's own event** | everyone | Discord's native event, linked to a roster here. Its title carries the count. |
-| **Web — list** | whoever may edit | The events you may edit, live from the database: ones you created, and every event in a server where you may edit them all. Members who only sign up use Discord; another event's page is a 404 to them. |
+| **Web — list** | anyone in the server | Every event in your servers, live from the database, with **Join** or **Leave** on each while signups are open and a picture of the people going who chose an avatar. Only the events you may edit — ones you created, and every event in a server where you may edit them all — open; another event's page is a 404. |
 | **Web — detail** | whoever may edit | One event. For an organiser its fields are the edit form, with Open/Close signups, the waitlist switch, End and Cancel beside them; then the roster, **Add people** (Send invite, or Add now to a list), the invites and how each was answered, and one log of signups, edits and invites, newest first. People are shown by their short name, with their Discord name on hover or tap. |
 | **Web — form** | organisers | Create, with the fields a Discord form has no room for. Editing is on the detail page. |
 | **Web — names** | site admins, server owners | The short name each person is shown by, everywhere. A 404 for anyone else, and not linked for them. |
-| **Web — your avatar** | just you | Upload a photo, and a model draws you in the site's print style. You see the drawing first; once you approve it, it shows beside your name on the event pages, and the photo is deleted. You can ask for it to be drawn again, or remove it and the photo, at any time. Not shown anywhere until you approve it. |
+| **Web — your avatar** | just you | Upload a photo and a model draws you in the site's print style. Every drawing is kept; you choose which one shows beside your name, or none. Ask for more — from a new photo, from your photo again, or a change to one you have — each with a comment on how it should look; the page shows the drawing when it is done. Your photo is kept until you delete it. |
 
 ## 5. Who may do what
 
@@ -221,7 +221,8 @@ because Discord has none to give.
 | **Edit an event** | **Administrator (which the server owner always has), Manage Events, or whoever created it** |
 | Add or remove someone else, invite someone | the same as Edit |
 | Set short names | a site admin, or a server's owner for the people in it |
-| Upload, approve or remove an avatar | the person themselves, if they are a member of a server the bot is in; nobody else |
+| Ask for, choose or delete avatar drawings, delete the photo | the person themselves, if they are a member of a server the bot is in; nobody else |
+| Join or leave on the web page | anyone in the event's server, as on Discord |
 | Rebuild the table | Administrator or Manage Events |
 
 Checked when the button is pressed, not when it is drawn: Discord cannot show a

@@ -27,7 +27,7 @@
     <tr><th>Discord name</th><th>Shown as</th><th class="count">Events</th></tr>
     {{range .NamePeople}}
     <tr>
-      <td>{{who .DisplayName .DiscordUserID}}</td>
+      <td>{{avatar $.AvatarUserIDs .DiscordUserID}}{{who .DisplayName .DiscordUserID}}</td>
       <td>
         <form method="post" action="/names" class="row" style="margin:0;gap:8px">
           <input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">

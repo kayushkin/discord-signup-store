@@ -159,7 +159,7 @@ func (s *Server) handleDashboardAction(w http.ResponseWriter, in *Interaction, a
 	userID, displayName := in.actor()
 	switch action {
 	case "dash-join":
-		result, err := s.store.Join(eventID, userID, displayName, JoinedViaButton)
+		_, err := s.joinAsThemselves(eventID, userID, displayName, JoinedViaButton)
 		if errors.Is(err, ErrEventFull) {
 			s.replyEphemeral(w, "This one is full, and its organiser turned the waitlist off.")
 			return
@@ -169,26 +169,12 @@ func (s *Server) handleDashboardAction(w http.ResponseWriter, in *Interaction, a
 			s.replyEphemeral(w, "Something went wrong. Nothing was changed — try again.")
 			return
 		}
-		if err == nil {
-			s.inBackground(func() { s.syncAfterChange(eventID, []stateChange{{UserID: userID, State: result.Signup.State}}) })
-		}
 	case "dash-leave":
-		result, err := s.store.Leave(eventID, userID, ActorUser)
+		_, err := s.leaveAsThemselves(eventID, userID)
 		if err != nil && !errors.Is(err, ErrNotFound) {
 			log.Printf("[discord-signup] dash leave event=%d user=%s: %v", eventID, userID, err)
 			s.replyEphemeral(w, "Something went wrong. Nothing was changed — try again.")
 			return
-		}
-		if err == nil {
-			if ev, err := s.store.GetEvent(eventID); err == nil {
-				changes := []stateChange{{UserID: userID, State: StateWithdrawn}}
-				if result.Promoted != nil {
-					changes = append(changes,
-						stateChange{UserID: result.Promoted.DiscordUserID, State: StateAttending})
-					s.inBackground(func() { s.notifyPromoted(ev, result.Promoted) })
-				}
-				s.inBackground(func() { s.syncAfterChange(eventID, changes) })
-			}
 		}
 	default:
 		s.replyEphemeral(w, "Unknown dashboard action.")

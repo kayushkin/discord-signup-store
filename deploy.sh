@@ -59,10 +59,12 @@ step "Building $BINARY…"
 go build -o "$BINARY" ./cmd/discord-signup-store
 echo "    built: $(ls -lh "$BINARY" | awk '{print $5}')"
 
-# The avatar drawer runs from the scheduler, reads art/kit.js and prints with
-# art/render-avatar.mjs, whose playwright-core lives in art/node_modules.
-step "Building discord-avatar-drawer and installing the art kit's modules…"
+# The avatar drawer and the event picture painter run from the scheduler, read
+# art/kit.js and print with art/render-*.mjs, whose playwright-core lives in
+# art/node_modules.
+step "Building discord-avatar-drawer, discord-event-picture-painter and the art kit's modules…"
 go build -o discord-avatar-drawer ./cmd/discord-avatar-drawer
+go build -o discord-event-picture-painter ./cmd/discord-event-picture-painter
 ( cd art && npm ci --silent )
 
 # A set DISCORD_ variable that settings.go does not declare, or a missing public
@@ -88,6 +90,7 @@ step "Installing binary to $BIN_DIR…"
 mkdir -p "$BIN_DIR"
 cp "$BINARY" "$BIN_DIR/$BINARY"
 cp discord-avatar-drawer "$BIN_DIR/discord-avatar-drawer"
+cp discord-event-picture-painter "$BIN_DIR/discord-event-picture-painter"
 
 step "Starting $SERVICE…"
 systemctl --user daemon-reload

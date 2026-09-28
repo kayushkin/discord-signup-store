@@ -1,55 +1,171 @@
+{{define "avatartile"}}
+    <figure class="avatar-tile{{if .Chosen}} is-chosen{{end}}" data-drawing-id="{{.Drawing.ID}}">
+      <img src="/avatar/drawings/{{.Drawing.ID}}.webp" alt="Drawing {{.Drawing.Number}}" width="180" height="180" loading="lazy">
+      <figcaption>
+        <strong>#{{.Drawing.Number}}</strong>{{if .Chosen}} <span class="pill open">shown</span>{{end}}
+        <span class="tile-how">{{if eq .Drawing.Kind "edit_drawing"}}a change{{else if eq .Drawing.Kind "redraw_photo"}}drawn again{{else if eq .Drawing.Kind "new_photo"}}from a photo{{else}}set by the site{{end}}{{if .Drawing.Comment}}: “{{.Drawing.Comment}}”{{end}}</span>
+      </figcaption>
+      <div class="row tile-actions">
+        <form method="post" action="/avatar/choose">
+          <input type="hidden" name="drawing_id" value="{{if .Chosen}}0{{else}}{{.Drawing.ID}}{{end}}">
+          <button class="btn-sm{{if .Chosen}} ghost{{end}}">{{if .Chosen}}Stop showing{{else}}Show this{{end}}</button></form>
+        <button type="button" class="btn-sm ghost" data-change-drawing="{{.Drawing.ID}}">Change this</button>
+        <form method="post" action="/avatar/drawings/delete">
+          <input type="hidden" name="drawing_id" value="{{.Drawing.ID}}">
+          <button class="btn-sm danger">Delete</button></form>
+      </div>
+    </figure>
+{{end}}
+
 {{define "content"}}
+{{$page := .AvatarPage}}
+{{$chosen := 0}}{{with $page.Person}}{{$chosen = .ChosenDrawingID}}{{end}}
 <div class="card">
   <h3>Your avatar</h3>
-  <p class="meta">A drawing of you in this site's print style, made from a photo you upload.
-    Once you approve it, it shows beside your name on event pages, and pictures of who is
-    going to an event can include you. You can remove it at any time.</p>
+  <p class="meta">Drawings of you in this site's print style, made from a photo you upload. Every drawing
+    is kept here. Choose one to show beside your name on event pages and in pictures of who is going.</p>
 
-  {{with .Avatar}}
-  <div class="avatar-status">
-    {{if or (eq .State "waiting_for_drawing") (eq .State "drawing")}}
-      <p><span class="pill">being drawn</span> Your avatar is being drawn from your photo, which
-        takes up to half an hour. Reload this page to see it.</p>
-    {{else if eq .State "drawing_failed"}}
-      <p><span class="pill cancelled">not drawn</span> The drawing did not come out: {{.Failure}}</p>
-    {{else if .HasImage}}
-      <img class="avatar-preview" src="/avatar/drawing.webp?v={{.UpdatedAt}}" alt="Your avatar" width="256" height="256">
-      {{if eq .State "approved"}}
-        <p><span class="pill open">in use</span> This shows beside your name. Your photo is deleted.</p>
-      {{else}}
-        <p>Only you can see this until you approve it. Approving it deletes your photo.</p>
-      {{end}}
-    {{end}}
-    <div class="row">
-      {{if eq .State "ready_for_approval"}}
-      <form method="post" action="/avatar/approve" style="margin:0"><button>Use this avatar</button></form>
-      {{end}}
-      {{if and (or (eq .State "ready_for_approval") (eq .State "drawing_failed")) $.AvatarDrawingsLeft}}
-      <form method="post" action="/avatar/redraw" style="margin:0"><button class="ghost">Draw it again</button></form>
-      {{end}}
-      <form method="post" action="/avatar/remove" style="margin:0"
-            data-confirm="Delete your avatar{{if .PhotoFileID}} and your photo{{end}}? It stops showing beside your name.">
-        <button class="danger">Remove my avatar{{if .PhotoFileID}} and photo{{end}}</button></form>
-    </div>
+  {{with $page.Request}}
+  <div class="avatar-progress" id="avatar-progress" data-request-id="{{.ID}}"{{if not .Open}} hidden{{end}}>
+    <span class="spinner" aria-hidden="true"></span>
+    <span>Drawing{{if eq .Kind "edit_drawing"}} your change{{end}}{{if .Comment}}: “{{.Comment}}”{{end}}. Usually a few
+      minutes; it appears below when it is done.</span>
   </div>
+  <div class="err" id="avatar-failed"{{if ne .State "failed"}} hidden{{end}}>The last drawing did not come out: <span data-failure>{{.Failure}}</span></div>
   {{end}}
 
-  {{if .AvatarMayUpload}}
-  <form method="post" action="/avatar/photo" enctype="multipart/form-data" class="avatar-upload">
-    <label for="avatar-photo">{{if .Avatar}}Start again from a new photo{{else}}Your photo{{end}}</label>
-    <input id="avatar-photo" type="file" name="photo" accept="image/jpeg,image/png,image/webp" required>
-    <p class="hint">A clear photo of your face and shoulders works best. JPEG, PNG or WebP.
-      {{if .Avatar}}A new photo replaces your avatar.{{end}}</p>
-    <label class="check"><input type="checkbox" name="consent" value="yes" required>
-      Draw an avatar of me from this photo. Once I approve it, show it beside my Discord name on
-      these pages and in pictures of who is going to events.</label>
-    <p class="hint">An AI model on this site's server looks at your photo to draw you. The photo is kept
-      until you approve the drawing or remove it, then deleted. You may ask for
-      {{.AvatarDrawingsPerDay}} drawings a day; {{.AvatarDrawingsLeft}} left today.</p>
-    <button{{if not .AvatarDrawingsLeft}} disabled{{end}}>Upload and draw my avatar</button>
+  <h4 class="avatar-heading">Your drawings</h4>
+  <p class="meta" id="avatar-empty"{{if $page.Drawings}} hidden{{end}}>No drawings yet.</p>
+  <div class="avatar-gallery" id="avatar-gallery">
+    {{range $page.Drawings}}{{template "avatartile" (tile . (eq .ID $chosen))}}{{end}}
+  </div>
+
+  {{if $page.MayAsk}}
+  <h4 class="avatar-heading">Ask for a drawing</h4>
+  <form method="post" action="/avatar/requests" enctype="multipart/form-data" class="avatar-upload" id="avatar-ask">
+    <fieldset class="avatar-kinds">
+      <label class="check" data-edit-choice{{if not $page.Drawings}} hidden{{end}}><input type="radio" name="kind" value="edit_drawing">
+        Change drawing <select name="base_drawing_id" aria-label="Which drawing">
+          {{range $page.Drawings}}<option value="{{.ID}}"{{if eq .ID $chosen}} selected{{end}}>#{{.Number}}{{if eq .ID $chosen}} (shown){{end}}</option>{{end}}
+        </select></label>
+      {{if and $page.Person $page.Person.PhotoFileID}}
+      <label class="check"><input type="radio" name="kind" value="redraw_photo"{{if not $page.Drawings}} checked{{end}}>
+        Draw me again from my photo</label>
+      {{end}}
+      <label class="check"><input type="radio" name="kind" value="new_photo"{{if not (and $page.Person $page.Person.PhotoFileID)}} checked{{end}}>
+        Upload a new photo</label>
+    </fieldset>
+    <div data-photo-fields>
+      <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" aria-label="Your photo">
+      <p class="hint">A clear photo of your face and shoulders works best. JPEG, PNG or WebP. It replaces any photo kept.</p>
+      <label class="check"><input type="checkbox" name="consent" value="yes">
+        Draw avatars of me from this photo, and keep it so I can ask for more. Show a drawing beside my Discord name
+        only once I choose it.</label>
+    </div>
+    <label for="avatar-comment">What should it look like?</label>
+    <textarea id="avatar-comment" name="comment" rows="3" maxlength="{{$page.CommentLimit}}"
+      placeholder="For example: longer hair, add my glasses, a green jacket, a bigger smile"></textarea>
+    <p class="hint" data-comment-hint>Optional for a new drawing; say what to change when changing one. An AI model on this
+      site's server reads your photo and this comment to draw you. {{$page.PerDay}} drawings a day;
+      {{$page.DrawingsLeft}} left today.</p>
+    <button{{if or (not $page.DrawingsLeft) (and $page.Request $page.Request.Open)}} disabled{{end}}>Draw it</button>
   </form>
   {{else if not .Error}}
   <p class="meta">Avatars are for members of a server this bot is in.</p>
   {{end}}
+
+  {{if $page.Person}}
+  <h4 class="avatar-heading">Your photo and data</h4>
+  <div class="row">
+    {{if $page.Person.PhotoFileID}}
+    <p class="meta" style="flex-basis:100%;margin:0">Your photo is kept so you can ask for new drawings from it. Nobody else can see it.</p>
+    <form method="post" action="/avatar/photo/delete" style="margin:0" data-confirm="Delete your photo? Your drawings stay.">
+      <button class="ghost">Delete my photo</button></form>
+    {{end}}
+    <form method="post" action="/avatar/remove" style="margin:0"
+          data-confirm="Delete your photo and every drawing? Nothing shows beside your name after this.">
+      <button class="danger">Delete everything</button></form>
+  </div>
+  {{end}}
 </div>
+
+<template id="avatar-tile-template">
+  {{template "avatartile" (tile (newDrawingTile) false)}}
+</template>
+
+<script>
+(function () {
+  var form = document.getElementById("avatar-ask");
+  if (form) {
+    var photoFields = form.querySelector("[data-photo-fields]");
+    var comment = form.querySelector("textarea[name=comment]");
+    var sync = function () {
+      var kind = (form.querySelector("input[name=kind]:checked") || {}).value;
+      photoFields.hidden = kind !== "new_photo";
+      photoFields.querySelectorAll("input").forEach(function (i) { i.required = kind === "new_photo"; });
+      comment.required = kind === "edit_drawing";
+    };
+    form.addEventListener("change", sync);
+    sync();
+    // "Change this" on a drawing picks it in the form and puts the cursor
+    // where the change is described.
+    document.addEventListener("click", function (e) {
+      var button = e.target.closest("[data-change-drawing]");
+      if (!button) return;
+      var radio = form.querySelector("input[value=edit_drawing]");
+      if (!radio) return;
+      radio.checked = true;
+      form.querySelector("select[name=base_drawing_id]").value = button.getAttribute("data-change-drawing");
+      sync();
+      comment.focus();
+      comment.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+  }
+
+  // While a drawing is under way, ask every few seconds, and put the drawing
+  // in the gallery when it is done.
+  var progress = document.getElementById("avatar-progress");
+  if (!progress || progress.hidden) return;
+  var requestID = progress.getAttribute("data-request-id");
+  var poll = function () {
+    fetch("/avatar/status", { headers: { Accept: "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (body) {
+        var request = body.request;
+        if (!request || String(request.id) !== requestID) return setTimeout(poll, 4000);
+        if (request.state === "waiting" || request.state === "drawing") return setTimeout(poll, 4000);
+        progress.hidden = true;
+        if (form) form.querySelector("button:not([type=button])").disabled = false;
+        if (request.state === "failed") {
+          var failed = document.getElementById("avatar-failed");
+          failed.querySelector("[data-failure]").textContent = request.failure;
+          failed.hidden = false;
+          return;
+        }
+        var html = document.getElementById("avatar-tile-template").innerHTML
+          .replace(/(drawings\/|value="|drawing-id="|change-drawing=")-1/g, "$1" + request.drawing_id)
+          .replace(/(#|Drawing )-1/g, "$1" + (document.querySelectorAll("#avatar-gallery .avatar-tile").length + 1));
+        var holder = document.createElement("div");
+        holder.innerHTML = html.trim();
+        var tile = holder.firstElementChild;
+        var how = tile.querySelector(".tile-how");
+        how.textContent = { edit_drawing: "a change", redraw_photo: "drawn again", new_photo: "from a photo" }[request.kind] +
+          (request.comment ? ": “" + request.comment + "”" : "");
+        tile.classList.add("is-new");
+        document.getElementById("avatar-gallery").prepend(tile);
+        document.getElementById("avatar-empty").hidden = true;
+        var select = form && form.querySelector("select[name=base_drawing_id]");
+        if (select) {
+          var option = document.createElement("option");
+          option.value = request.drawing_id; option.textContent = tile.querySelector("strong").textContent;
+          select.prepend(option);
+          select.value = option.value;
+          form.querySelector("[data-edit-choice]").hidden = false;
+        }
+      })
+      .catch(function () { setTimeout(poll, 8000); });
+  };
+  setTimeout(poll, 4000);
+})();
+</script>
 {{end}}

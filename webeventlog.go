@@ -113,6 +113,13 @@ type eventLogNames struct {
 	people map[string]actorName
 	// roles maps a role id to its name in the server.
 	roles map[string]string
+	// avatars are the people with an approved avatar, shown beside their name.
+	avatars map[string]bool
+}
+
+// person shows someone as personHTML does, after their avatar if they have one.
+func (n eventLogNames) person(readableName, displayName, userID string) template.HTML {
+	return avatarHTML(n.avatars, userID) + personHTML(readableName, displayName, userID)
 }
 
 // actorName is a person the log names.
@@ -129,7 +136,7 @@ func (n eventLogNames) actor(actor string) template.HTML {
 	if !ok {
 		return template.HTML(`<span class="muted">` + template.HTMLEscapeString(actor) + `</span>`)
 	}
-	out := personHTML(a.ReadableName, a.DisplayName, a.UserID)
+	out := n.person(a.ReadableName, a.DisplayName, a.UserID)
 	if a.Via != "" {
 		out += template.HTML(` <span class="muted">(` + template.HTMLEscapeString(a.Via) + `)</span>`)
 	}
@@ -184,7 +191,7 @@ func (n eventLogNames) eventUpdateValue(field, value string) template.HTML {
 		}
 	case "created_by":
 		if p, ok := n.people[value]; ok {
-			return personHTML(p.ReadableName, p.DisplayName, value)
+			return n.person(p.ReadableName, p.DisplayName, value)
 		}
 	}
 	if value == "" {
@@ -236,7 +243,7 @@ func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventI
 	}
 	base := len(signups) + len(edits) + 2*len(invites)
 	for i, p := range regulars {
-		subject := personHTML(p.ReadableName, p.DisplayName, p.DiscordUserID)
+		subject := names.person(p.ReadableName, p.DisplayName, p.DiscordUserID)
 		out = append(out, eventLogEntry{At: p.AddedAt, order: base + i, Subject: subject,
 			What: "made a regular: on every date", By: names.actor(p.AddedBy)})
 		if p.EndedAt > 0 {
@@ -253,7 +260,7 @@ func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventI
 			what += " → " + u.ToState
 		}
 		out = append(out, eventLogEntry{At: u.At, order: i,
-			Subject: personHTML(u.ReadableName, u.DisplayName, u.DiscordUserID),
+			Subject: names.person(u.ReadableName, u.DisplayName, u.DiscordUserID),
 			What:    template.HTML(template.HTMLEscapeString(what)),
 			By:      names.actor(u.Actor)})
 	}
@@ -290,7 +297,7 @@ func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventI
 		if inv.PastLimit {
 			what += ", able to join past the limit"
 		}
-		subject := personHTML(inv.ReadableName, inv.DisplayName, inv.DiscordUserID)
+		subject := names.person(inv.ReadableName, inv.DisplayName, inv.DiscordUserID)
 		out = append(out, eventLogEntry{At: inv.At, order: len(signups) + len(edits) + i,
 			Subject: subject, What: what, By: names.actor(inv.InvitedBy)})
 		if (inv.HoldsPlace || inv.PastLimit) && inv.HoldEndedAt > 0 {

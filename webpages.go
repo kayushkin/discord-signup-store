@@ -2,6 +2,7 @@ package discordsignup
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -52,13 +53,13 @@ type pageData struct {
 	Error   string
 	Notice  string
 
-	Events []Event
-	// Archived is the collapsed tail: events that are over. Split here rather
-	// than filtered in the template so the counts in the summary are right and
-	// the two lists can be sorted differently — soonest-first for what is
-	// coming, most-recent-first for what is done.
-	Archived []Event
-	Event    *Event
+	// EventCards is the home page's events; ArchivedCards the collapsed
+	// tail, events that are over. Split here rather than filtered in the
+	// template so the counts in the summary are right and the two lists can
+	// be sorted differently — soonest-first for what is coming,
+	// most-recent-first for what is done.
+	EventCards, ArchivedCards []eventCard
+	Event                     *Event
 
 	Roster []Signup
 	// Going, Waiting and Maybes are the roster split into its three lists,
@@ -99,6 +100,9 @@ type pageData struct {
 	// EventFull is whether a capped event has no free place, which is when
 	// the waitlist can be added to.
 	EventFull bool
+	// ViewerHasAvatar is whether the signed-in viewer has an approved avatar,
+	// for the header.
+	ViewerHasAvatar bool
 	// MayName is whether the viewer may open the names page.
 	MayName bool
 
@@ -118,12 +122,8 @@ type pageData struct {
 	// AvatarUserIDs are the people whose approved avatar the page may show
 	// beside their name.
 	AvatarUserIDs map[string]bool
-	// Avatar is the viewer's own avatar on the avatar page, nil when they
-	// have none; AvatarMayUpload whether they may upload a photo, and
-	// AvatarDrawingsLeft how many more drawings they may ask for today.
-	Avatar                                   *Avatar
-	AvatarMayUpload                          bool
-	AvatarDrawingsLeft, AvatarDrawingsPerDay int
+	// AvatarPage is the avatar page's photo, gallery and last request.
+	AvatarPage *avatarPage
 
 	StartsLocal       string
 	EndsLocal         string
@@ -169,6 +169,12 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 	// person shows someone by their short name with their Discord name
 	// behind it.
 	"person": personHTML,
+	// tile pairs a drawing with whether it is the one shown, for the avatar
+	// page's gallery.
+	"tile": func(d AvatarDrawing, chosen bool) avatarTile { return avatarTile{Drawing: d, Chosen: chosen} },
+	// newDrawingTile is the gallery tile the avatar page's script fills in
+	// when a drawing finishes: its id and number are placeholders.
+	"newDrawingTile": func() AvatarDrawing { return AvatarDrawing{ID: -1, Number: -1} },
 	// avatar is a person's approved avatar, for beside their name, or
 	// nothing when they have none.
 	"avatar": avatarHTML,
@@ -218,6 +224,13 @@ func splitByArchived(events []Event) (live, archived []Event) {
 func (s *Server) render(w http.ResponseWriter, page string, data pageData) {
 	data.Zones = commonZones
 	data.RecurrenceChoices = recurrenceChoices
+	if data.Session != nil {
+		person, err := s.store.AvatarPersonOf(data.Session.DiscordUserID)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			log.Printf("[discord-signup] header avatar of %s: %v", data.Session.DiscordUserID, err)
+		}
+		data.ViewerHasAvatar = err == nil && person.ChosenDrawingID != 0
+	}
 	tmpl, err := templates.Clone()
 	if err != nil {
 		log.Printf("[discord-signup] clone templates: %v", err)
@@ -295,11 +308,12 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 	} else {
 		data.MayName = len(guilds) > 0
 	}
-	// Only the events the viewer may edit. Everyone else joins from Discord;
-	// the web pages are an organiser's tool. Whether they may edit every
-	// event in a server is asked once per server, since with an editor role
-	// it costs a Discord call.
+	// Every event in the viewer's servers, so anyone can see what is on and
+	// join from here. Only the events they may edit open; whether they may
+	// edit every event in a server is asked once per server, since with an
+	// editor role it costs a Discord call.
 	var visible []Event
+	mayOpen := map[int64]bool{}
 	for guildID := range guildIDs {
 		events, err := s.store.ListEvents(guildID, "", 200)
 		if err != nil {
@@ -309,15 +323,35 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 		editsAll, err := s.mayEditAllEventsIn(session.editActor(guildID))
 		if err != nil {
 			data.Error = "Could not check which events you may edit: " + err.Error()
-			continue
 		}
 		for _, ev := range events {
-			if editsAll || (ev.CreatedBy != "" && ev.CreatedBy == session.DiscordUserID) {
-				visible = append(visible, ev)
-			}
+			visible = append(visible, ev)
+			mayOpen[ev.ID] = editsAll || (ev.CreatedBy != "" && ev.CreatedBy == session.DiscordUserID)
 		}
 	}
-	data.Events, data.Archived = splitByArchived(visible)
+	myStates, err := s.store.SignupStatesOf(session.DiscordUserID)
+	if err != nil {
+		data.Error = strings.TrimSpace(data.Error + " Could not read which events you are on: " + err.Error())
+	}
+	pictures, err := s.store.currentEventPictures(visible)
+	if err != nil {
+		data.Error = strings.TrimSpace(data.Error + " Could not read the pictures of who is going: " + err.Error())
+	}
+	card := func(ev Event) eventCard {
+		return eventCard{Event: ev, MayOpen: mayOpen[ev.ID], MyState: myStates[ev.ID],
+			MayJoin: ev.Status == StatusOpen && session.IsMemberOf(ev.GuildID), Full: eventIsFull(&ev),
+			PictureSignature: pictures[ev.ID]}
+	}
+	live, archived := splitByArchived(visible)
+	for _, ev := range live {
+		data.EventCards = append(data.EventCards, card(ev))
+	}
+	for _, ev := range archived {
+		// Nobody joins an event that is over.
+		c := card(ev)
+		c.MayJoin = false
+		data.ArchivedCards = append(data.ArchivedCards, c)
+	}
 	s.render(w, "index.html", data)
 }
 

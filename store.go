@@ -274,6 +274,10 @@ func Open(dataDir string) (*Store, error) {
 	if err := dropRetiredTables(db); err != nil {
 		return nil, err
 	}
+	if err := migrateSingleAvatarsTable(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := ensureColumns(db); err != nil {
 		db.Close()
 		return nil, err

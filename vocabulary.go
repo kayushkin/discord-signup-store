@@ -174,6 +174,8 @@ const (
 	// JoinedViaRegular is a regular at a recurring event, put back on as
 	// going when its date rolls over.
 	JoinedViaRegular = "regular"
+	// JoinedViaWebPage is the Join button on the web home page.
+	JoinedViaWebPage = "web"
 )
 
 var validJoinedVia = map[string]bool{
@@ -183,6 +185,7 @@ var validJoinedVia = map[string]bool{
 	JoinedViaOrganiser:  true,
 	JoinedViaReaction:   true,
 	JoinedViaRegular:    true,
+	JoinedViaWebPage:    true,
 }
 
 // ValidJoinedVia returns the accepted arrival routes, sorted.

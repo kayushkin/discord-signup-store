@@ -266,9 +266,10 @@ func TestLeavingAnEventOverItsLimitPromotesNobody(t *testing.T) {
 	}
 }
 
-// TestTheWebPagesShowOnlyEventsYouMayEdit: a member who created one event
-// sees that one, and someone else's is a 404, as if it did not exist.
-func TestTheWebPagesShowOnlyEventsYouMayEdit(t *testing.T) {
+// TestEveryoneSeesEveryEventButOpensOnlyThoseTheyMayEdit: a member sees
+// every event in their server on the home page, with Join on each, but only
+// the one they created links to its page, and someone else's page is a 404.
+func TestEveryoneSeesEveryEventButOpensOnlyThoseTheyMayEdit(t *testing.T) {
 	_, store, _, mux, _ := webTestServer(t)
 	mine, _ := store.CreateEvent(Event{GuildID: "g1", ChannelID: "c", Name: "My picnic", Status: StatusOpen,
 		StartsAt: 4102444800, CreatedBy: "member"})
@@ -277,8 +278,14 @@ func TestTheWebPagesShowOnlyEventsYouMayEdit(t *testing.T) {
 	member, _ := store.CreateWebSession("member", "Member", "", map[string]uint64{"g1": 0})
 
 	home := getPage(t, mux, member.Token, "/").Body.String()
-	if !strings.Contains(home, "My picnic") || strings.Contains(home, "Someone else") {
-		t.Errorf("home page shows the wrong events for a member who created one")
+	if !strings.Contains(home, "My picnic") || !strings.Contains(home, "Someone else&#39;s quiz") {
+		t.Errorf("the home page does not list every event in the member's server")
+	}
+	if !strings.Contains(home, `href="`+eventPath(mine)+`"`) || strings.Contains(home, `href="`+eventPath(theirs)+`"`) {
+		t.Errorf("the home page links an event the member may not open, or not the one they may")
+	}
+	if !strings.Contains(home, `action="`+eventPath(theirs)+`/join"`) {
+		t.Errorf("the home page offers no Join on someone else's event")
 	}
 	if rec := getPage(t, mux, member.Token, eventPath(mine)); rec.Code != http.StatusOK {
 		t.Errorf("their own event = %d, want 200", rec.Code)

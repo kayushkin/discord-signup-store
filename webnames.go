@@ -121,6 +121,9 @@ func (s *Server) handleWebNames(w http.ResponseWriter, r *http.Request) {
 	}
 	data.NamePeople = people
 	data.NameableGuilds = guilds
+	if data.AvatarUserIDs, err = s.store.ChosenAvatarUserIDs(); err != nil {
+		data.Error = strings.TrimSpace(data.Error + " Could not read who has an avatar: " + err.Error())
+	}
 	s.render(w, "names.html", data)
 }
 

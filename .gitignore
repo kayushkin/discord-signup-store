@@ -1,5 +1,6 @@
 /discord-signup-store
 /discord-avatar-drawer
+/discord-event-picture-painter
 
 # Host-specific configuration. Copy the .example files and fill them in; the
 # filled-in versions name one machine, one domain and one Discord application,

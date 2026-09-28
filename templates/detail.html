@@ -179,7 +179,7 @@
 
     {{if .RegularsAway}}
     <p class="regulars-away">{{template "regular"}} Regulars not going this date:
-      {{range $i, $p := .RegularsAway}}{{if $i}}, {{end}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}</p>
+      {{range $i, $p := .RegularsAway}}{{if $i}}, {{end}}{{avatar $.AvatarUserIDs $p.DiscordUserID}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}</p>
     {{end}}
 
     {{if or .Waiting (not $ev.WaitlistDisabled)}}
