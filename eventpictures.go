@@ -492,7 +492,11 @@ type eventPictureDue struct {
 	People  []eventPictureSubject `json:"people"`
 	// NeedsScene says the scene must be written, from Details, before the
 	// picture can be printed; DetailsSignature goes back with it.
-	NeedsScene       bool              `json:"needs_scene"`
+	NeedsScene bool `json:"needs_scene"`
+	// UpdateExisting says, with NeedsScene, that the event has a scene
+	// already, in SceneCode: change only what no longer fits the details
+	// or the scene format, rather than write a new one.
+	UpdateExisting   bool              `json:"update_existing"`
 	Details          eventSceneDetails `json:"details"`
 	DetailsSignature string            `json:"details_signature"`
 	// Request is an organiser asking for the scene again: with NeedsScene,
@@ -551,6 +555,9 @@ func (s *Server) handleEventPicturesDue(w http.ResponseWriter, r *http.Request) 
 			switch {
 			case !recentlyFailed:
 				item.NeedsScene = true
+				if scene != nil && scene.SceneCode != "" {
+					item.UpdateExisting, item.SceneCode = true, scene.SceneCode
+				}
 				due = append(due, item)
 			case scene.SceneCode != "":
 				// The new scene failed of late: print the one there is, so

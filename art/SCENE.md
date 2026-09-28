@@ -95,6 +95,11 @@ Rules:
 
 - `cast(n)` must return exactly `n` people for every `n` from 1 to 12, all
   inside the picture, faces not covered by one another or by the foreground.
+- **People stay where they are as the crowd grows.** `cast(n + 1)` gives the
+  first `n` people the same places and heights `cast(n)` gave them, and only
+  adds one: someone joining the event adds a person to the picture and moves
+  nobody. Plan every place from the start — who stands where when there are
+  12 — and have `cast(n)` take the first `n` of them. The painter checks this.
 - Paint only with the kit's functions and inks (`part`, `stroke`, `capsule`,
   `ellipsePoints`, `halftone`, `harlequin`, `tilt`, `pushTransform`,
   `translateBy`, `rotateBy`, `scaleBy`, `popTransform`, `INK` …). Extra colours

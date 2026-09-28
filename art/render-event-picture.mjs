@@ -1,6 +1,6 @@
 // Prints an event's picture: its scene, with each person going posed in it,
 // as a looping animated WebP.
-// Run: node render-event-picture.mjs <scene.js> <people.json> <out.webp> [count] [--still | --sheet]
+// Run: node render-event-picture.mjs <scene.js> <people.json> <out.webp> [count] [--still | --sheet | --cast-report]
 // people.json is [{"discord_user_id", "format", "drawing_code"}, …]: the
 // people going with avatars first, in the order they signed up, then a
 // "background" entry for each of the rest. format is "character"
@@ -11,7 +11,10 @@
 // that many people, taking people.json round again if it holds fewer — to see
 // how a scene holds a crowd. --still prints one frame, the first; --sheet
 // prints four moments of the loop one above another, to see the motion in one
-// still picture. CHROME_PATH names the Chrome or Chromium to use; img2webp
+// still picture. --cast-report writes no picture: out is JSON saying, for
+// each crowd from 1 to 11, how far anyone already cast moves when one more is
+// added — a scene must keep people where they are as the crowd grows, so a
+// roster change only adds someone. CHROME_PATH names the Chrome or Chromium to use; img2webp
 // (libwebp's tools) joins the frames.
 //
 // The loop is SCENE.seconds long (2 unless it says), at 12 frames a second.
@@ -33,9 +36,9 @@ import path from 'node:path';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const flags = process.argv.slice(2).filter(a => a.startsWith('--'));
 const [sceneFile, peopleFile, outFile, countArgument] = process.argv.slice(2).filter(a => !a.startsWith('--'));
-const mode = flags.includes('--still') ? 'still' : flags.includes('--sheet') ? 'sheet' : 'loop';
-if (!sceneFile || !peopleFile || !outFile || flags.some(f => !['--still', '--sheet'].includes(f))) {
-  console.error('usage: node render-event-picture.mjs <scene.js> <people.json> <out.webp> [count] [--still | --sheet]');
+const mode = flags.includes('--still') ? 'still' : flags.includes('--sheet') ? 'sheet' : flags.includes('--cast-report') ? 'cast-report' : 'loop';
+if (!sceneFile || !peopleFile || !outFile || flags.some(f => !['--still', '--sheet', '--cast-report'].includes(f))) {
+  console.error('usage: node render-event-picture.mjs <scene.js> <people.json> <out.webp> [count] [--still | --sheet | --cast-report]');
   process.exit(2);
 }
 const FRAMES_PER_SECOND = 12;
@@ -124,7 +127,27 @@ try {
   });
   if (errors.length) throw new Error(errors.join('\n'));
   const png = dataURL => Buffer.from(dataURL.split(',')[1], 'base64');
-  if (mode === 'still') {
+  if (mode === 'cast-report') {
+    const withAvatars = people.filter(p => p.format !== 'background').length;
+    writeFileSync(outFile, JSON.stringify(await page.evaluate(withAvatars => {
+      const scene = window.SCENE_DEFINED, moves = [];
+      const castOf = n => {
+        PEOPLE = Array.from({ length: n }, (_, i) => ({ avatar: i < withAvatars }));
+        const cast = scene.cast(n, 0);
+        if (!Array.isArray(cast) || cast.length !== n) throw new Error(`SCENE.cast(${n}) must give ${n} people`);
+        return cast;
+      };
+      for (let n = 1; n < 12; n++) {
+        const before = castOf(n), after = castOf(n + 1);
+        before.forEach((c, i) => {
+          const pixels = Math.round(Math.hypot(c.x - after[i].x, c.y - after[i].y));
+          const grew = Math.round(100 * Math.abs(after[i].height - c.height) / c.height);
+          if (pixels > 0 || grew > 0) moves.push({ from: n, person: i, pixels, height_change_percent: grew });
+        });
+      }
+      return { moves };
+    }, withAvatars)));
+  } else if (mode === 'still') {
     writeFileSync(outFile, png(await page.evaluate(() => window.frameAt(0).toDataURL('image/webp', .88))));
   } else if (mode === 'sheet') {
     writeFileSync(outFile, png(await page.evaluate(() => {

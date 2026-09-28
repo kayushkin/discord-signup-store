@@ -43,6 +43,7 @@ type drawer struct {
 	model           string
 	maximumBudget   string
 	correctionTurns int
+	recoveryTurns   int
 	turnTimeout     time.Duration
 	http            *http.Client
 }
@@ -67,6 +68,7 @@ func main() {
 	flag.StringVar(&d.model, "model", "", "the model Claude Code draws with; empty takes Claude Code's own default")
 	flag.StringVar(&d.maximumBudget, "max-budget-usd", "10", "the most one Claude Code turn may spend, in dollars")
 	flag.IntVar(&d.correctionTurns, "correction-turns", 2, "how many times Claude Code sees its print and corrects the drawing")
+	flag.IntVar(&d.recoveryTurns, "recovery-turns", 2, "how many more turns Claude Code gets to fix a character that fails its last print, before the drawing counts as failed")
 	flag.DurationVar(&d.turnTimeout, "turn-timeout", 15*time.Minute, "how long one Claude Code turn may take")
 	runFor := flag.Duration("run-for", 20*time.Minute, "start no new drawing after this long; the scheduler kills a run after its timeout")
 	flag.Parse()
@@ -216,8 +218,21 @@ func (d *drawer) draw(base string, r request) (*character, error) {
 			return nil, err
 		}
 	}
-	if err := d.print(folder, filepath.Join(folder, "final")); err != nil {
-		return nil, fmt.Errorf("the character would not print: %w", err)
+	// A character that fails its last print gets recoveryTurns more turns
+	// to fix what failed before the drawing counts as failed.
+	for recovery := 0; ; recovery++ {
+		err := d.print(folder, filepath.Join(folder, "final"))
+		if err == nil {
+			break
+		}
+		if recovery == d.recoveryTurns {
+			return nil, fmt.Errorf("the character still would not print after %d turns to fix it: %w", d.recoveryTurns, err)
+		}
+		log.Printf("request %d: the character failed its last print; turn %d to fix it", r.ID, recovery+1)
+		if err := d.claudeTurn(folder, brief+"character.js failed its last print:\n"+err.Error()+
+			"\n\nFix exactly that in character.js, keeping the character as it is otherwise. Read character.js through once more after editing: an unmatched bracket or a stray semicolon stops the whole drawing."); err != nil {
+			return nil, err
+		}
 	}
 	code, err := os.ReadFile(filepath.Join(folder, "character.js"))
 	if err != nil {

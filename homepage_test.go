@@ -133,8 +133,8 @@ func TestAnEventPictureIsItsSceneWithWhoIsGoing(t *testing.T) {
 	}
 	// The details change: a new scene is asked for.
 	store.db.Exec(`UPDATE events SET description = 'Now with pizza' WHERE id = ?`, ev.ID)
-	if next := due(); len(next) != 1 || !next[0].NeedsScene {
-		t.Errorf("after a new description, due = %+v", next)
+	if next := due(); len(next) != 1 || !next[0].NeedsScene || !next[0].UpdateExisting || next[0].SceneCode != "const SCENE = {}" {
+		t.Errorf("after a new description, due = %+v; want the scene there updated, not a new one", next)
 	}
 	failed, _ := json.Marshal(map[string]string{"details_signature": due()[0].DetailsSignature, "reason": "no"})
 	callAPI(mux, http.MethodPost, fmt.Sprintf("/api/events/%d/scene-failed", ev.ID), string(failed))

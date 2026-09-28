@@ -1,13 +1,12 @@
 {{define "eventcard"}}
-  {{/* A banner card: the picture of who is going heads it, or a printed
-       title panel when there is none, and the date stamp overlaps its lower
-       edge. Everyone in the server sees the card; only whoever may edit the
+  {{/* A banner card: the picture of who is going heads it, with the date
+       stamp overlapping its lower edge; with no picture, a thin strip of a
+       spot ink tops a slimmer card. Everyone in the server sees the card; only whoever may edit the
        event can open it, and then the whole card is the link. */}}
-  <article class="event-card{{if isArchived .Status}} faded{{end}}{{if .MayOpen}} opens{{end}}">
+  <article class="event-card{{if .PictureSignature}} has-picture{{end}}{{if isArchived .Status}} faded{{end}}{{if .MayOpen}} opens{{end}}">
     {{if .PictureSignature}}<img class="ec-banner" src="/events/{{.ID}}/picture.webp?v={{.PictureSignature}}"
       alt="A drawing of the people going" width="1200" height="400" loading="lazy">
-    {{else}}<div class="ec-banner ec-panel ink-{{inkOf .ID}}" aria-hidden="true"><span>{{.Name}}</span>
-      <em>{{if .AttendingCount}}No one going has an avatar yet{{else}}Nobody going yet{{end}}</em></div>{{end}}
+    {{else}}<div class="ec-strip ink-{{inkOf .ID}}" aria-hidden="true"></div>{{end}}
     <div class="ec-main">
       {{if .StartsAt}}{{dateBox .StartsAt}}{{else}}<span class="datebox none">no date</span>{{end}}
       <div class="ec-body">
