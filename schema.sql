@@ -563,15 +563,22 @@ CREATE TABLE IF NOT EXISTS event_scenes (
     updated_at               INTEGER NOT NULL
 );
 
--- event_pictures: a picture of the people going to an event, their chosen
--- avatars printed into the event's scene by cmd/discord-event-picture-painter
--- and shown on the home page. signature names the scene, who was painted and
--- which drawing of each (eventPictureSignature, eventpictures.go); a page
--- shows the last picture painted until a new one replaces it, and none once
--- nobody going has an avatar.
-CREATE TABLE IF NOT EXISTS event_pictures (
-    event_id   INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
-    signature  TEXT NOT NULL,
-    image_webp BLOB NOT NULL,
-    painted_at INTEGER NOT NULL
+-- event_picture_prints: every picture painted of an event's current scene,
+-- the people going with avatars and faceless stand-ins for the rest printed
+-- into it by cmd/discord-event-picture-painter. signature names the scene,
+-- each person with an avatar and which drawing, and how many stand-ins
+-- (eventPictureSignature, eventpictures.go), so a roster that comes back to
+-- one already painted shows that print again with nothing repainted.
+-- scene_version is the scene's updated_at: a print of an older scene is
+-- forgotten when the first of a newer one is saved. A page shows the print of
+-- who is going now, or the last one painted while that is painted, and none
+-- once nobody going has an avatar. (Until 2026-09-28 one picture per event, in
+-- a table named event_pictures; migrateSinglePicturePerEvent moves it here.)
+CREATE TABLE IF NOT EXISTS event_picture_prints (
+    event_id      INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    signature     TEXT NOT NULL,
+    scene_version INTEGER NOT NULL,
+    image_webp    BLOB NOT NULL,
+    painted_at    INTEGER NOT NULL,
+    PRIMARY KEY (event_id, signature)
 );

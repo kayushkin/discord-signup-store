@@ -86,7 +86,8 @@ func TestAnEventPictureIsItsSceneWithWhoIsGoing(t *testing.T) {
 		return body.Pictures
 	}
 	first := due()
-	if len(first) != 1 || !first[0].NeedsScene || first[0].Details.Name != "Games" || len(first[0].People) != 1 {
+	if len(first) != 1 || !first[0].NeedsScene || first[0].Details.Name != "Games" || len(first[0].People) != 2 ||
+		first[0].People[1].Format != eventPictureStandIn {
 		t.Fatalf("due = %+v", first)
 	}
 	stale, _ := json.Marshal(map[string]string{"details_signature": "old", "scene_code": "const SCENE = {}"})
@@ -217,7 +218,7 @@ func TestAnOrganiserControlsTheEventsPicture(t *testing.T) {
 	if !after.PicturesDisabled || len(due()) != 0 {
 		t.Fatalf("after switching off: disabled %v, due %+v", after.PicturesDisabled, due())
 	}
-	if _, _, err := store.EventPicture(ev.ID); err == nil {
+	if _, err := store.EventPicture(ev.ID, ""); err == nil {
 		t.Error("the picture outlived switching pictures off")
 	}
 	if rec := getPage(t, mux, token, fmt.Sprintf("/events/%d/picture.webp", ev.ID)); rec.Code != http.StatusNotFound {
@@ -250,5 +251,46 @@ func TestTheCreateFormCanLeaveThePictureOff(t *testing.T) {
 	}
 	if !disabled["Quiet"] || disabled["Loud"] || disabled["Plain"] {
 		t.Errorf("pictures disabled = %v, want only Quiet", disabled)
+	}
+}
+
+// TestAPictureOfTheSameCrowdIsNotPaintedTwice: a stand-in is anyone going
+// without an avatar, so one of them leaving and another joining asks for the
+// picture already saved, and it is shown with nothing repainted.
+func TestAPictureOfTheSameCrowdIsNotPaintedTwice(t *testing.T) {
+	_, store, _, mux, token := webTestServer(t)
+	ev := publishedEvent(t, store, 5, "ann", "bob")
+	store.SetAvatarByOperator("ann", newAvatarDrawing{Format: AvatarFormatPortrait, Code: "const DRAWING = {}", ImageWebP: testWebP}, "test")
+	due := func() []eventPictureDue {
+		var body struct {
+			Pictures []eventPictureDue `json:"pictures"`
+		}
+		json.Unmarshal(callAPI(mux, http.MethodGet, "/api/event-pictures/due", "").Body.Bytes(), &body)
+		return body.Pictures
+	}
+	put := func(path string, body map[string]any) {
+		encoded, _ := json.Marshal(body)
+		callAPI(mux, http.MethodPut, path, string(encoded))
+	}
+	first := due()[0]
+	rec := callAPI(mux, http.MethodPut, fmt.Sprintf("/api/events/%d/scene", ev.ID),
+		fmt.Sprintf(`{"details_signature":%q,"scene_code":"const SCENE = 1"}`, first.DetailsSignature))
+	var saved struct {
+		Signature string `json:"signature"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &saved)
+	put(fmt.Sprintf("/api/events/%d/picture", ev.ID), map[string]any{"signature": saved.Signature, "image_webp": testWebP})
+
+	store.Leave(ev.ID, "bob", ActorUser)
+	if next := due(); len(next) != 1 || len(next[0].People) != 1 {
+		t.Fatalf("after bob left, due = %+v", next)
+	}
+	put(fmt.Sprintf("/api/events/%d/picture", ev.ID), map[string]any{"signature": due()[0].Signature, "image_webp": testWebP})
+	store.Join(ev.ID, "cy", "Cy", JoinedViaButton)
+	if next := due(); len(next) != 0 {
+		t.Errorf("cy, without an avatar, took bob's place, and the picture was asked for again: %+v", next)
+	}
+	if home := getPage(t, mux, token, "/").Body.String(); !strings.Contains(home, "picture.webp?v="+saved.Signature) {
+		t.Error("the home page does not show the picture saved for this crowd")
 	}
 }

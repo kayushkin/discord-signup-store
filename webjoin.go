@@ -27,8 +27,12 @@ type eventCard struct {
 	// Full is whether a capped event has no free place.
 	Full bool
 	// PictureSignature is the address version of the event's picture of who
-	// is going, "" when there is none showing who is going now.
+	// is going, "" when there is none to show.
 	PictureSignature string
+	// Faces are the people going with an avatar, at most four, by Discord
+	// user id; Blanks stand for up to three more going without one.
+	Faces  []string
+	Blanks []struct{}
 }
 
 // SignupStatesOf is where a person is on each event they are on.

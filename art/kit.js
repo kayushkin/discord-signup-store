@@ -363,3 +363,53 @@ function idleMotion(pose, t, seed) {
   }
   return p;
 }
+
+// ---------------------------------------------------------------- stand-ins
+// A background character stands in for someone going who has no avatar. It
+// must never be taken for anyone: no face at all — a blank oval where one
+// would be — muted clothes in paper greys, thin lines, and a pale screen over
+// it all, like a figure printed on the second pass. seed picks a build and
+// clothes, so a crowd of them is not one person repeated.
+const STAND_IN_CLOTHES = ['#9b978a', '#93a39b', '#a8998a', '#8e9aad', '#a3a08c', '#9d8f98'];
+const STAND_IN_SKIN = '#e6dcc9', STAND_IN_HAIR = ['#8a8479', '#6f6a62', '#a39b8e'];
+function backgroundCharacter(seed) {
+  const pick = (list, k) => list[Math.floor(hash(seed * 13.7 + k) * list.length)];
+  const top = pick(STAND_IN_CLOTHES, 1), legs = pick(STAND_IN_CLOTHES, 2), hair = pick(STAND_IN_HAIR, 3);
+  const build = .9 + hash(seed * 3.1) * .25, tall = .92 + hash(seed * 5.3) * .14;
+  const hat = hash(seed * 7.7) < .3, skirt = hash(seed * 9.9) < .3;
+  const P = { head: 230, neck: 36, torso: 290 * tall, shoulderWidth: 180 * build, shoulderDrop: 32, hipWidth: 130 * build,
+              upperArm: 165 * tall, forearm: 145 * tall, hand: 64, thigh: 225 * tall, shin: 215 * tall, footHeight: 36 };
+  const quiet = { line: 3 };
+  // The pale screen: paper dots over every part, so they sit back.
+  const screen = ctx => halftone(ctx, [-400, -400, 400, 400], 7, 2.4, 'rgba(248,239,216,.55)', () => .9);
+  const limb = (length, width, fill) => () => part(capsule([0, -8], [0, length], width), { ...quiet, fill, colourDetail: screen });
+  const arm = limb(P.upperArm, 40 * build, top), forearm = limb(P.forearm, 34 * build, STAND_IN_SKIN);
+  const thigh = limb(P.thigh, 64 * build, skirt ? STAND_IN_SKIN : legs), shin = limb(P.shin, 54 * build, skirt ? STAND_IN_SKIN : legs);
+  const hand = () => part(ellipsePoints(0, 26, 22, 26, 14), { ...quiet, fill: STAND_IN_SKIN, colourDetail: screen });
+  const foot = () => part([[24, -8], [-10, -10], [-46, 6], [-54, 34], [30, 34], [32, 12]], { ...quiet, fill: '#7d786e' });
+  return {
+    standIn: true,
+    proportions: P,
+    draw: {
+      head() {
+        part(ellipsePoints(0, -118, 92, 110, 26), { ...quiet, fill: hair });
+        // The blank face: an oval of skin, nothing drawn on it.
+        part(ellipsePoints(0, -100, 80, 94, 26), { ...quiet, fill: STAND_IN_SKIN, colourDetail: screen });
+        if (hat) part([[-96, -150], [-84, -214], [0, -238], [84, -214], [96, -150], [0, -160]], { ...quiet, fill: pick(STAND_IN_CLOTHES, 4) });
+      },
+      neck() { part([[-22, 8], [22, 8], [20, -40], [-20, -40]], { ...quiet, fill: STAND_IN_SKIN }); },
+      torso() {
+        const w = P.shoulderWidth / 2 + 20, t = P.torso;
+        part([[-w, -t + 14], [-w * .6, -t - 4], [w * .6, -t - 4], [w, -t + 14], [w - 10, -t * .5], [w - 22, 10], [-(w - 22), 10], [-(w - 10), -t * .5]],
+          { ...quiet, fill: top, colourDetail: screen });
+      },
+      pelvis() {
+        const w = P.hipWidth / 2 + 24;
+        if (skirt) part([[-w + 6, -10], [w - 6, -10], [w + 26, 150], [-w - 26, 150]], { ...quiet, fill: legs, colourDetail: screen });
+        else part([[-w, -10], [w, -10], [w, 56], [-w, 56]], { ...quiet, fill: legs, colourDetail: screen });
+      },
+      upperArmL: arm, forearmL: forearm, handL: hand, upperArmR: mirrored(arm), forearmR: mirrored(forearm), handR: mirrored(hand),
+      thighL: thigh, shinL: shin, footL: foot, thighR: mirrored(thigh), shinR: mirrored(shin), footR: mirrored(foot),
+    },
+  };
+}

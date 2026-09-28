@@ -180,6 +180,10 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 	// avatar is a person's approved avatar, for beside their name, or
 	// nothing when they have none.
 	"avatar": avatarHTML,
+	// inkOf picks one of the four spot inks for an event's printed title
+	// panel, by its id, so neighbouring cards differ and one card never
+	// changes colour.
+	"inkOf": func(id int64) int64 { return id % 4 },
 	// toggleSubject is what the Open/Close button opens or closes: the
 	// waitlist, on a full event that has one, or signups.
 	"toggleSubject": closeToggleSubject,
@@ -339,10 +343,25 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data.Error = strings.TrimSpace(data.Error + " Could not read the pictures of who is going: " + err.Error())
 	}
+	ids := make([]int64, len(visible))
+	for i, ev := range visible {
+		ids[i] = ev.ID
+	}
+	subjects, err := s.store.EventPictureSubjects(ids)
+	if err != nil {
+		data.Error = strings.TrimSpace(data.Error + " Could not read who is going with an avatar: " + err.Error())
+	}
 	card := func(ev Event) eventCard {
-		return eventCard{Event: ev, MayOpen: mayOpen[ev.ID], MyState: myStates[ev.ID],
+		c := eventCard{Event: ev, MayOpen: mayOpen[ev.ID], MyState: myStates[ev.ID],
 			MayJoin: ev.Status == StatusOpen && session.IsMemberOf(ev.GuildID), Full: eventIsFull(&ev),
 			PictureSignature: pictures[ev.ID]}
+		for _, subject := range subjects[ev.ID] {
+			if subject.Format != eventPictureStandIn && len(c.Faces) < 4 {
+				c.Faces = append(c.Faces, subject.DiscordUserID)
+			}
+		}
+		c.Blanks = make([]struct{}, min(3, max(0, ev.AttendingCount-len(c.Faces))))
+		return c
 	}
 	live, archived := splitByArchived(visible)
 	for _, ev := range live {

@@ -1,10 +1,13 @@
 // Prints an event's picture: its scene, with each person going posed in it,
 // as a looping animated WebP.
 // Run: node render-event-picture.mjs <scene.js> <people.json> <out.webp> [count] [--still | --sheet]
-// people.json is [{"discord_user_id", "format", "drawing_code"}, …] in the
-// order they signed up; format is "character" (CHARACTER.md), painted whole
-// and posed as the scene casts them, or "portrait", an older head-and-shoulders
-// drawing, painted round where their head would be. count, when given, prints
+// people.json is [{"discord_user_id", "format", "drawing_code"}, …]: the
+// people going with avatars first, in the order they signed up, then a
+// "background" entry for each of the rest. format is "character"
+// (CHARACTER.md), painted whole and posed as the scene casts them; "portrait",
+// an older head-and-shoulders drawing, painted round where their head would
+// be; or "background", a faceless stand-in from the kit (backgroundCharacter),
+// no code of its own. count, when given, prints
 // that many people, taking people.json round again if it holds fewer — to see
 // how a scene holds a crowd. --still prints one frame, the first; --sheet
 // prints four moments of the loop one above another, to see the motion in one
@@ -53,10 +56,16 @@ try {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.setContent('<!doctype html><meta charset="utf-8"><body></body>');
-  await page.addScriptTag({ content: kit + `\nwindow.people = []; var PEOPLE_COUNT = ${people.length}, CAST = [], JOINTS = [], T = 0;` });
+  await page.addScriptTag({ content: kit + `\nwindow.people = []; var PEOPLE_COUNT = ${people.length}, CAST = [], JOINTS = [], T = 0,
+    PEOPLE = ${JSON.stringify(people.map(p => ({ avatar: p.format !== 'background' })))};` });
   // Each person, and the scene, declares its own constant, so each runs in a
   // function of its own and hands the constant back.
+  let standIns = 0;
   for (const person of people) {
+    if (person.format === 'background') {
+      await page.addScriptTag({ content: `window.people.push({ format: 'character', it: backgroundCharacter(${++standIns}) });` });
+      continue;
+    }
     const name = person.format === 'character' ? 'CHARACTER' : 'DRAWING';
     await page.addScriptTag({ content: `window.people.push({ format: ${JSON.stringify(person.format)}, it: (function () {\n${person.drawing_code}\n;return ${name};})() });` });
   }
@@ -98,7 +107,10 @@ try {
         width: scene.width, height: scene.height, misregister: scene.misregister,
         paint() {
           scene.background(t);
-          window.people.forEach((person, i) => paintPerson(person, cast[i], JOINTS[i], poses[i]));
+          // Back to front: whoever stands further up the picture is further
+          // away, so is painted first and overlapped by those nearer.
+          const order = cast.map((c, i) => i).sort((a, b) => cast[a].y - cast[b].y || a - b);
+          order.forEach(i => paintPerson(window.people[i], cast[i], JOINTS[i], poses[i]));
           if (typeof scene.foreground === 'function') scene.foreground(t);
         },
       });

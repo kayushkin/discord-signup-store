@@ -104,21 +104,37 @@ h2,h3{font-family:var(--display);font-weight:400;letter-spacing:.3px}
   .home-filter{flex:1 1 100%;margin:0!important;flex-wrap:nowrap}
   .home-filter select{flex:1;min-width:0}
 }
-/* Home page cards: every event in the viewer's servers. One they may edit is
+/* Home page cards: every event in the viewer's servers, as banners. The
+   picture of who is going heads the card — or a printed title panel in a spot
+   ink — and the date stamp overlaps its lower edge. One the viewer may edit is
    a link, the whole card through its title's link; Join and Leave sit above it. */
 .event-card{position:relative;background:var(--paper-light);border:2.5px solid var(--ink);
-  border-radius:3px;padding:14px 16px;margin-bottom:14px;color:var(--ink);box-shadow:var(--shadow);
+  border-radius:3px;margin-bottom:18px;color:var(--ink);box-shadow:var(--shadow);overflow:hidden;
   transition:transform .1s,box-shadow .1s}
-.ec-row{display:flex;align-items:center;gap:16px}
+.ec-banner{display:block;width:100%;height:auto;aspect-ratio:3/1;object-fit:cover;border-bottom:2.5px solid var(--ink);background:var(--paper)}
+.ec-panel{display:flex;flex-direction:column;align-items:flex-end;padding:12px 16px;gap:2px;
+  background:radial-gradient(circle,#221c1730 1.3px,transparent 1.7px) 0 0/7px 7px,var(--c)}
+.ec-panel span{font-family:var(--display);font-size:clamp(20px,5.5vw,34px);line-height:1.05;text-align:right;max-width:75%;
+  overflow-wrap:anywhere;text-shadow:2px 2px 0 #f8efd880}
+.ec-panel em{font-style:normal;font-size:11px;font-weight:700;opacity:.65;margin-top:auto}
+.ink-0{--c:#e7755f}.ink-1{--c:#4fa08c}.ink-2{--c:#d9a441}.ink-3{--c:#5b86ad}
+.ec-main{display:flex;gap:14px;padding:0 16px;align-items:flex-start}
+.ec-main .datebox{margin-top:-26px;position:relative}
 .ec-link{color:inherit;text-decoration:none}
 .ec-link::after{content:"";position:absolute;inset:0}
 .ec-link:focus-visible{outline:none}
 .event-card:has(.ec-link:focus-visible){outline:3px solid var(--accent);outline-offset:3px}
 .event-card.opens:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--accent)}
-.event-card.opens:hover .chev{color:var(--accent);transform:translateX(3px)}
+.ec-foot{display:flex;align-items:center;gap:10px;padding:12px 16px 14px}
+.ec-faces{display:inline-flex;flex:none}
+.ec-faces img,.ec-faces span{width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);margin-left:-9px;background:var(--paper-deep)}
+.ec-faces :first-child{margin-left:0}
+.ec-faces:empty{display:none}
+.ec-count{flex:1;font-size:13px;color:var(--dim);min-width:0}
+.ec-count strong{font-family:var(--display);font-size:17px;color:var(--ink)}
 .ec-join{position:relative;z-index:1;flex:none;margin:0}
 .ec-join button{white-space:nowrap}
-.ec-picture{display:block;width:100%;height:auto;margin-top:12px;border:2px solid var(--ink);border-radius:2px;background:var(--paper)}
+.pill.held{color:var(--ink);background:var(--warn)}
 /* The date is a stamped block: black, with the day in poster type. */
 .datebox{flex:none;width:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;
   background:var(--ink);color:var(--paper-light);border:2px solid var(--ink);border-radius:2px;padding:6px 0;line-height:1.1;
@@ -127,33 +143,13 @@ h2,h3{font-family:var(--display);font-weight:400;letter-spacing:.3px}
 .db-dow,.db-mon{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--paper-deep)}
 .db-dow{color:var(--warn)}
 .db-day{font-family:var(--display);font-size:24px;margin:2px 0}
-.ec-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.ec-title{font-family:var(--display);font-size:17px;letter-spacing:.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ec-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;padding-top:10px}
+.ec-title{font-family:var(--display);font-size:18px;letter-spacing:.3px;line-height:1.25}
 .ec-meta{color:var(--dim);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ec-meta .dot{margin:0 6px;color:var(--accent)}
 .ec-tags{display:flex;gap:6px;flex-wrap:wrap}
 /* :empty never matches: the template leaves whitespace between the tags. */
 .ec-tags:not(:has(.pill)){display:none}
-.ec-count{flex:none;width:112px;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
-.ec-num{font-family:var(--display);font-size:19px;font-variant-numeric:tabular-nums}
-.ec-sub{font-size:12px;color:var(--dim);text-align:right}
-/* How full: an ink-outlined bar filled with screen-printed stripes. */
-.bar{display:flex;width:100%;height:9px;background:radial-gradient(circle,var(--rule) 1px,transparent 1.4px) 0 0/4px 4px,var(--paper);
-  border:1.5px solid var(--ink);border-radius:1px;overflow:hidden}
-.bar-going{background:repeating-linear-gradient(135deg,var(--ok) 0 4px,color-mix(in srgb,var(--ok) 75%,#000) 4px 6px)}
-.bar-held{background:repeating-linear-gradient(135deg,var(--warn) 0 4px,color-mix(in srgb,var(--warn) 75%,#000) 4px 6px)}
-.chev{flex:none;color:var(--ink);transition:transform .12s}
-/* On a phone the count goes under the event's text, in the same column, and
-   the date block runs down the left of both: "1/3 going", then the bar. */
-@media (max-width:560px){
-  .ec-row{display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:8px;align-items:start}
-  .ec-row .datebox{grid-row:1 / span 3}
-  .ec-join{grid-column:2}
-  .ec-count{grid-column:2;width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:4px 8px}
-  .ec-num{font-size:17px}
-  .ec-sub{order:1;text-align:left;white-space:nowrap}
-  .ec-count .bar{order:2;flex:1 1 60px}
-  .chev{display:none}
 }
 /* Archived cards stay legible but visibly done — faded like an old print,
    not hidden, because the roster of a past event is exactly what gets looked
@@ -364,7 +360,6 @@ label.force-tile:has(input:checked) .tile-box{background:var(--warn)}
 .btn-sm.regular-toggle{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:124px}
 .btn-sm.regular-toggle.is-on{color:var(--paper-light);background:var(--blue);border-color:var(--ink)}
 .regulars-away{font-size:13px;color:var(--ink);margin:10px 0 0;display:flex;gap:6px;flex-wrap:wrap;align-items:baseline}
-.pill.held{color:var(--ink);background:var(--warn)}
 .control.is-off h4{opacity:.6}
 .map-link{display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:13px}
 .location-row{display:flex;gap:8px;align-items:center}

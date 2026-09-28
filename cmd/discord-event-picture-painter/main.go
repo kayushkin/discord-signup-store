@@ -197,7 +197,7 @@ func (p *painter) writeScene(folder, peopleFile string, pic picture) (string, er
 			return "", err
 		}
 	}
-	if err := os.WriteFile(filepath.Join(folder, "event.txt"), []byte(describeEvent(pic.Details, len(pic.People))), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(folder, "event.txt"), []byte(describeEvent(pic.Details, len(pic.People), countAvatars(pic.People))), 0o600); err != nil {
 		return "", err
 	}
 	// The people going, as the page will paint them, so the scene can suit
@@ -211,6 +211,9 @@ func (p *painter) writeScene(folder, peopleFile string, pic picture) (string, er
 		return "", err
 	}
 	for i := range min(4, len(people)) {
+		if people[i].Format == "background" {
+			break // the stand-ins come after everyone with an avatar
+		}
 		prefix := filepath.Join(folder, fmt.Sprintf("person-%d", i+1))
 		code := prefix + ".js"
 		if err := os.WriteFile(code, []byte(people[i].DrawingCode), 0o600); err != nil {
@@ -280,13 +283,28 @@ func (p *painter) writeScene(folder, peopleFile string, pic picture) (string, er
 	return string(code), nil
 }
 
+// countAvatars is how many of the people in a picture have an avatar, not a
+// stand-in.
+func countAvatars(people []json.RawMessage) int {
+	n := 0
+	for _, raw := range people {
+		var person struct {
+			Format string `json:"format"`
+		}
+		if json.Unmarshal(raw, &person) == nil && person.Format != "background" {
+			n++
+		}
+	}
+	return n
+}
+
 func mustRead(file string) []byte {
 	content, _ := os.ReadFile(file)
 	return content
 }
 
 // describeEvent is event.txt: the event as its organiser described it.
-func describeEvent(d details, going int) string {
+func describeEvent(d details, going, withAvatars int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Event: %s\n", d.Name)
 	if zone, err := time.LoadLocation(d.Timezone); err == nil && d.StartsAt != 0 {
@@ -303,7 +321,7 @@ func describeEvent(d details, going int) string {
 	if d.Location != "" {
 		fmt.Fprintf(&b, "Where: %s\n", d.Location)
 	}
-	fmt.Fprintf(&b, "People going with avatars now: %d\n", going)
+	fmt.Fprintf(&b, "People in the picture now: %d with avatars, %d faceless stand-ins for the others going\n", withAvatars, going-withAvatars)
 	if d.Description != "" {
 		fmt.Fprintf(&b, "\nDescription, in the organiser's words:\n%s\n", d.Description)
 	}
@@ -317,8 +335,11 @@ but inform the picture.
 
 Each person is a character the page paints for you, whole and posed as you cast them: person-N-full.webp
 is one standing and person-N-poses.webp the same one in eight poses (a person-N-portrait-256.webp is an
-older avatar that is only a portrait, painted round where their head would be). You never draw the
-people; you choose where they are, what they are doing, and what is around them and in their hands.
+older avatar that is only a portrait, painted round where their head would be). The people with avatars
+come first; after them come faceless stand-ins for everyone else going, so the picture has as many
+people as are going (event.txt says how many of each). You never draw the people; you choose where
+they are, what they are doing, and what is around them and in their hands — the people with avatars
+in front, the stand-ins filling out the crowd behind.
 
 Read SCENE.md for exactly what to write, then CHARACTER.md and kit.js for how characters and poses work,
 and example-maleeha.js for the level of detail to aim for.

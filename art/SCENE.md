@@ -71,12 +71,21 @@ for you, posed. For each one `cast(n)` gives:
   the body.
 - `mirror`: flip them left to right, to face or turn toward someone.
 
-People are painted after `background()`, in the order `cast` gives them, so
-list the ones further back first. While `background()` and `foreground()` run,
+People are painted after `background()`, back to front by where their feet
+are: whoever stands higher up the picture is further away and is painted
+first, overlapped by those nearer. While `background()` and `foreground()` run,
 `CAST` is what `cast(PEOPLE_COUNT)` returned and `JOINTS[i]` is where person
 `i`'s joints landed: `head`, `top`, `pelvis`, `handL`, `handR`, `footL`,
 `footR` (each `[x, y]`), and `scale`, pixels per character unit. Draw a torch in
 `JOINTS[i].handR`, a chair under `JOINTS[i].pelvis`, a hat on `JOINTS[i].top`.
+
+`PEOPLE[i].avatar` says whether person `i` has an avatar of their own. The
+people with avatars come first, in the order they signed up; the rest are
+**stand-ins**: faceless background characters from the kit, one for each
+person going without an avatar, so the picture has as many people as are
+going, up to 12. Give the people with avatars the leading places and actions,
+nearer and bigger; put the stand-ins behind them, smaller, filling out the
+crowd. A stand-in poses like anyone else.
 
 A person whose avatar is an older portrait, not a character, is painted as
 their round portrait where their head would be, the same size as a head; the

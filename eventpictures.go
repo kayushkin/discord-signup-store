@@ -113,8 +113,9 @@ func shortHash(parts ...string) string {
 // eventSceneFormat is the version of art/SCENE.md scenes are written to. It
 // is part of every details signature, so a new version asks every event for a
 // new scene: on 2026-09-28 scenes went from placing round portraits to casting
-// posed characters, and then to moving in a loop.
-const eventSceneFormat = "cast-motion"
+// posed characters, then to moving in a loop, then to crowds with faceless
+// stand-ins for the people going without avatars.
+const eventSceneFormat = "cast-crowd"
 
 // eventDetailsSignature names the details a scene is made from. The date
 // counts only as far as its day and time of day, so a repeating event's
@@ -129,8 +130,10 @@ func eventDetailsSignature(ev Event) string {
 }
 
 // eventPictureSignature names what a picture should show: the scene and who
-// is in it. "" for nobody or no scene. A stored picture whose signature
-// differs is repainted, and shown until then.
+// is in it — each person with an avatar and which drawing of theirs, and how
+// many stand-ins, who are all alike. "" for nobody or no scene. So one person
+// without an avatar leaving and another joining asks for the same picture,
+// and the print saved for it is shown again.
 func eventPictureSignature(scene *eventScene, subjects []eventPictureSubject) string {
 	if len(subjects) == 0 || scene == nil || scene.SceneCode == "" {
 		return ""
@@ -150,8 +153,11 @@ func int64Placeholders(ids []int64) (string, []any) {
 	return strings.TrimSuffix(strings.Repeat("?,", len(ids)), ","), args
 }
 
-// EventPictureSubjects is, for each event, the people going who chose an
-// avatar, in sign-up order, at most eventPictureMaximumPeople.
+// EventPictureSubjects is, for each event, who its picture shows: the people
+// going who chose an avatar, in sign-up order, then a faceless stand-in for
+// each of the rest going, at most eventPictureMaximumPeople in all. An event
+// with nobody going who chose an avatar has none: a picture of stand-ins alone
+// would show nobody.
 func (s *Store) EventPictureSubjects(eventIDs []int64) (map[int64][]eventPictureSubject, error) {
 	out := map[int64][]eventPictureSubject{}
 	if len(eventIDs) == 0 {
@@ -179,8 +185,36 @@ func (s *Store) EventPictureSubjects(eventIDs []int64) (map[int64][]eventPicture
 			out[eventID] = append(out[eventID], subject)
 		}
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	counts, err := s.db.Query(`SELECT event_id, COUNT(*) FROM signups WHERE state = ? AND event_id IN (`+placeholders+`) GROUP BY event_id`,
+		append([]any{StateAttending}, args...)...)
+	if err != nil {
+		return nil, fmt.Errorf("count who is going: %w", err)
+	}
+	defer counts.Close()
+	for counts.Next() {
+		var eventID int64
+		var going int
+		if err := counts.Scan(&eventID, &going); err != nil {
+			return nil, fmt.Errorf("scan who is going: %w", err)
+		}
+		withAvatars := len(out[eventID])
+		if withAvatars == 0 {
+			continue
+		}
+		for range min(going, eventPictureMaximumPeople) - withAvatars {
+			out[eventID] = append(out[eventID], eventPictureSubject{Format: eventPictureStandIn})
+		}
+	}
+	return out, counts.Err()
 }
+
+// eventPictureStandIn is the format of a faceless stand-in for someone going
+// without an avatar: the kit draws it (backgroundCharacter), with no code of
+// its own.
+const eventPictureStandIn = "background"
 
 // EventScenes is each event's scene, where it has one.
 func (s *Store) EventScenes(eventIDs []int64) (map[int64]*eventScene, error) {
@@ -259,7 +293,7 @@ func (s *Store) RequestEventScene(eventID int64, kind, comment, by string) error
 
 // DeleteEventPicture deletes an event's picture and its scene.
 func (s *Store) DeleteEventPicture(eventID int64) error {
-	for _, table := range []string{"event_pictures", "event_scenes"} {
+	for _, table := range []string{"event_picture_prints", "event_scenes"} {
 		if _, err := s.db.Exec(`DELETE FROM `+table+` WHERE event_id = ?`, eventID); err != nil {
 			return fmt.Errorf("delete from %s: %w", table, err)
 		}
@@ -290,52 +324,112 @@ func (s *Store) FailEventScene(eventID int64, detailsSignature, reason string, a
 	return tx.Commit()
 }
 
-// EventPictureSignatures is the signature of each stored picture.
-func (s *Store) EventPictureSignatures(eventIDs []int64) (map[int64]string, error) {
-	out := map[int64]string{}
+// eventPrints are the pictures saved for one event: every signature
+// printed for its current scene, and the one printed last.
+type eventPrints struct {
+	signatures map[string]bool
+	latest     string
+}
+
+func (p *eventPrints) has(signature string) bool { return p != nil && p.signatures[signature] }
+
+// EventPicturePrints is the prints saved for each event.
+func (s *Store) EventPicturePrints(eventIDs []int64) (map[int64]*eventPrints, error) {
+	out := map[int64]*eventPrints{}
 	if len(eventIDs) == 0 {
 		return out, nil
 	}
 	placeholders, args := int64Placeholders(eventIDs)
-	rows, err := s.db.Query(`SELECT event_id, signature FROM event_pictures WHERE event_id IN (`+placeholders+`)`, args...)
+	rows, err := s.db.Query(`SELECT event_id, signature FROM event_picture_prints WHERE event_id IN (`+placeholders+`)
+		ORDER BY event_id, painted_at, rowid`, args...)
 	if err != nil {
-		return nil, fmt.Errorf("read event picture signatures: %w", err)
+		return nil, fmt.Errorf("read event picture prints: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var eventID int64
 		var signature string
 		if err := rows.Scan(&eventID, &signature); err != nil {
-			return nil, fmt.Errorf("scan event picture signature: %w", err)
+			return nil, fmt.Errorf("scan event picture print: %w", err)
 		}
-		out[eventID] = signature
+		if out[eventID] == nil {
+			out[eventID] = &eventPrints{signatures: map[string]bool{}}
+		}
+		out[eventID].signatures[signature] = true
+		out[eventID].latest = signature
 	}
 	return out, rows.Err()
 }
 
-// SaveEventPicture stores a painted picture, replacing the last.
-func (s *Store) SaveEventPicture(eventID int64, signature string, imageWebP []byte) error {
-	_, err := s.db.Exec(`INSERT INTO event_pictures (event_id, signature, image_webp, painted_at) VALUES (?, ?, ?, ?)
-		ON CONFLICT(event_id) DO UPDATE SET signature = excluded.signature, image_webp = excluded.image_webp,
-			painted_at = excluded.painted_at`, eventID, signature, imageWebP, now())
+// SaveEventPicture keeps a painted picture beside the others of the same
+// scene, and forgets those of an older scene, which nothing will show again.
+func (s *Store) SaveEventPicture(eventID int64, signature string, sceneVersion int64, imageWebP []byte) error {
+	tx, err := s.db.Begin()
 	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO event_picture_prints (event_id, signature, scene_version, image_webp, painted_at) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(event_id, signature) DO UPDATE SET scene_version = excluded.scene_version, image_webp = excluded.image_webp,
+			painted_at = excluded.painted_at`, eventID, signature, sceneVersion, imageWebP, now()); err != nil {
 		return fmt.Errorf("store event picture: %w", err)
 	}
-	return nil
+	if _, err := tx.Exec(`DELETE FROM event_picture_prints WHERE event_id = ? AND scene_version != ?`, eventID, sceneVersion); err != nil {
+		return fmt.Errorf("forget an older scene's pictures: %w", err)
+	}
+	return tx.Commit()
 }
 
-// EventPicture is the stored picture and its signature.
-func (s *Store) EventPicture(eventID int64) ([]byte, string, error) {
+// EventPicture is the print with the signature, or with "" the one printed
+// last.
+func (s *Store) EventPicture(eventID int64, signature string) ([]byte, error) {
 	var image []byte
-	var signature string
-	err := s.db.QueryRow(`SELECT image_webp, signature FROM event_pictures WHERE event_id = ?`, eventID).Scan(&image, &signature)
+	var err error
+	if signature == "" {
+		err = s.db.QueryRow(`SELECT image_webp FROM event_picture_prints WHERE event_id = ? ORDER BY painted_at DESC, rowid DESC LIMIT 1`,
+			eventID).Scan(&image)
+	} else {
+		err = s.db.QueryRow(`SELECT image_webp FROM event_picture_prints WHERE event_id = ? AND signature = ?`, eventID, signature).Scan(&image)
+	}
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, "", ErrNotFound
+		return nil, ErrNotFound
 	}
 	if err != nil {
-		return nil, "", fmt.Errorf("read event picture: %w", err)
+		return nil, fmt.Errorf("read event picture: %w", err)
 	}
-	return image, signature, nil
+	return image, nil
+}
+
+// migrateSinglePicturePerEvent moves the pictures kept one per event, in a
+// table named event_pictures until 2026-09-28, into event_picture_prints, and
+// drops it. Their scene is not known, so the next print of each forgets them.
+func migrateSinglePicturePerEvent(db *sql.DB) error {
+	var exists int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'event_pictures'`).Scan(&exists); err != nil {
+		return fmt.Errorf("look for the old event_pictures table: %w", err)
+	}
+	if exists == 0 {
+		return nil
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`INSERT OR IGNORE INTO event_picture_prints (event_id, signature, scene_version, image_webp, painted_at)
+		SELECT event_id, signature, -1, image_webp, painted_at FROM event_pictures`)
+	if err != nil {
+		return fmt.Errorf("move event pictures: %w", err)
+	}
+	if _, err := tx.Exec(`DROP TABLE event_pictures`); err != nil {
+		return fmt.Errorf("drop the old event_pictures table: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	moved, _ := result.RowsAffected()
+	log.Printf("[discord-signup] moved %d event pictures to event_picture_prints", moved)
+	return nil
 }
 
 // eventPictureState is, for a set of events, who each picture should show,
@@ -343,7 +437,7 @@ func (s *Store) EventPicture(eventID int64) ([]byte, string, error) {
 type eventPictureState struct {
 	subjects map[int64][]eventPictureSubject
 	scenes   map[int64]*eventScene
-	stored   map[int64]string
+	prints   map[int64]*eventPrints
 }
 
 func (s *Store) eventPictureStateOf(eventIDs []int64) (*eventPictureState, error) {
@@ -355,19 +449,18 @@ func (s *Store) eventPictureStateOf(eventIDs []int64) (*eventPictureState, error
 	if err != nil {
 		return nil, err
 	}
-	stored, err := s.EventPictureSignatures(eventIDs)
+	prints, err := s.EventPicturePrints(eventIDs)
 	if err != nil {
 		return nil, err
 	}
-	return &eventPictureState{subjects: subjects, scenes: scenes, stored: stored}, nil
+	return &eventPictureState{subjects: subjects, scenes: scenes, prints: prints}, nil
 }
 
 // currentEventPictures is, for each event with a picture to show, its
-// signature — for the page's image address, so a repainted picture is
-// fetched again. The last picture painted stays up while a new one is
-// painted, which takes minutes: someone who joins sees the old one until
-// theirs replaces it, rather than an empty card. An event nobody going has
-// an avatar for shows none, since nothing would ever replace it.
+// signature — for the page's image address. The print of who is going now
+// when one is saved; otherwise the last one painted, which stays up while
+// the new one is painted, rather than an empty card. An event nobody going
+// has an avatar for shows none, since nothing would ever replace it.
 func (s *Store) currentEventPictures(events []Event) (map[int64]string, error) {
 	ids := make([]int64, len(events))
 	for i, ev := range events {
@@ -379,8 +472,14 @@ func (s *Store) currentEventPictures(events []Event) (map[int64]string, error) {
 	}
 	out := map[int64]string{}
 	for _, ev := range events {
-		if stored := state.stored[ev.ID]; stored != "" && len(state.subjects[ev.ID]) > 0 && !ev.PicturesDisabled {
-			out[ev.ID] = stored
+		prints := state.prints[ev.ID]
+		if prints == nil || len(state.subjects[ev.ID]) == 0 || ev.PicturesDisabled {
+			continue
+		}
+		if want := eventPictureSignature(state.scenes[ev.ID], state.subjects[ev.ID]); prints.has(want) {
+			out[ev.ID] = want
+		} else {
+			out[ev.ID] = prints.latest
 		}
 	}
 	return out, nil
@@ -456,14 +555,14 @@ func (s *Server) handleEventPicturesDue(w http.ResponseWriter, r *http.Request) 
 			case scene.SceneCode != "":
 				// The new scene failed of late: print the one there is, so
 				// who is going stays right meanwhile.
-				if want := eventPictureSignature(scene, people); state.stored[id] != want {
+				if want := eventPictureSignature(scene, people); !state.prints[id].has(want) {
 					item.SceneCode, item.Signature = scene.SceneCode, want
 					due = append(due, item)
 				}
 			}
 			continue
 		}
-		if want := eventPictureSignature(scene, people); state.stored[id] != want {
+		if want := eventPictureSignature(scene, people); !state.prints[id].has(want) {
 			item.SceneCode, item.Signature = scene.SceneCode, want
 			due = append(due, item)
 		}
@@ -578,7 +677,7 @@ func (s *Server) handleSaveEventPicture(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "the scene or who is going has changed since this was painted", "signature": current})
 		return
 	}
-	if err := s.store.SaveEventPicture(eventID, body.Signature, body.ImageWebP); err != nil {
+	if err := s.store.SaveEventPicture(eventID, body.Signature, state.scenes[eventID].UpdatedAt, body.ImageWebP); err != nil {
 		writeStoreError(w, err)
 		return
 	}
@@ -612,7 +711,12 @@ func (s *Server) handleWebEventPicture(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	image, _, err := s.store.EventPicture(eventID)
+	// The page asks for a print by its signature; one no longer saved, or
+	// none asked for, is the one printed last.
+	image, err := s.store.EventPicture(eventID, r.URL.Query().Get("v"))
+	if errors.Is(err, ErrNotFound) {
+		image, err = s.store.EventPicture(eventID, "")
+	}
 	if errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return

@@ -267,9 +267,9 @@ Drawings of a person, kept in a gallery; they choose which shows beside their na
 
 `event_id` PK; `request_kind` (`change`, `new`, `''`), `request_comment`, `requested_at`, `requested_by`: an organiser asking for the scene again, cleared by the scene or failure that answers it; `details_signature`, the name, description, place, weekday and time and repeat rule it was written from, and the scene format (`eventDetailsSignature`, `eventSceneFormat`: a new format asks every event for a new scene); `scene_code`, the scene in `art/SCENE.md`'s form, casting each person as a posed character; `failure`, `failed_details_signature` and `failed_at`, the last scene that did not come out and from which details, tried again an hour later; `updated_at`. A model writes it; a change to the details asks for a new one, a change to who is going does not.
 
-### `event_pictures` — a picture of who is going, new 2026-09-28
+### `event_picture_prints` — every picture painted of an event's scene, new 2026-09-28
 
-`event_id` PK; `signature`, which scene, which people and which drawing of each it shows (`eventPictureSignature`); `image_webp`, 1200 by 400; `painted_at`. A picture whose signature no longer matches is repainted and shown until then, so a card is never empty while a new picture is painted; none shows once nobody going has an avatar. Animated: a loop of frames (`art/render-event-picture.mjs`).
+`(event_id, signature)` PK; `signature`, which scene, which people with avatars and which drawing of each, and how many faceless stand-ins (`eventPictureSignature`: stand-ins are counted, not named); `scene_version`, the scene's `updated_at`; `image_webp`, an animated 1200 by 400 loop; `painted_at`. A roster that comes back to one already painted shows that print again. Prints of an older scene are deleted when the first of a newer one is saved. A page shows the print of who is going now, or the last painted while that one is painted, and none once nobody going has an avatar. Until 2026-09-28 one picture per event in `event_pictures`; `migrateSinglePicturePerEvent` moves it here.
 
 ### `site_admins` — whoever runs the bot
 

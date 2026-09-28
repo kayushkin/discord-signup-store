@@ -282,6 +282,10 @@ func Open(dataDir string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := migrateSinglePicturePerEvent(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := ensureColumns(db); err != nil {
 		db.Close()
 		return nil, err
