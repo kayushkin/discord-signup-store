@@ -88,9 +88,15 @@ systemctl --user stop "$SERVICE" 2>/dev/null || true
 
 step "Installing binary to $BIN_DIR…"
 mkdir -p "$BIN_DIR"
-cp "$BINARY" "$BIN_DIR/$BINARY"
-cp discord-avatar-drawer "$BIN_DIR/discord-avatar-drawer"
-cp discord-event-picture-painter "$BIN_DIR/discord-event-picture-painter"
+# Copied beside the target and renamed over it. The service starts the drawer
+# and the painter as child processes, and one can outlive the stop above: cp
+# onto a running binary fails with "Text file busy" and left the service
+# stopped on 2026-09-28. A rename swaps the name and the running process keeps
+# the old file.
+for installed in "$BINARY" discord-avatar-drawer discord-event-picture-painter; do
+  cp "$installed" "$BIN_DIR/$installed.new"
+  mv -f "$BIN_DIR/$installed.new" "$BIN_DIR/$installed"
+done
 
 step "Starting $SERVICE…"
 systemctl --user daemon-reload
