@@ -993,3 +993,70 @@ func TestABlockAppendedToAnEmptyDescriptionIsStrippedOnTheWayBack(t *testing.T) 
 		t.Errorf("a real description came back as %q", got)
 	}
 }
+
+// TestAOneOffImportTakesTheDefaultTimezone is the karaoke night: a one-off
+// Discord event imported with no zone printed its 9pm Los Angeles start in
+// UTC, so the forum title said "10/4 4am".
+func TestAOneOffImportTakesTheDefaultTimezone(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	srv.EnableWeb(nil)
+	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
+	srv.SetDefaultTimezone("America/Los_Angeles")
+
+	fake.on(http.MethodGet, "/users/@me", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"id":"the-bot"}`)
+	})
+	fake.on(http.MethodGet, "/guilds/g1/scheduled-events", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `[{"id":"karaoke","guild_id":"g1","creator_id":"a-person","name":"Karaoke",
+			"scheduled_start_time":"2099-10-04T04:00:00+00:00","status":1,"entity_type":3}]`)
+	})
+	if _, err := srv.SyncScheduledEvents("g1"); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	events, err := store.ListEvents("g1", "", 50)
+	if err != nil || len(events) != 1 {
+		t.Fatalf("list: %d events, %v", len(events), err)
+	}
+	if events[0].Timezone != "America/Los_Angeles" {
+		t.Errorf("imported timezone = %q, want America/Los_Angeles", events[0].Timezone)
+	}
+	if got := forumPostTitle(&events[0]); !strings.Contains(got, "10/3 9pm") {
+		t.Errorf("forum title = %q, want the start as 10/3 9pm", got)
+	}
+}
+
+// TestFillTimezoneOnImportedEventsLeavesLocalEventsAlone: the backfill is for
+// imports the old code left without a zone. A local event's zone is whatever
+// its organiser chose, empty included.
+func TestFillTimezoneOnImportedEventsLeavesLocalEventsAlone(t *testing.T) {
+	store := testStore(t)
+	srv := NewServer(store, nil, nil)
+	srv.SetDefaultTimezone("America/Los_Angeles")
+	start := time.Now().Add(48 * time.Hour).Unix()
+	imported, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Imported",
+		StartsAt: start, Origin: OriginDiscord})
+	if err != nil {
+		t.Fatalf("create imported: %v", err)
+	}
+	local, err := store.CreateEvent(Event{GuildID: "g1", ChannelID: "board", Name: "Local",
+		StartsAt: start, Origin: OriginLocal})
+	if err != nil {
+		t.Fatalf("create local: %v", err)
+	}
+
+	filled, err := srv.FillTimezoneOnImportedEvents()
+	if err != nil || filled != 1 {
+		t.Fatalf("filled %d, %v; want 1", filled, err)
+	}
+	if got, _ := store.GetEvent(imported.ID); got.Timezone != "America/Los_Angeles" {
+		t.Errorf("imported timezone = %q", got.Timezone)
+	}
+	if got, _ := store.GetEvent(local.ID); got.Timezone != "" {
+		t.Errorf("local timezone = %q, want it left empty", got.Timezone)
+	}
+	if again, err := srv.FillTimezoneOnImportedEvents(); err != nil || again != 0 {
+		t.Errorf("second run filled %d, %v; want 0", again, err)
+	}
+}

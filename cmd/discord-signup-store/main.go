@@ -68,6 +68,13 @@ func main() {
 			log.Fatalf("DISCORD_DEFAULT_TIMEZONE=%q is not an IANA zone name: %v", zone, err)
 		}
 		srvAPI.SetDefaultTimezone(zone)
+		filled, err := srvAPI.FillTimezoneOnImportedEvents()
+		if err != nil {
+			log.Fatalf("fill timezone on imported events: %v", err)
+		}
+		if filled > 0 {
+			log.Printf("gave %d imported events the default timezone %s", filled, zone)
+		}
 	} else {
 		log.Print("DISCORD_DEFAULT_TIMEZONE is not set — times typed into Discord forms will " +
 			"be read as UTC, which is almost certainly not what anyone means")

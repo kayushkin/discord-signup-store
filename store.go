@@ -1077,6 +1077,30 @@ func (s *Store) GuildsWithEvents() ([]string, error) {
 	return out, nil
 }
 
+// ImportedEventIDsWithoutTimezone lists the events imported from Discord
+// that carry no zone. Before 2026-09-28 the import stamped one only on a
+// repeating event, so every one-off import printed its start in UTC.
+func (s *Store) ImportedEventIDsWithoutTimezone() ([]int64, error) {
+	rows, err := s.db.Query(`SELECT id FROM events
+		WHERE deleted_at = 0 AND origin = ? AND timezone = ''`, OriginDiscord)
+	if err != nil {
+		return nil, fmt.Errorf("list imported events without a timezone: %w", err)
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan event id: %w", err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate imported events without a timezone: %w", err)
+	}
+	return out, nil
+}
+
 // StampReminder records that a reminder stage is settled — sent, or written
 // off. Both are the same fact to everything downstream: nothing more is owed.
 func (s *Store) StampReminder(id int64, stage string) error {

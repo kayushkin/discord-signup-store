@@ -272,14 +272,20 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 			// Discord had no cap, so the imported event starts uncapped. Adding
 			// one is a decision a person makes on the web page; inventing a
 			// number here would silently waitlist people who were already in.
-			Capacity:               0,
-			Status:                 status,
-			StartsAt:               startsAt,
-			EndsAt:                 endsAt,
-			Location:               stripLocationPlaceholder(r.EntityMetadata.Location),
-			EntityType:             discordEntityTypeNames[r.EntityType],
-			RecurrenceRule:         recurrenceRuleText(r.RecurrenceRule),
-			Timezone:               recurrenceTimezone(r.RecurrenceRule, s.DefaultTimezone()),
+			Capacity:       0,
+			Status:         status,
+			StartsAt:       startsAt,
+			EndsAt:         endsAt,
+			Location:       stripLocationPlaceholder(r.EntityMetadata.Location),
+			EntityType:     discordEntityTypeNames[r.EntityType],
+			RecurrenceRule: recurrenceRuleText(r.RecurrenceRule),
+			// Discord sends no zone: the start is an absolute instant and its
+			// recurrence_rule has no tzid. The server's default is the zone a
+			// person made the event in, and every title and table row prints
+			// the start in it. Until 2026-09-28 only a repeating import got
+			// it; a one-off stored "", printed in UTC, and a 9pm Los Angeles
+			// karaoke night showed in its forum title as "10/4 4am".
+			Timezone:               s.DefaultTimezone(),
 			Origin:                 OriginDiscord,
 			DiscordInterestedCount: r.UserCount,
 			DiscordSyncedAt:        now(),
@@ -536,19 +542,23 @@ func recurrenceRuleText(raw json.RawMessage) string {
 	return strings.Join(parts, ";")
 }
 
-// recurrenceTimezone reports the zone a recurring Discord event runs in.
-//
-// Discord does not send one: its recurrence_rule carries no tzid, and the
-// start time is an absolute instant. The server's default zone is the one a
-// person made the event in, and it is the zone the next occurrence is worked
-// out in — UTC, which this returned until 2026-09-04, put a Friday-evening
-// Los Angeles event on Saturday. Returning "" instead would fail
-// validateRecurrence and make the import refuse every recurring event.
-func recurrenceTimezone(raw json.RawMessage, defaultZone string) string {
-	if len(raw) == 0 || string(raw) == "null" {
-		return ""
+// FillTimezoneOnImportedEvents gives every imported event that has no zone the
+// server's default, the zone the import now stamps on every new one. It goes
+// through UpdateEvent so each row gains a history line, and the zone is part of
+// the publish signature, so the sweep redraws the card, the table row and the
+// forum title in the right zone without being asked.
+func (s *Server) FillTimezoneOnImportedEvents() (int, error) {
+	ids, err := s.store.ImportedEventIDsWithoutTimezone()
+	if err != nil {
+		return 0, err
 	}
-	return defaultZone
+	zone := s.DefaultTimezone()
+	for i, id := range ids {
+		if _, err := s.store.UpdateEvent(id, EventPatch{Timezone: &zone}); err != nil {
+			return i, fmt.Errorf("set timezone on imported event %d: %w", id, err)
+		}
+	}
+	return len(ids), nil
 }
 
 // PublishToDiscord creates a native scheduled event for a local roster, so it
