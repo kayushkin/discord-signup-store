@@ -261,7 +261,7 @@ Drawings of a person, kept in a gallery; they choose which shows beside their na
 
 **`avatar_updates`** — append-only: `id`, `discord_user_id`, `action` (`requested_<kind>`, `drawing_started`, `drawing_saved`, `drawing_failed`, `chose`, `deleted_drawing`, `deleted_photo`, `removed`, `set_by_operator`), `detail` and `at`. Kept after everything else is removed.
 
-`events.pictures_disabled` (INTEGER, 0): no picture of who is going shown or painted for this event; its scene and pictures are kept, inactive, and come back when it is switched off again. Logged in `event_updates` as `picture`.
+`events.pictures_disabled` (INTEGER, 0): no picture of who is going shown or painted for this event; its scene and pictures are kept, inactive, and come back when pictures are switched on again. Logged in `event_updates` as `picture`.
 
 ### `event_scenes` — the scene an event's picture is set in, new 2026-09-28
 
