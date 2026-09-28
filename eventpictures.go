@@ -62,7 +62,28 @@ type eventScene struct {
 	// written from.
 	FailedDetailsSignature string `json:"failed_details_signature,omitempty"`
 	FailedAt               int64  `json:"failed_at"`
+	// Request is an organiser asking for the scene again, nil when nobody is.
+	Request *eventSceneRequest `json:"request,omitempty"`
 	UpdatedAt              int64  `json:"updated_at"`
+}
+
+// The ways an organiser can ask for a scene again.
+const (
+	// EventSceneChange changes the scene there is as the comment says.
+	EventSceneChange = "change"
+	// EventSceneNew draws a new scene, with the comment to go by.
+	EventSceneNew = "new"
+)
+
+// eventSceneCommentMaximumCharacters bounds what an organiser writes.
+const eventSceneCommentMaximumCharacters = 600
+
+// eventSceneRequest is an organiser asking for the scene again.
+type eventSceneRequest struct {
+	Kind        string `json:"kind"`
+	Comment     string `json:"comment"`
+	RequestedAt int64  `json:"requested_at"`
+	RequestedBy string `json:"requested_by"`
 }
 
 // eventSceneDetails are what a scene is made from.
@@ -168,7 +189,8 @@ func (s *Store) EventScenes(eventIDs []int64) (map[int64]*eventScene, error) {
 		return out, nil
 	}
 	placeholders, args := int64Placeholders(eventIDs)
-	rows, err := s.db.Query(`SELECT event_id, details_signature, scene_code, failure, failed_details_signature, failed_at, updated_at
+	rows, err := s.db.Query(`SELECT event_id, details_signature, scene_code, failure, failed_details_signature, failed_at,
+			request_kind, request_comment, requested_at, requested_by, updated_at
 		FROM event_scenes WHERE event_id IN (`+placeholders+`)`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read event scenes: %w", err)
@@ -177,37 +199,95 @@ func (s *Store) EventScenes(eventIDs []int64) (map[int64]*eventScene, error) {
 	for rows.Next() {
 		var eventID int64
 		var scene eventScene
-		if err := rows.Scan(&eventID, &scene.DetailsSignature, &scene.SceneCode, &scene.Failure, &scene.FailedDetailsSignature, &scene.FailedAt, &scene.UpdatedAt); err != nil {
+		var request eventSceneRequest
+		if err := rows.Scan(&eventID, &scene.DetailsSignature, &scene.SceneCode, &scene.Failure, &scene.FailedDetailsSignature, &scene.FailedAt,
+			&request.Kind, &request.Comment, &request.RequestedAt, &request.RequestedBy, &scene.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan event scene: %w", err)
+		}
+		if request.Kind != "" {
+			scene.Request = &request
 		}
 		out[eventID] = &scene
 	}
 	return out, rows.Err()
 }
 
-// SaveEventScene stores a scene written from the given details.
-func (s *Store) SaveEventScene(eventID int64, detailsSignature, sceneCode string) error {
-	_, err := s.db.Exec(`INSERT INTO event_scenes (event_id, details_signature, scene_code, updated_at) VALUES (?, ?, ?, ?)
-		ON CONFLICT(event_id) DO UPDATE SET details_signature = excluded.details_signature, scene_code = excluded.scene_code,
-			failure = '', failed_details_signature = '', failed_at = 0, updated_at = excluded.updated_at`, eventID, detailsSignature, sceneCode, now())
+// SaveEventScene stores a scene written from the given details. answered
+// is the request it was written for, 0 for none: that request is done, and
+// one made while it was being written still waits.
+func (s *Store) SaveEventScene(eventID int64, detailsSignature, sceneCode string, answered int64) error {
+	tx, err := s.db.Begin()
 	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO event_scenes (event_id, details_signature, scene_code, updated_at) VALUES (?, ?, ?, ?)
+		ON CONFLICT(event_id) DO UPDATE SET details_signature = excluded.details_signature, scene_code = excluded.scene_code,
+			failure = '', failed_details_signature = '', failed_at = 0, updated_at = excluded.updated_at`, eventID, detailsSignature, sceneCode, now()); err != nil {
 		return fmt.Errorf("store event scene: %w", err)
+	}
+	if err := clearSceneRequest(tx, eventID, answered); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func clearSceneRequest(tx *sql.Tx, eventID, answered int64) error {
+	if answered == 0 {
+		return nil
+	}
+	if _, err := tx.Exec(`UPDATE event_scenes SET request_kind = '', request_comment = '', requested_at = 0, requested_by = ''
+		WHERE event_id = ? AND requested_at = ?`, eventID, answered); err != nil {
+		return fmt.Errorf("clear scene request: %w", err)
+	}
+	return nil
+}
+
+// RequestEventScene asks for an event's scene again, replacing any request
+// not yet answered.
+func (s *Store) RequestEventScene(eventID int64, kind, comment, by string) error {
+	_, err := s.db.Exec(`INSERT INTO event_scenes (event_id, details_signature, request_kind, request_comment, requested_at, requested_by, updated_at)
+		VALUES (?, '', ?, ?, ?, ?, ?)
+		ON CONFLICT(event_id) DO UPDATE SET request_kind = excluded.request_kind, request_comment = excluded.request_comment,
+			requested_at = excluded.requested_at, requested_by = excluded.requested_by, failure = ''`,
+		eventID, kind, comment, now(), by, now())
+	if err != nil {
+		return fmt.Errorf("store scene request: %w", err)
+	}
+	return nil
+}
+
+// DeleteEventPicture deletes an event's picture and its scene.
+func (s *Store) DeleteEventPicture(eventID int64) error {
+	for _, table := range []string{"event_pictures", "event_scenes"} {
+		if _, err := s.db.Exec(`DELETE FROM `+table+` WHERE event_id = ?`, eventID); err != nil {
+			return fmt.Errorf("delete from %s: %w", table, err)
+		}
 	}
 	return nil
 }
 
 // FailEventScene records a scene that did not come out. A scene already
-// there stays, and is printed until a new one comes out.
-func (s *Store) FailEventScene(eventID int64, detailsSignature, reason string) error {
-	_, err := s.db.Exec(`INSERT INTO event_scenes (event_id, details_signature, failure, failed_details_signature, failed_at, updated_at)
+// there stays, and is printed until a new one comes out. answered is the
+// request it was written for, 0 for none: that request is cleared, so the
+// page says it failed rather than it being tried again and again.
+func (s *Store) FailEventScene(eventID int64, detailsSignature, reason string, answered int64) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO event_scenes (event_id, details_signature, failure, failed_details_signature, failed_at, updated_at)
 		VALUES (?, '', ?, ?, ?, ?)
 		ON CONFLICT(event_id) DO UPDATE SET failure = excluded.failure,
 			failed_details_signature = excluded.failed_details_signature, failed_at = excluded.failed_at`,
-		eventID, reason, detailsSignature, now(), now())
-	if err != nil {
+		eventID, reason, detailsSignature, now(), now()); err != nil {
 		return fmt.Errorf("record event scene failure: %w", err)
 	}
-	return nil
+	if err := clearSceneRequest(tx, eventID, answered); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // EventPictureSignatures is the signature of each stored picture.
@@ -298,9 +378,9 @@ func (s *Store) currentEventPictures(events []Event) (map[int64]string, error) {
 		return nil, err
 	}
 	out := map[int64]string{}
-	for _, id := range ids {
-		if stored := state.stored[id]; stored != "" && len(state.subjects[id]) > 0 {
-			out[id] = stored
+	for _, ev := range events {
+		if stored := state.stored[ev.ID]; stored != "" && len(state.subjects[ev.ID]) > 0 && !ev.PicturesDisabled {
+			out[ev.ID] = stored
 		}
 	}
 	return out, nil
@@ -316,8 +396,12 @@ type eventPictureDue struct {
 	NeedsScene       bool              `json:"needs_scene"`
 	Details          eventSceneDetails `json:"details"`
 	DetailsSignature string            `json:"details_signature"`
+	// Request is an organiser asking for the scene again: with NeedsScene,
+	// write it as the request says, and send its requested_at back.
+	Request *eventSceneRequest `json:"request,omitempty"`
 	// SceneCode is the scene to print the people into, when it needs no new
-	// one; Signature is the picture's, to send back with it.
+	// one, or the scene a "change" request changes; Signature is the
+	// picture's, to send back with it.
 	SceneCode string `json:"scene_code,omitempty"`
 	Signature string `json:"signature,omitempty"`
 }
@@ -334,7 +418,7 @@ func (s *Server) handleEventPicturesDue(w http.ResponseWriter, r *http.Request) 
 	live := map[int64]Event{}
 	var ids []int64
 	for _, ev := range events {
-		if !IsArchived(ev.Status) {
+		if !IsArchived(ev.Status) && !ev.PicturesDisabled {
 			live[ev.ID] = ev
 			ids = append(ids, ev.ID)
 		}
@@ -353,6 +437,15 @@ func (s *Server) handleEventPicturesDue(w http.ResponseWriter, r *http.Request) 
 		ev, scene := live[id], state.scenes[id]
 		details := eventDetailsSignature(ev)
 		item := eventPictureDue{EventID: id, People: people, Details: sceneDetailsOf(ev), DetailsSignature: details}
+		if scene != nil && scene.Request != nil {
+			// An organiser asked: write it now, whatever else holds.
+			item.NeedsScene, item.Request = true, scene.Request
+			if scene.Request.Kind == EventSceneChange {
+				item.SceneCode = scene.SceneCode
+			}
+			due = append(due, item)
+			continue
+		}
 		if scene == nil || scene.DetailsSignature != details || scene.SceneCode == "" {
 			recentlyFailed := scene != nil && scene.FailedDetailsSignature == details &&
 				scene.FailedAt > now()-int64(eventSceneRetryAfter/time.Second)
@@ -390,6 +483,8 @@ func (s *Server) handleSaveEventScene(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		DetailsSignature string `json:"details_signature"`
 		SceneCode        string `json:"scene_code"`
+		// Answered is the requested_at of the request it was written for.
+		Answered int64 `json:"answered"`
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, eventSceneMaximumBytes))
 	decoder.DisallowUnknownFields()
@@ -406,7 +501,7 @@ func (s *Server) handleSaveEventScene(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "the event's details have changed since this scene was written"})
 		return
 	}
-	if err := s.store.SaveEventScene(eventID, body.DetailsSignature, body.SceneCode); err != nil {
+	if err := s.store.SaveEventScene(eventID, body.DetailsSignature, body.SceneCode, body.Answered); err != nil {
 		writeStoreError(w, err)
 		return
 	}
@@ -428,6 +523,7 @@ func (s *Server) handleEventSceneFailed(w http.ResponseWriter, r *http.Request) 
 	var body struct {
 		DetailsSignature string `json:"details_signature"`
 		Reason           string `json:"reason"`
+		Answered         int64  `json:"answered"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -439,7 +535,7 @@ func (s *Server) handleEventSceneFailed(w http.ResponseWriter, r *http.Request) 
 		writeStoreError(w, err)
 		return
 	}
-	if err := s.store.FailEventScene(eventID, body.DetailsSignature, body.Reason); err != nil {
+	if err := s.store.FailEventScene(eventID, body.DetailsSignature, body.Reason, body.Answered); err != nil {
 		writeStoreError(w, err)
 		return
 	}
@@ -512,7 +608,7 @@ func (s *Server) handleWebEventPicture(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if !mayView {
+	if !mayView || ev.PicturesDisabled {
 		http.NotFound(w, r)
 		return
 	}
@@ -527,4 +623,78 @@ func (s *Server) handleWebEventPicture(w http.ResponseWriter, r *http.Request) {
 	}
 	// The address carries the signature, so a new picture is a new address.
 	writeWebPImage(w, image, "private, max-age=86400")
+}
+
+// handleWebEventSceneRequest is an organiser asking for the event's scene
+// again: "change" it as the comment says, or a "new" one with the comment to
+// go by. The picture there stays up until the new one is painted.
+func (s *Server) handleWebEventSceneRequest(w http.ResponseWriter, r *http.Request) {
+	session := s.requireSession(w, r)
+	if session == nil {
+		return
+	}
+	ev, canManage := s.webEvent(w, r, session)
+	if ev == nil {
+		return
+	}
+	if !canManage {
+		http.Error(w, "you cannot edit this event", http.StatusForbidden)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "malformed form", http.StatusBadRequest)
+		return
+	}
+	kind, comment := r.FormValue("kind"), strings.TrimSpace(r.FormValue("comment"))
+	scenes, err := s.store.EventScenes([]int64{ev.ID})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	switch {
+	case ev.PicturesDisabled:
+		s.redirectWithNotice(w, r, ev.ID, "The picture is off for this event. Turn it on first.")
+		return
+	case kind != EventSceneChange && kind != EventSceneNew:
+		http.Error(w, "kind is change or new", http.StatusBadRequest)
+		return
+	case len([]rune(comment)) > eventSceneCommentMaximumCharacters:
+		s.redirectWithNotice(w, r, ev.ID, fmt.Sprintf("Keep the comment to %d characters.", eventSceneCommentMaximumCharacters))
+		return
+	case kind == EventSceneChange && comment == "":
+		s.redirectWithNotice(w, r, ev.ID, "Say how the scene should change.")
+		return
+	case kind == EventSceneChange && (scenes[ev.ID] == nil || scenes[ev.ID].SceneCode == ""):
+		s.redirectWithNotice(w, r, ev.ID, "There is no scene to change yet. Ask for a new one instead.")
+		return
+	}
+	if err := s.store.RequestEventScene(ev.ID, kind, comment, "web:"+session.DiscordUserID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("[discord-signup] %s scene for event %d asked for by web:%s", kind, ev.ID, session.DiscordUserID)
+	s.redirectWithNotice(w, r, ev.ID, "The scene is being drawn again. The picture here stays up until the new one is ready, in about ten minutes.")
+}
+
+// eventPicturePanel is what the event page shows of its picture.
+type eventPicturePanel struct {
+	// Signature addresses the picture to show, "" for none yet.
+	Signature string
+	// People is how many going have an avatar: none, and there is no picture.
+	People int
+	// Scene is the event's scene, with any request waiting and the last
+	// failure; nil before one is written.
+	Scene *eventScene
+}
+
+func (s *Server) eventPicturePanelOf(ev *Event) (*eventPicturePanel, error) {
+	state, err := s.store.eventPictureStateOf([]int64{ev.ID})
+	if err != nil {
+		return nil, err
+	}
+	shown, err := s.store.currentEventPictures([]Event{*ev})
+	if err != nil {
+		return nil, err
+	}
+	return &eventPicturePanel{Signature: shown[ev.ID], People: len(state.subjects[ev.ID]), Scene: state.scenes[ev.ID]}, nil
 }

@@ -261,9 +261,11 @@ Drawings of a person, kept in a gallery; they choose which shows beside their na
 
 **`avatar_updates`** — append-only: `id`, `discord_user_id`, `action` (`requested_<kind>`, `drawing_started`, `drawing_saved`, `drawing_failed`, `chose`, `deleted_drawing`, `deleted_photo`, `removed`, `set_by_operator`), `detail` and `at`. Kept after everything else is removed.
 
+`events.pictures_disabled` (INTEGER, 0): no picture of who is going for this event; switching it on deletes the picture and scene. Logged in `event_updates` as `picture`.
+
 ### `event_scenes` — the scene an event's picture is set in, new 2026-09-28
 
-`event_id` PK; `details_signature`, the name, description, place, weekday and time and repeat rule it was written from, and the scene format (`eventDetailsSignature`, `eventSceneFormat`: a new format asks every event for a new scene); `scene_code`, the scene in `art/SCENE.md`'s form, casting each person as a posed character; `failure`, `failed_details_signature` and `failed_at`, the last scene that did not come out and from which details, tried again an hour later; `updated_at`. A model writes it; a change to the details asks for a new one, a change to who is going does not.
+`event_id` PK; `request_kind` (`change`, `new`, `''`), `request_comment`, `requested_at`, `requested_by`: an organiser asking for the scene again, cleared by the scene or failure that answers it; `details_signature`, the name, description, place, weekday and time and repeat rule it was written from, and the scene format (`eventDetailsSignature`, `eventSceneFormat`: a new format asks every event for a new scene); `scene_code`, the scene in `art/SCENE.md`'s form, casting each person as a posed character; `failure`, `failed_details_signature` and `failed_at`, the last scene that did not come out and from which details, tried again an hour later; `updated_at`. A model writes it; a change to the details asks for a new one, a change to who is going does not.
 
 ### `event_pictures` — a picture of who is going, new 2026-09-28
 

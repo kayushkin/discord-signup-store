@@ -107,7 +107,11 @@ type Event struct {
 	// WaitlistDisabled refuses someone joining a full event instead of
 	// putting them on the waitlist; anyone already waiting stays and still
 	// moves up in order. Off — the zero value — is the ordinary waitlist.
-	WaitlistDisabled bool  `json:"waitlist_disabled"`
+	WaitlistDisabled bool `json:"waitlist_disabled"`
+	// PicturesDisabled stops the picture of who is going: none is made for
+	// the event, and one made before is deleted. Off — the zero value — makes
+	// one once someone going has an avatar.
+	PicturesDisabled bool  `json:"pictures_disabled"`
 	CreatedAt        int64 `json:"created_at"`
 	UpdatedAt        int64 `json:"updated_at"`
 
@@ -407,6 +411,13 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// waitlist. Off by default, so every event made before the switch keeps
 	// its waitlist.
 	{"events", "waitlist_disabled", "INTEGER NOT NULL DEFAULT 0"},
+	// Whether the event has a picture of who is going. See eventpictures.go.
+	{"events", "pictures_disabled", "INTEGER NOT NULL DEFAULT 0"},
+	// An organiser asking for an event's scene again, with a comment.
+	{"event_scenes", "request_kind", "TEXT NOT NULL DEFAULT ''"},
+	{"event_scenes", "request_comment", "TEXT NOT NULL DEFAULT ''"},
+	{"event_scenes", "requested_at", "INTEGER NOT NULL DEFAULT 0"},
+	{"event_scenes", "requested_by", "TEXT NOT NULL DEFAULT ''"},
 
 	// An invite that keeps a place until the person answers. See holds.go.
 	{"event_invites", "holds_place", "INTEGER NOT NULL DEFAULT 0"},
@@ -677,13 +688,13 @@ func (s *Store) CreateEvent(e Event) (*Event, error) {
 		                    attending_role_id, waitlist_role_id, starts_at, ends_at,
 		                    location, entity_type, recurrence_rule, timezone, origin,
 		                    discord_interested_count, discord_synced_at, created_by,
-		                    created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		                    pictures_disabled, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		e.GuildID, e.ChannelID, e.MessageID, e.DiscordScheduledEventID,
 		e.Name, e.Description, e.Capacity, e.Status,
 		e.AttendingRoleID, e.WaitlistRoleID, e.StartsAt, e.EndsAt,
 		e.Location, e.EntityType, e.RecurrenceRule, e.Timezone, e.Origin,
-		e.DiscordInterestedCount, e.DiscordSyncedAt, e.CreatedBy, ts, ts)
+		e.DiscordInterestedCount, e.DiscordSyncedAt, e.CreatedBy, boolToInt(e.PicturesDisabled), ts, ts)
 	if err != nil {
 		return nil, fmt.Errorf("insert event: %w", err)
 	}
@@ -702,7 +713,7 @@ const eventColumns = `id, guild_id, channel_id, message_id, discord_scheduled_ev
 	title_written_at, native_title_written, forum_title_written,
 	native_name_written, native_description_written, native_starts_at_written,
 	native_ends_at_written, native_location_written, native_written_at,
-	new_events_message_id, waitlist_disabled, created_at, updated_at`
+	new_events_message_id, waitlist_disabled, pictures_disabled, created_at, updated_at`
 
 func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 	var e Event
@@ -714,7 +725,7 @@ func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 		&e.TitleWrittenAt, &e.NativeTitleWritten, &e.ForumTitleWritten,
 		&e.NativeWritten.Name, &e.NativeWritten.Description, &e.NativeWritten.StartsAt,
 		&e.NativeWritten.EndsAt, &e.NativeWritten.Location, &e.NativeWritten.At,
-		&e.NewEventsMessageID, &e.WaitlistDisabled, &e.CreatedAt, &e.UpdatedAt)
+		&e.NewEventsMessageID, &e.WaitlistDisabled, &e.PicturesDisabled, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -966,6 +977,9 @@ func (s *Store) UpdateEvent(id int64, patch EventPatch) (*Event, error) {
 	if patch.WaitlistDisabled != nil {
 		add("waitlist_disabled", boolToInt(*patch.WaitlistDisabled))
 	}
+	if patch.PicturesDisabled != nil {
+		add("pictures_disabled", boolToInt(*patch.PicturesDisabled))
+	}
 	if patch.DiscordInterestedCount != nil {
 		add("discord_interested_count", *patch.DiscordInterestedCount)
 		add("discord_synced_at", now())
@@ -1013,6 +1027,9 @@ type EventPatch struct {
 	// WaitlistDisabled turns the waitlist off or back on. Turning it back
 	// on promotes nobody: the waitlist only fills from new joins.
 	WaitlistDisabled *bool `json:"waitlist_disabled"`
+	// PicturesDisabled stops or starts the picture of who is going. Stopping
+	// it deletes the picture and its scene; starting it again draws a new one.
+	PicturesDisabled *bool `json:"pictures_disabled"`
 }
 
 // validateRecurrence enforces the one rule that cannot be defaulted: a

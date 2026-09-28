@@ -146,6 +146,43 @@
     </dl>
   </section>
 
+  {{if not $ev.PicturesDisabled}}{{with .EventPicture}}
+  {{/* The picture of who is going, as the home page shows it, and for an
+       organiser a way to ask for the scene again. */}}
+  <section class="card event-picture">
+    {{if .Signature}}
+    <img class="event-picture-img" src="/events/{{$ev.ID}}/picture.webp?v={{.Signature}}"
+         alt="A drawing of the people going to {{$ev.Name}}" width="1200" height="400">
+    {{else if .People}}
+    <p class="meta">The picture of who is going is being drawn. It appears here in about ten minutes.</p>
+    {{else}}
+    <p class="meta">A picture of who is going appears here once someone going has chosen an avatar.</p>
+    {{end}}
+    {{with .Scene}}
+      {{with .Request}}<p class="scene-pending"><span class="spinner" aria-hidden="true"></span>
+        A {{if eq .Kind "change"}}change to the scene{{else}}new scene{{end}} is being drawn{{if .Comment}}: “{{.Comment}}”{{end}}.
+        The picture above stays until it is ready.</p>
+      {{else}}{{if .Failure}}<p class="scene-failed">The last scene did not come out: {{.Failure}}</p>{{end}}{{end}}
+    {{end}}
+    {{if and $canManage .People}}
+    <details class="scene-change">
+      <summary>Change the picture</summary>
+      <form method="post" action="/events/{{$ev.ID}}/picture/scene">
+        <label for="scene-comment">What should be different?</label>
+        <textarea id="scene-comment" name="comment" rows="3" maxlength="600"
+          placeholder="For example: put us in a pumpkin patch, make the ghost bigger, everyone holding candles"></textarea>
+        <div class="row">
+          {{if and .Scene .Scene.SceneCode}}<button name="kind" value="change">Change this scene</button>{{end}}
+          <button name="kind" value="new" class="ghost">Draw a new scene</button>
+        </div>
+        <p class="hint">Change this scene keeps it and makes what you ask; a new scene starts again, with your comment
+          to go by. Either takes about ten minutes, and the picture above stays until it is ready.</p>
+      </form>
+    </details>
+    {{end}}
+  </section>
+  {{end}}{{end}}
+
   <section class="card" id="roster">
     <div class="card-head">
       <h3>Going</h3>
@@ -451,6 +488,19 @@
       {{end}}
     </div>
     {{end}}
+    <div class="control">
+      <h4 id="picture-label">Picture of who is going</h4>
+      <div class="seg-control" role="radiogroup" aria-labelledby="picture-label">
+        <form method="post" action="/events/{{$ev.ID}}" data-async>
+          <input type="hidden" name="pictures" value="on">
+          <button role="radio" data-tone="ok" aria-checked="{{not $ev.PicturesDisabled}}" {{if not $ev.PicturesDisabled}}tabindex="-1"{{end}}>On</button></form>
+        <form method="post" action="/events/{{$ev.ID}}" data-async
+              data-confirm="Take the picture down and stop making one? Its scene is deleted; turning it on again draws a new one.">
+          <input type="hidden" name="pictures" value="off">
+          <button role="radio" data-tone="warn" aria-checked="{{$ev.PicturesDisabled}}" {{if $ev.PicturesDisabled}}tabindex="-1"{{end}}>Off</button></form>
+      </div>
+      <p class="hint">{{if $ev.PicturesDisabled}}No picture is made for this event.{{else}}A drawn scene with everyone going who has an avatar.{{end}}</p>
+    </div>
     {{$watch := .RosterWatch}}
     <div class="control">
       <h4 id="notices-label">Tell me who joins and leaves</h4>

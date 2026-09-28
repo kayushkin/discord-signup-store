@@ -100,6 +100,8 @@ type pageData struct {
 	// EventFull is whether a capped event has no free place, which is when
 	// the waitlist can be added to.
 	EventFull bool
+	// EventPicture is the event page's picture of who is going.
+	EventPicture *eventPicturePanel
 	// ViewerHasAvatar is whether the signed-in viewer has an approved avatar,
 	// for the header.
 	ViewerHasAvatar bool
@@ -501,6 +503,9 @@ func (s *Server) handleWebCreateEvent(w http.ResponseWriter, r *http.Request) {
 		WaitlistRoleID:  r.FormValue("waitlist_role_id"),
 		Origin:          OriginLocal,
 		CreatedBy:       session.DiscordUserID,
+		// The form offers the picture as a checkbox, on unless unticked;
+		// a form that does not offer it leaves pictures on.
+		PicturesDisabled: r.Form.Has("pictures_offered") && r.FormValue("pictures") != "on",
 	}, session.DisplayName)
 	if err != nil {
 		s.renderFormError(w, session, nil, err)

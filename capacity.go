@@ -186,6 +186,13 @@ func (s *Server) applyEventEdit(before *Event, patch EventPatch, actor string) (
 	if _, err := s.store.UpdateEvent(before.ID, patch); err != nil {
 		return nil, nil, err
 	}
+	// A picture switched off is taken down and forgotten, scene and all, so
+	// switching it on again draws a new one.
+	if patch.PicturesDisabled != nil && *patch.PicturesDisabled && !before.PicturesDisabled {
+		if err := s.store.DeleteEventPicture(before.ID); err != nil {
+			return nil, nil, err
+		}
+	}
 
 	var promoted []Signup
 	// Only a raise can free places. Lowering never demotes anyone — see the

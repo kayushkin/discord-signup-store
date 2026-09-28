@@ -157,6 +157,7 @@ var eventUpdateFieldWords = map[string]string{
 	"attending_role_id": "attending role",
 	"waitlist_role_id":  "waitlist role",
 	"waitlist_disabled": "waitlist",
+	"pictures_disabled": "picture",
 	"created_by":        "host",
 }
 
@@ -175,7 +176,7 @@ func (n eventLogNames) eventUpdateValue(field, value string) template.HTML {
 		if value == "0" {
 			return "no limit"
 		}
-	case "waitlist_disabled":
+	case "waitlist_disabled", "pictures_disabled":
 		if value == "true" {
 			return "off"
 		}

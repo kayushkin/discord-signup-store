@@ -545,7 +545,10 @@ CREATE INDEX IF NOT EXISTS avatar_updates_by_person ON avatar_updates (discord_u
 -- again. failure, failed_details_signature and failed_at record the last
 -- scene that did not come out, and from which details, so a failing event is
 -- tried again an hour later rather than every minute; the scene already there
--- stays in use meanwhile.
+-- stays in use meanwhile. request_kind, request_comment, requested_at and
+-- requested_by are an organiser asking for the scene again: 'change' this
+-- one as the comment says, or a 'new' one with the comment to go by; '' when
+-- nothing is asked. A request that fails is cleared, and its failure shown.
 CREATE TABLE IF NOT EXISTS event_scenes (
     event_id                 INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
     details_signature        TEXT NOT NULL,
@@ -553,6 +556,10 @@ CREATE TABLE IF NOT EXISTS event_scenes (
     failure                  TEXT NOT NULL DEFAULT '',
     failed_details_signature TEXT NOT NULL DEFAULT '',
     failed_at                INTEGER NOT NULL DEFAULT 0,
+    request_kind             TEXT NOT NULL DEFAULT '',
+    request_comment          TEXT NOT NULL DEFAULT '',
+    requested_at             INTEGER NOT NULL DEFAULT 0,
+    requested_by             TEXT NOT NULL DEFAULT '',
     updated_at               INTEGER NOT NULL
 );
 

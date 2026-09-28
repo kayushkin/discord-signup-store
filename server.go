@@ -230,6 +230,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/join", s.handleWebJoin)
 	mux.HandleFunc("POST /events/{id}/leave", s.handleWebLeave)
 	mux.HandleFunc("GET /events/{id}/picture.webp", s.handleWebEventPicture)
+	mux.HandleFunc("POST /events/{id}/picture/scene", s.handleWebEventSceneRequest)
 	mux.HandleFunc("GET /avatar", s.handleWebAvatar)
 	mux.HandleFunc("GET /avatar/status", s.handleWebAvatarStatus)
 	mux.HandleFunc("POST /avatar/requests", s.handleWebAvatarRequest)

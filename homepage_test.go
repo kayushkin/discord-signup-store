@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestAMemberJoinsAndLeavesFromTheHomePage under the name Discord gives them
@@ -155,5 +156,99 @@ func TestAnOperatorSetsAnAvatarIntoTheGallery(t *testing.T) {
 	}
 	if rec := callAPI(mux, http.MethodGet, "/avatars/u-bob.webp", ""); rec.Code != http.StatusOK {
 		t.Errorf("the set avatar is not shown: %d", rec.Code)
+	}
+}
+
+// TestAnOrganiserControlsTheEventsPicture: the event page shows it, a scene
+// can be asked for again with a comment, a request made while one is drawn
+// is not lost, and switching pictures off takes the picture and scene down.
+func TestAnOrganiserControlsTheEventsPicture(t *testing.T) {
+	_, store, _, mux, token := webTestServer(t)
+	ev := publishedEvent(t, store, 5, "ann")
+	store.SetAvatarByOperator("ann", newAvatarDrawing{Format: AvatarFormatPortrait, Code: "const DRAWING = {}", ImageWebP: testWebP}, "test")
+	due := func() []eventPictureDue {
+		var body struct {
+			Pictures []eventPictureDue `json:"pictures"`
+		}
+		json.Unmarshal(callAPI(mux, http.MethodGet, "/api/event-pictures/due", "").Body.Bytes(), &body)
+		return body.Pictures
+	}
+	put := func(path string, body map[string]any) *httptest.ResponseRecorder {
+		encoded, _ := json.Marshal(body)
+		return callAPI(mux, http.MethodPut, path, string(encoded))
+	}
+	first := due()[0]
+	rec := put(fmt.Sprintf("/api/events/%d/scene", ev.ID), map[string]any{"details_signature": first.DetailsSignature, "scene_code": "const SCENE = 1"})
+	var saved struct {
+		Signature string `json:"signature"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &saved)
+	put(fmt.Sprintf("/api/events/%d/picture", ev.ID), map[string]any{"signature": saved.Signature, "image_webp": testWebP})
+	page := getPage(t, mux, token, eventPath(ev)).Body.String()
+	if !strings.Contains(page, fmt.Sprintf("/events/%d/picture.webp", ev.ID)) || !strings.Contains(page, "Change this scene") {
+		t.Fatal("the event page does not show the picture and the way to change it")
+	}
+
+	// A change needs a comment, and hands the painter the scene to change.
+	postForm(t, mux, token, eventPath(ev)+"/picture/scene", url.Values{"kind": {"change"}})
+	if len(due()) != 0 {
+		t.Error("a change with no comment was taken")
+	}
+	postForm(t, mux, token, eventPath(ev)+"/picture/scene", url.Values{"kind": {"change"}, "comment": {"a pumpkin patch"}})
+	asked := due()
+	if len(asked) != 1 || !asked[0].NeedsScene || asked[0].Request == nil || asked[0].Request.Comment != "a pumpkin patch" || asked[0].SceneCode != "const SCENE = 1" {
+		t.Fatalf("after asking for a change, due = %+v", asked)
+	}
+	if page := getPage(t, mux, token, eventPath(ev)).Body.String(); !strings.Contains(page, "a pumpkin patch") ||
+		!strings.Contains(page, fmt.Sprintf("/events/%d/picture.webp", ev.ID)) {
+		t.Error("while the change is drawn, the page does not say so with the old picture still up")
+	}
+	// Someone asks again while it is drawn: answering the first leaves the second.
+	time.Sleep(1100 * time.Millisecond)
+	postForm(t, mux, token, eventPath(ev)+"/picture/scene", url.Values{"kind": {"new"}, "comment": {"on the moon"}})
+	put(fmt.Sprintf("/api/events/%d/scene", ev.ID), map[string]any{"details_signature": first.DetailsSignature, "scene_code": "const SCENE = 2", "answered": asked[0].Request.RequestedAt})
+	if again := due(); len(again) != 1 || again[0].Request == nil || again[0].Request.Comment != "on the moon" {
+		t.Errorf("the request made while the first was drawn was lost: %+v", again)
+	}
+
+	// Off: the picture and scene go, and nothing is made.
+	postForm(t, mux, token, eventPath(ev), url.Values{"pictures": {"off"}})
+	after, _ := store.GetEvent(ev.ID)
+	if !after.PicturesDisabled || len(due()) != 0 {
+		t.Fatalf("after switching off: disabled %v, due %+v", after.PicturesDisabled, due())
+	}
+	if _, _, err := store.EventPicture(ev.ID); err == nil {
+		t.Error("the picture outlived switching pictures off")
+	}
+	if rec := getPage(t, mux, token, fmt.Sprintf("/events/%d/picture.webp", ev.ID)); rec.Code != http.StatusNotFound {
+		t.Errorf("picture of a switched-off event = %d, want 404", rec.Code)
+	}
+	postForm(t, mux, token, eventPath(ev), url.Values{"pictures": {"on"}})
+	if on := due(); len(on) != 1 || !on[0].NeedsScene || on[0].Request != nil {
+		t.Errorf("after switching back on, due = %+v; want a new scene", on)
+	}
+}
+
+// TestTheCreateFormCanLeaveThePictureOff, and a create that does not offer
+// the choice leaves pictures on.
+func TestTheCreateFormCanLeaveThePictureOff(t *testing.T) {
+	_, store, _, mux, token := webTestServer(t)
+	base := url.Values{"guild_id": {"g1"}, "starts_at": {"9/29 7pm"}, "timezone": {"UTC"}}
+	off := url.Values{"name": {"Quiet"}, "pictures_offered": {"1"}}
+	on := url.Values{"name": {"Loud"}, "pictures_offered": {"1"}, "pictures": {"on"}}
+	plain := url.Values{"name": {"Plain"}}
+	for _, form := range []url.Values{off, on, plain} {
+		for k, v := range base {
+			form[k] = v
+		}
+		postForm(t, mux, token, "/events/new", form)
+	}
+	events, _ := store.ListEvents("g1", "", 10)
+	disabled := map[string]bool{}
+	for _, ev := range events {
+		disabled[ev.Name] = ev.PicturesDisabled
+	}
+	if !disabled["Quiet"] || disabled["Loud"] || disabled["Plain"] {
+		t.Errorf("pictures disabled = %v, want only Quiet", disabled)
 	}
 }

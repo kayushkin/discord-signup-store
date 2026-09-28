@@ -221,6 +221,10 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	data.MessagesLeft, data.MessagesNextAt = messageAllowance(messages, now())
 	data.MessageLimit, data.MessageWindowMinutes, data.MessageBodyLimit = messageLimit, int(messageWindow/time.Minute), messageBodyLimit
 	data.AvatarUserIDs = avatars
+	if data.EventPicture, err = s.eventPicturePanelOf(ev); err != nil {
+		log.Printf("[discord-signup] event picture %d: %v", ev.ID, err)
+		data.Error = strings.TrimSpace(data.Error + " Could not read the picture of who is going: " + err.Error())
+	}
 	if avatarsErr != nil {
 		data.Error = strings.TrimSpace(data.Error + " Could not read who has an avatar: " + avatarsErr.Error())
 	}
@@ -349,6 +353,10 @@ func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Form.Has("waitlist") {
 		patch.WaitlistDisabled = &submitted.WaitlistDisabled
+	}
+	if r.Form.Has("pictures") {
+		off := r.FormValue("pictures") == "off"
+		patch.PicturesDisabled = &off
 	}
 	// Raising the limit here does exactly what raising it from Discord does,
 	// because it is now the same function rather than a second copy of the
