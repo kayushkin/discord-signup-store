@@ -30,8 +30,9 @@ import (
 // to sign up among those going with an avatar.
 const eventPictureMaximumPeople = 12
 
-// eventPictureMaximumBytes bounds a painted picture handed back.
-const eventPictureMaximumBytes = 3 << 20
+// eventPictureMaximumBytes bounds a painted picture handed back: a loop of
+// frames, 700 KB for two seconds of the haunted house on 2026-09-28.
+const eventPictureMaximumBytes = 6 << 20
 
 // eventSceneMaximumBytes bounds a scene's code handed back.
 const eventSceneMaximumBytes = 256 << 10
@@ -91,8 +92,8 @@ func shortHash(parts ...string) string {
 // eventSceneFormat is the version of art/SCENE.md scenes are written to. It
 // is part of every details signature, so a new version asks every event for a
 // new scene: on 2026-09-28 scenes went from placing round portraits to casting
-// posed characters.
-const eventSceneFormat = "cast"
+// posed characters, and then to moving in a loop.
+const eventSceneFormat = "cast-motion"
 
 // eventDetailsSignature names the details a scene is made from. The date
 // counts only as far as its day and time of day, so a repeating event's
@@ -106,8 +107,9 @@ func eventDetailsSignature(ev Event) string {
 	return shortHash(eventSceneFormat, d.Name, d.Description, d.Location, when, d.RecurrenceRule)
 }
 
-// eventPictureSignature names what a picture shows: the scene and who is in
-// it. "" for nobody or no scene, which is no picture.
+// eventPictureSignature names what a picture should show: the scene and who
+// is in it. "" for nobody or no scene. A stored picture whose signature
+// differs is repainted, and shown until then.
 func eventPictureSignature(scene *eventScene, subjects []eventPictureSubject) string {
 	if len(subjects) == 0 || scene == nil || scene.SceneCode == "" {
 		return ""
@@ -280,10 +282,12 @@ func (s *Store) eventPictureStateOf(eventIDs []int64) (*eventPictureState, error
 	return &eventPictureState{subjects: subjects, scenes: scenes, stored: stored}, nil
 }
 
-// currentEventPictures is, for each event whose stored picture shows its
-// scene and who is going now, that picture's signature — for the page's image
-// address, so a repainted picture is fetched again. An event missing here
-// shows none.
+// currentEventPictures is, for each event with a picture to show, its
+// signature — for the page's image address, so a repainted picture is
+// fetched again. The last picture painted stays up while a new one is
+// painted, which takes minutes: someone who joins sees the old one until
+// theirs replaces it, rather than an empty card. An event nobody going has
+// an avatar for shows none, since nothing would ever replace it.
 func (s *Store) currentEventPictures(events []Event) (map[int64]string, error) {
 	ids := make([]int64, len(events))
 	for i, ev := range events {
@@ -295,8 +299,8 @@ func (s *Store) currentEventPictures(events []Event) (map[int64]string, error) {
 	}
 	out := map[int64]string{}
 	for _, id := range ids {
-		if want := eventPictureSignature(state.scenes[id], state.subjects[id]); want != "" && state.stored[id] == want {
-			out[id] = want
+		if stored := state.stored[id]; stored != "" && len(state.subjects[id]) > 0 {
+			out[id] = stored
 		}
 	}
 	return out, nil

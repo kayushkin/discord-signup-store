@@ -21,8 +21,29 @@ const SCENE = {
   // Optional: anything in front of the people — a table's edge, a prop in a
   // hand, confetti, a banner across the bottom.
   foreground() { … },
+  seconds: 2,                         // optional: how long the loop is, 1 to 4
 };
 ```
+
+## Motion
+
+The picture is a short loop, printed at 12 frames a second. `cast(n, t)`,
+`background(t)` and `foreground(t)` are called for every frame with `t`, the
+moment in the loop, from 0 up to 1 — and 1 is 0 again, so the loop must join
+up. `loop(t, turns, offset)` is `sin(2π(turns·t + offset))`: anything moved by
+whole turns of it joins up. `T` holds `t` too.
+
+Make the scene move the way the event does: a flashlight sweeping, a ghost
+bobbing, candles flickering, someone waving, dancers stepping, a ball flying
+between two players, steam off a mug. Move people by changing their pose with
+`t` in `cast` — `addToPose(pose, 'upperArmR', 25 * loop(t))` — or their `x` and
+`y`. Keep it gentle and readable: one or two things moving clearly, the rest
+still. Props held follow the hands by themselves, since `JOINTS` is worked out
+again for every frame.
+
+Every person also sways a little on their own — head, torso, arms — out of
+step with the others. Cast someone `idle: false` to stop that, for a pose that
+must hold exactly.
 
 Each person is a **character** (`CHARACTER.md`): a whole body the page paints
 for you, posed. For each one `cast(n)` gives:

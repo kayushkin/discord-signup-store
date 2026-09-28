@@ -267,7 +267,7 @@ Drawings of a person, kept in a gallery; they choose which shows beside their na
 
 ### `event_pictures` — a picture of who is going, new 2026-09-28
 
-`event_id` PK; `signature`, which scene, which people and which drawing of each it shows (`eventPictureSignature`); `image_webp`, 1200 by 400; `painted_at`. A page shows it only while the signature matches who is going now, so someone who left never lingers in it.
+`event_id` PK; `signature`, which scene, which people and which drawing of each it shows (`eventPictureSignature`); `image_webp`, 1200 by 400; `painted_at`. A picture whose signature no longer matches is repainted and shown until then, so a card is never empty while a new picture is painted; none shows once nobody going has an avatar. Animated: a loop of frames (`art/render-event-picture.mjs`).
 
 ### `site_admins` — whoever runs the bot
 

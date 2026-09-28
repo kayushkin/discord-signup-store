@@ -336,3 +336,30 @@ function characterPortrait(C) {
 function characterFullBody(C, pose = {}) {
   return { width: 500, height: 900, paint() { paintCharacter(C, pose, { x: 250, y: 870, height: 820 }); } };
 }
+
+// ---------------------------------------------------------------- motion
+// A picture is a short loop: t runs from 0 up to 1, and 1 is 0 again. A
+// movement made of whole turns of loop() has no seam where the loop restarts.
+function loop(t, turns = 1, offset = 0) { return Math.sin(2 * Math.PI * (turns * t + offset)); }
+
+// A pose with degrees added to one bone, whether it holds a number or
+// { angle, stretch }.
+function addToPose(pose, bone, degrees) {
+  const value = pose[bone];
+  if (value && typeof value === 'object') return { ...pose, [bone]: { ...value, angle: (value.angle ?? 0) + degrees } };
+  return { ...pose, [bone]: (value ?? 0) + degrees };
+}
+
+// Nobody standing in a picture is quite still: they sway, turn their head,
+// shift their arms. idleMotion adds that to a pose at moment t, each person
+// out of step with the next by their seed, so a crowd does not move as one.
+function idleMotion(pose, t, seed) {
+  const o = hash(seed * 7.13 + 1.7);
+  let p = addToPose(pose, 'torso', 1.8 * loop(t, 1, o));
+  p = addToPose(p, 'neck', 1.4 * loop(t, 1, o + .2));
+  p = addToPose(p, 'head', 4 * loop(t, 1, o + .45));
+  for (const [bone, k, size] of [['upperArmL', .1, 3.5], ['upperArmR', .6, 3.5], ['forearmL', .3, 4], ['forearmR', .85, 4]]) {
+    p = addToPose(p, bone, size * loop(t, 1, o + k));
+  }
+  return p;
+}

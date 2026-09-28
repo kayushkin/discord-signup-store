@@ -560,7 +560,8 @@ CREATE TABLE IF NOT EXISTS event_scenes (
 -- avatars printed into the event's scene by cmd/discord-event-picture-painter
 -- and shown on the home page. signature names the scene, who was painted and
 -- which drawing of each (eventPictureSignature, eventpictures.go); a page
--- shows the picture only while it matches, so someone who left never lingers.
+-- shows the last picture painted until a new one replaces it, and none once
+-- nobody going has an avatar.
 CREATE TABLE IF NOT EXISTS event_pictures (
     event_id   INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
     signature  TEXT NOT NULL,

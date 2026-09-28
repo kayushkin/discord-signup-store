@@ -68,7 +68,8 @@ func TestAMemberJoinsAndLeavesFromTheHomePage(t *testing.T) {
 // TestAnEventPictureIsItsSceneWithWhoIsGoing: the painter is asked for a
 // scene first, one written from old details is refused, a picture shows only
 // while it matches the scene and who is going, and a roster change prints the
-// same scene again without asking for a new one.
+// same scene again without asking for a new one, and the old picture stays
+// up until the new one is painted.
 func TestAnEventPictureIsItsSceneWithWhoIsGoing(t *testing.T) {
 	_, store, _, mux, _ := webTestServer(t)
 	ev := publishedEvent(t, store, 5, "ann", "bob")
@@ -125,8 +126,8 @@ func TestAnEventPictureIsItsSceneWithWhoIsGoing(t *testing.T) {
 	if next := due(); len(next) != 1 || next[0].NeedsScene || len(next[0].People) != 2 {
 		t.Errorf("after bob's avatar, due = %+v", next)
 	}
-	if home := getPage(t, mux, member.Token, "/").Body.String(); strings.Contains(home, picturePath) {
-		t.Error("the picture still shows though it lacks bob")
+	if home := getPage(t, mux, member.Token, "/").Body.String(); !strings.Contains(home, picturePath) {
+		t.Error("the old picture was taken down before a new one was painted")
 	}
 	// The details change: a new scene is asked for.
 	store.db.Exec(`UPDATE events SET description = 'Now with pizza' WHERE id = ?`, ev.ID)

@@ -147,7 +147,7 @@ func (p *painter) paint(pic picture) error {
 	if err := os.WriteFile(sceneFile, []byte(sceneCode), 0o600); err != nil {
 		return err
 	}
-	if err := p.render(sceneFile, peopleFile, outFile, 0); err != nil {
+	if err := p.render(sceneFile, peopleFile, outFile, 0, printLoop); err != nil {
 		return err
 	}
 	image, err := os.ReadFile(outFile)
@@ -218,10 +218,10 @@ func (p *painter) writeScene(folder, peopleFile string, pic picture) (string, er
 	sceneFile := filepath.Join(folder, "scene.js")
 	for turn := 0; turn < p.correctionTurns; turn++ {
 		var problems []string
-		if err := p.render(sceneFile, peopleFile, filepath.Join(folder, "print-now.webp"), 0); err != nil {
+		if err := p.render(sceneFile, peopleFile, filepath.Join(folder, "print-now.webp"), 0, printSheet); err != nil {
 			problems = append(problems, fmt.Sprintf("With the %d people going now it would not print: %v", len(pic.People), err))
 		}
-		if err := p.render(sceneFile, peopleFile, filepath.Join(folder, "print-crowd.webp"), crowd); err != nil {
+		if err := p.render(sceneFile, peopleFile, filepath.Join(folder, "print-crowd.webp"), crowd, printStill); err != nil {
 			problems = append(problems, fmt.Sprintf("With %d people it would not print: %v", crowd, err))
 		}
 		if err := p.turn.Run(folder, sceneBrief+correctSceneTurn(len(pic.People), crowd, problems)); err != nil {
@@ -229,7 +229,7 @@ func (p *painter) writeScene(folder, peopleFile string, pic picture) (string, er
 		}
 	}
 	for _, count := range []int{0, 1, crowd, 12} {
-		if err := p.render(sceneFile, peopleFile, filepath.Join(folder, "check.webp"), count); err != nil {
+		if err := p.render(sceneFile, peopleFile, filepath.Join(folder, "check.webp"), count, printStill); err != nil {
 			return "", fmt.Errorf("the scene would not print with %d people: %w", count, err)
 		}
 	}
@@ -288,26 +288,39 @@ and example-maleeha.js for the level of detail to aim for.
 const firstSceneTurn = `Decide what the picture should be: where it happens, what the people are doing — each their own pose,
 interacting with each other and the place — the props in their hands, the time of day, the mood: something
 specific and fun that anyone who read the event would recognise at a glance. Write notes.txt: the idea in
-one sentence, then everything you will draw and each person's pose. Then write scene.js.`
+one sentence, then everything you will draw, each person's pose, and what moves in the loop. Then write
+scene.js.`
 
 func correctSceneTurn(going, crowd int, problems []string) string {
 	if len(problems) > 0 {
 		return "scene.js is written, but:\n" + strings.Join(problems, "\n") +
 			"\n\nFix scene.js so it prints for every number of people from 1 to 12, keeping the scene."
 	}
-	return fmt.Sprintf(`scene.js is written. print-now.webp is it printed with the %d people going now, and
-print-crowd.webp with %d. Look at both closely. Does each read at a glance as the idea in notes.txt? Is
+	return fmt.Sprintf(`scene.js is written. print-now.webp is it with the %d people going now, at four moments of its
+loop one above another (t = 0, 0.25, 0.5, 0.75), and print-crowd.webp its first moment with %d. Look at
+both closely. Does what moves move the way notes.txt says, clearly but gently, and join up round the loop? Does each read at a glance as the idea in notes.txt? Is
 everything in notes.txt there? Are the people placed and posed well: doing what notes.txt says, faces
 not covered, nobody off the edge or floating, feet on the floor or seats under them, props in their
 hands, the crowd not cramped? Is the lettering clear of the people? Fix what is wrong by editing
 scene.js. If both look right, leave it as it is.`, going, crowd)
 }
 
+// How a scene is printed: the animated loop the page shows, its first frame
+// alone, or four moments of it one above another.
+const (
+	printLoop  = ""
+	printStill = "--still"
+	printSheet = "--sheet"
+)
+
 // render prints scene with the people, count of them when count is not 0.
-func (p *painter) render(sceneFile, peopleFile, outFile string, count int) error {
+func (p *painter) render(sceneFile, peopleFile, outFile string, count int, mode string) error {
 	arguments := []string{filepath.Join(p.artDirectory, "render-event-picture.mjs"), sceneFile, peopleFile, outFile}
 	if count > 0 {
 		arguments = append(arguments, fmt.Sprint(count))
+	}
+	if mode != printLoop {
+		arguments = append(arguments, mode)
 	}
 	return p.node(arguments...)
 }
