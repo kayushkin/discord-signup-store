@@ -59,6 +59,12 @@ func homeRedirect(w http.ResponseWriter, r *http.Request, notice string) {
 	http.Redirect(w, r, "/?"+noticeQuery(notice), http.StatusSeeOther)
 }
 
+// homeRedirectWithMascotReaction goes home with the notice, and has the
+// mascot play one of mascotReactions there.
+func homeRedirectWithMascotReaction(w http.ResponseWriter, r *http.Request, notice, reaction string) {
+	http.Redirect(w, r, "/?"+noticeQuery(notice)+"&"+mascotReactionQuery(reaction), http.StatusSeeOther)
+}
+
 // eventForSelfSignup reads the event a Join or Leave names and checks the
 // viewer is in its server, answering the request itself when not.
 func (s *Server) eventForSelfSignup(w http.ResponseWriter, r *http.Request, session *WebSession) *Event {
@@ -119,18 +125,16 @@ func (s *Server) handleWebJoin(w http.ResponseWriter, r *http.Request) {
 		homeRedirect(w, r, "Something went wrong signing you up. Nothing was changed. Try again.")
 		return
 	}
-	var notice string
 	switch {
 	case result.AlreadySignedUp && result.Signup.State == StateWaitlisted:
-		notice = fmt.Sprintf("You are already on the waitlist for %s, at number %d.", ev.Name, result.Signup.WaitlistPlace)
+		homeRedirect(w, r, fmt.Sprintf("You are already on the waitlist for %s, at number %d.", ev.Name, result.Signup.WaitlistPlace))
 	case result.AlreadySignedUp:
-		notice = fmt.Sprintf("You are already going to %s.", ev.Name)
+		homeRedirect(w, r, fmt.Sprintf("You are already going to %s.", ev.Name))
 	case result.Signup.State == StateWaitlisted:
-		notice = fmt.Sprintf("%s is full, so you are on the waitlist at number %d. If someone drops out you move up and get a message on Discord.", ev.Name, result.Signup.WaitlistPlace)
+		homeRedirectWithMascotReaction(w, r, fmt.Sprintf("%s is full, so you are on the waitlist at number %d. If someone drops out you move up and get a message on Discord.", ev.Name, result.Signup.WaitlistPlace), "waitlisted")
 	default:
-		notice = fmt.Sprintf("You're going to %s.", ev.Name)
+		homeRedirectWithMascotReaction(w, r, fmt.Sprintf("You're going to %s.", ev.Name), "joined")
 	}
-	homeRedirect(w, r, notice)
 }
 
 func (s *Server) handleWebLeave(w http.ResponseWriter, r *http.Request) {
@@ -152,5 +156,5 @@ func (s *Server) handleWebLeave(w http.ResponseWriter, r *http.Request) {
 		homeRedirect(w, r, "Something went wrong. Nothing was changed. Try again.")
 		return
 	}
-	homeRedirect(w, r, ev.Name+": "+describeLeave(result))
+	homeRedirectWithMascotReaction(w, r, ev.Name+": "+describeLeave(result), "left")
 }

@@ -210,6 +210,7 @@ because Discord has none to give.
 | **Web — detail** | whoever may edit | One event, with its picture of who is going, a switch to turn pictures off (which hides it, keeping it to show again when switched on), and a comment box to change the scene or ask for a new one. Its fields are the edit form, with Open/Close signups, the waitlist switch, End and Cancel beside them; then the roster, **Add people** (Send invite, or Add now to a list), the invites and how each was answered, and one log of signups, edits and invites, newest first. People are shown by their short name, with their Discord name on hover or tap. |
 | **Web — form** | organisers | Create, with the fields a Discord form has no room for, whether to make a picture of who is going, and the people to invite or put on the event as it is made. Editing is on the detail page. |
 | **Web — names** | site admins, server owners | The short name each person is shown by, everywhere. A 404 for anyone else, and not linked for them. |
+| **Web — mascot** | everyone; set by server owners | Each server can have a mascot of its own, shown in the page header and on the home page while you have that server chosen, and on its event pages; a server with none, or no server chosen, shows the site's own, Maleeha. The mascot reacts to what you do: it waves hello when you first open the home page, cheers when you join, shrugs when you land on the waitlist, sighs when you leave, jumps when you create an event, and startles when you click it. Nothing moves if your browser asks for less motion. The server's owner (or a site admin) sets it on `/mascot`: a drawing made for the server — from a description, from a photo, or a change to one made before — or the avatar a member shows beside their name, which stops being the mascot if they delete it. |
 | **Web — your avatar** | just you | Upload a photo and a model draws the whole of you in the site's print style, part by part so pictures can pose you; your round portrait comes from the same drawing. Every drawing is kept; you choose which one shows beside your name, or none. Ask for more — from a new photo, from your photo again, or a change to one you have — each with a comment on how it should look; the page shows the drawing when it is done. Your photo is kept until you delete it. |
 
 ## 5. Who may do what
@@ -222,6 +223,7 @@ because Discord has none to give.
 | Add or remove someone else, invite someone | the same as Edit |
 | Set short names | a site admin, or a server's owner for the people in it |
 | Ask for, choose or delete avatar drawings, delete the photo | the person themselves, if they are a member of a server the bot is in; nobody else |
+| Set a server's mascot, ask for or delete its drawings | the server's owner, or a site admin |
 | Join or leave on the web page | anyone in the event's server, as on Discord |
 | Rebuild the table | Administrator or Manage Events |
 

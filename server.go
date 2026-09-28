@@ -194,6 +194,15 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/avatar-requests/{requestID}/started", s.handleAvatarRequestStarted)
 	mux.HandleFunc("PUT /api/avatar-requests/{requestID}/drawing", s.handleAvatarRequestDrawing)
 	mux.HandleFunc("POST /api/avatar-requests/{requestID}/failed", s.handleAvatarRequestFailed)
+	mux.HandleFunc("GET /api/guilds/{guildID}/mascot", s.handleGetGuildMascot)
+	mux.HandleFunc("GET /api/mascot-requests/to-draw", s.handleMascotRequestsToDraw)
+	mux.HandleFunc("GET /api/mascot-requests/{requestID}/photo", s.handleMascotRequestPhoto)
+	mux.HandleFunc("POST /api/mascot-requests/{requestID}/started", s.handleMascotRequestStarted)
+	mux.HandleFunc("PUT /api/mascot-requests/{requestID}/drawing", s.handleMascotRequestDrawing)
+	mux.HandleFunc("POST /api/mascot-requests/{requestID}/failed", s.handleMascotRequestFailed)
+	mux.HandleFunc("GET /api/mascot-reactions/to-print", s.handleMascotsToReact)
+	mux.HandleFunc("PUT /api/guilds/{guildID}/mascot/reactions", s.handleSaveMascotReactions)
+	mux.HandleFunc("POST /api/guilds/{guildID}/mascot/reactions-failed", s.handleMascotReactionsFailed)
 
 	// Browser surface — session-gated.
 	mux.HandleFunc("GET /", s.handleWebIndex)
@@ -240,6 +249,13 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /avatar/remove", s.handleWebAvatarRemove)
 	mux.HandleFunc("GET /avatar/drawings/{file}", s.handleWebOwnAvatarDrawing)
 	mux.HandleFunc("GET /avatars/{file}", s.handleAvatarImage)
+	mux.HandleFunc("GET /mascot", s.handleWebMascot)
+	mux.HandleFunc("GET /mascot/status", s.handleWebMascotStatus)
+	mux.HandleFunc("POST /mascot/requests", s.handleWebMascotRequest)
+	mux.HandleFunc("POST /mascot/choose", s.handleWebMascotChoose)
+	mux.HandleFunc("POST /mascot/drawings/delete", s.handleWebMascotDeleteDrawing)
+	mux.HandleFunc("GET /mascot/drawings/{file}", s.handleWebMascotDrawing)
+	mux.HandleFunc("GET /mascots/{guildID}/{file}", s.handleMascotImage)
 }
 
 // handleSetGuildManagement points a guild's management table at a channel and

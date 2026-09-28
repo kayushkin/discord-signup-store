@@ -12,9 +12,10 @@ import (
 	"time"
 )
 
-// FileStoreClient keeps the photos people upload for their avatars in
-// file-store, which owns uploaded bytes. This service owns which photo is
-// whose and who may see it; file-store holds the bytes and judges nobody. Its
+// FileStoreClient keeps the photos people upload for their avatars, and for
+// their servers' mascots, in file-store, which owns uploaded bytes. This
+// service owns which photo is whose and who may see it; file-store holds the
+// bytes and judges nobody. Its
 // token reads every file there, so it comes from file-store's own host-local
 // file and reaches this unit through a drop-in, never the tracked unit.
 type FileStoreClient struct {
@@ -53,7 +54,18 @@ func fileStoreRefusal(response *http.Response) error {
 
 // UploadAvatarPhoto stores one person's photo and returns its file id.
 func (c *FileStoreClient) UploadAvatarPhoto(discordUserID, filename, contentType string, content []byte) (string, error) {
-	query := url.Values{"filename": {filename}, "owner_service": {fileStoreOwnerService}, "owner_ref": {"avatar:" + discordUserID}}
+	return c.uploadPhoto("avatar:"+discordUserID, filename, contentType, content)
+}
+
+// UploadMascotPhoto stores the photo a server's mascot is to be drawn from
+// and returns its file id.
+func (c *FileStoreClient) UploadMascotPhoto(guildID, filename, contentType string, content []byte) (string, error) {
+	return c.uploadPhoto("mascot:"+guildID, filename, contentType, content)
+}
+
+// uploadPhoto stores a photo under ownerRef, which says what it hangs on.
+func (c *FileStoreClient) uploadPhoto(ownerRef, filename, contentType string, content []byte) (string, error) {
+	query := url.Values{"filename": {filename}, "owner_service": {fileStoreOwnerService}, "owner_ref": {ownerRef}}
 	request, err := http.NewRequest(http.MethodPost, c.baseURL+"/files?"+query.Encode(), bytes.NewReader(content))
 	if err != nil {
 		return "", err

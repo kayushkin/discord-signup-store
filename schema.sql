@@ -596,3 +596,89 @@ CREATE TABLE IF NOT EXISTS event_picture_prints (
     painted_at    INTEGER NOT NULL,
     PRIMARY KEY (event_id, signature)
 );
+
+-- Mascots: each server's own mascot, shown in the masthead and on the home
+-- page for that server, and set by its owner or a site admin. A server with
+-- no row shows the site's own mascot, Maleeha (art/drawings/maleeha.js).
+
+-- guild_mascots: which drawing is the server's mascot. Exactly one of
+-- mascot_drawing_id (a drawing made for the server, mascot_drawings) and
+-- avatar_drawing_id (a member's avatar, avatar_drawings) is set; the other is
+-- 0. A member's drawing stays the mascot only while it exists: deleting it
+-- deletes this row. set_by is who chose it. reaction_failure and
+-- reaction_failed_at record the last time its reactions would not print, so
+-- the drawer tries again an hour later rather than every minute.
+CREATE TABLE IF NOT EXISTS guild_mascots (
+    guild_id           TEXT PRIMARY KEY,
+    mascot_drawing_id  INTEGER NOT NULL DEFAULT 0,
+    avatar_drawing_id  INTEGER NOT NULL DEFAULT 0,
+    set_by             TEXT NOT NULL,
+    set_at             INTEGER NOT NULL,
+    reaction_failure   TEXT NOT NULL DEFAULT '',
+    reaction_failed_at INTEGER NOT NULL DEFAULT 0
+);
+
+-- guild_mascot_reactions: the mascot's short animated loops, one per
+-- reaction in mascotReactions (mascots.go) — waving hello, cheering when the
+-- viewer joins — printed by cmd/discord-character-drawer from the character's
+-- code. They belong to the choice in guild_mascots, and are deleted when it
+-- changes. Only a character can be posed, so a portrait mascot has none.
+CREATE TABLE IF NOT EXISTS guild_mascot_reactions (
+    guild_id   TEXT NOT NULL REFERENCES guild_mascots(guild_id) ON DELETE CASCADE,
+    reaction   TEXT NOT NULL,
+    image_webp BLOB NOT NULL,
+    printed_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, reaction)
+);
+
+-- mascot_drawings: every drawing made for a server's mascot, until someone
+-- who may set the mascot deletes it. The columns mean what they do in
+-- avatar_drawings; every one is a character.
+CREATE TABLE IF NOT EXISTS mascot_drawings (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id       TEXT NOT NULL,
+    format         TEXT NOT NULL,
+    drawing_code   TEXT NOT NULL,
+    image_webp     BLOB NOT NULL,
+    full_body_webp BLOB NOT NULL,
+    request_id     INTEGER NOT NULL,
+    created_at     INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS mascot_drawings_by_guild ON mascot_drawings (guild_id, id);
+
+-- mascot_requests: each mascot drawing asked for. kind is one of
+-- mascotRequestKinds (mascots.go): describe, drawn from comment alone;
+-- from_photo, from the photo uploaded with it (photo_file_id, in
+-- file-store, purged when the drawing is done or fails); or edit_drawing,
+-- which changes base_drawing_id as comment says. requested_by is who asked.
+-- state, failure and the times are as in avatar_requests; a server has at
+-- most one waiting or drawing at a time.
+CREATE TABLE IF NOT EXISTS mascot_requests (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id        TEXT NOT NULL,
+    requested_by    TEXT NOT NULL,
+    kind            TEXT NOT NULL,
+    base_drawing_id INTEGER NOT NULL DEFAULT 0,
+    comment         TEXT NOT NULL DEFAULT '',
+    photo_file_id   TEXT NOT NULL DEFAULT '',
+    state           TEXT NOT NULL,
+    failure         TEXT NOT NULL DEFAULT '',
+    requested_at    INTEGER NOT NULL,
+    started_at      INTEGER NOT NULL DEFAULT 0,
+    finished_at     INTEGER NOT NULL DEFAULT 0,
+    drawing_id      INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS mascot_requests_by_guild ON mascot_requests (guild_id, id);
+CREATE INDEX IF NOT EXISTS mascot_requests_by_state ON mascot_requests (state, id);
+
+-- guild_mascot_updates: what happened to each server's mascot and who did
+-- it, append-only.
+CREATE TABLE IF NOT EXISTS guild_mascot_updates (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id        TEXT NOT NULL,
+    discord_user_id TEXT NOT NULL,
+    action          TEXT NOT NULL,
+    detail          TEXT NOT NULL DEFAULT '',
+    at              INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS guild_mascot_updates_by_guild ON guild_mascot_updates (guild_id, at);

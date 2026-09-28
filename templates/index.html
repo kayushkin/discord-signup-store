@@ -40,7 +40,7 @@
 {{define "content"}}
 {{if not .Session}}
   <div class="card hero">
-    <img class="hero-art" src="/art/maleeha-360.webp" alt="Maleeha in her jester hood, tongue out, waving" width="200" height="200">
+    <img class="hero-art" src="{{.Mascot.Large}}" alt="{{.Mascot.Alt}}" width="200" height="200">
     <div>
       <h3>Sign in to manage events</h3>
       <p class="meta">Log in with Discord to create events, set capacities and manage waitlists.
@@ -53,6 +53,7 @@
     <a class="btn" href="/events/new">New event</a>
     {{if .MayName}}<a class="btn ghost" href="/names">Names</a>{{end}}
     <a class="btn ghost" href="/avatar">{{if .ViewerHasAvatar}}Your avatar{{else}}Add an avatar{{end}}</a>
+    {{if .MascotGuilds}}<a class="btn ghost" href="/mascot{{if .HomeGuildID}}?guild_id={{.HomeGuildID}}{{end}}">Server mascot</a>{{end}}
     {{if gt (len .HomeGuildChoices) 1}}
     <form method="post" action="/preferences/home-server" style="margin:0 0 0 auto" class="row home-filter">
       <label for="home-server" class="meta" style="margin:0">Show</label>
@@ -66,7 +67,7 @@
   </div>
 
   {{if not .EventCards}}
-    <div class="card hero"><img class="hero-art small" src="/art/maleeha-360.webp" alt="" width="130" height="130"><p class="meta">
+    <div class="card hero"><img class="hero-art small" src="{{.Mascot.Large}}" alt="" width="130" height="130"><p class="meta">
       {{if .ArchivedCards}}Nothing coming up. Finished events are in the archive below.
       {{else}}No events yet in your servers. This page lists every event in the
       servers you are in; join one here or with its Join button in Discord.{{end}}

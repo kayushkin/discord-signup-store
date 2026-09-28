@@ -126,6 +126,14 @@ type pageData struct {
 	AvatarUserIDs map[string]bool
 	// AvatarPage is the avatar page's photo, gallery and last request.
 	AvatarPage *avatarPage
+	// Mascot is the mascot the page shows, which render fills in from
+	// MascotGuildID, the page's event, or the viewer's home server.
+	Mascot        mascotView
+	MascotGuildID string
+	// MascotPage is the mascot page's server, drawings and choices, and
+	// MascotGuilds the servers whose mascot the viewer may set.
+	MascotPage   *mascotPage
+	MascotGuilds []Guild
 
 	StartsLocal       string
 	EndsLocal         string
@@ -237,6 +245,11 @@ func (s *Server) render(w http.ResponseWriter, page string, data pageData) {
 		}
 		data.ViewerHasAvatar = err == nil && person.ChosenDrawingID != 0
 	}
+	mascot, err := s.pageMascot(data)
+	if err != nil {
+		log.Printf("[discord-signup] the mascot for %s: %v", page, err)
+	}
+	data.Mascot = mascot
 	tmpl, err := templates.Clone()
 	if err != nil {
 		log.Printf("[discord-signup] clone templates: %v", err)
@@ -313,6 +326,11 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[discord-signup] may %s open the names page: %v", session.DiscordUserID, err)
 	} else {
 		data.MayName = len(guilds) > 0
+	}
+	if guilds, err := s.mascotGuildsOf(session); err != nil {
+		log.Printf("[discord-signup] whose mascots %s may set: %v", session.DiscordUserID, err)
+	} else {
+		data.MascotGuilds = guilds
 	}
 	// Every event in the viewer's servers, so anyone can see what is on and
 	// join from here. Only the events they may edit open; whether they may
@@ -530,11 +548,16 @@ func (s *Server) handleWebCreateEvent(w http.ResponseWriter, r *http.Request) {
 		s.renderFormError(w, session, nil, err)
 		return
 	}
-	if notice := s.peopleOnCreate(r, ev, session); notice != "" {
-		s.redirectWithNotice(w, r, ev.ID, "Created. "+notice)
+	notice := s.peopleOnCreate(r, ev, session)
+	if wantsJSON(r) && notice != "" {
+		writeJSON(w, http.StatusOK, map[string]string{"notice": "Created. " + notice})
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/events/%d", ev.ID), http.StatusSeeOther)
+	query := mascotReactionQuery("created")
+	if notice != "" {
+		query = noticeQuery("Created. "+notice) + "&" + query
+	}
+	http.Redirect(w, r, fmt.Sprintf("/events/%d?%s", ev.ID, query), http.StatusSeeOther)
 }
 
 func (s *Server) renderFormError(w http.ResponseWriter, session *WebSession, ev *Event, err error) {

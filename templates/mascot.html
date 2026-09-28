@@ -1,0 +1,177 @@
+{{define "content"}}
+{{$page := .MascotPage}}
+{{$guild := $page.Guild.ID}}
+{{$current := $page.Current}}
+<div class="card">
+  <div class="row" style="align-items:center">
+    <h3 style="margin:0">{{$page.Guild.Name}}: mascot</h3>
+    {{if gt (len $page.Guilds) 1}}
+    <form method="get" action="/mascot" style="margin:0 0 0 auto" class="row home-filter">
+      <label for="mascot-server" class="meta" style="margin:0">Server</label>
+      <select id="mascot-server" name="guild_id" onchange="this.form.submit()">
+        {{range $page.Guilds}}<option value="{{.ID}}"{{if eq .ID $guild}} selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+      <noscript><button class="ghost">Show</button></noscript>
+    </form>
+    {{end}}
+  </div>
+  <p class="meta">The mascot sits in the masthead and on the home page for everyone who has this server chosen, and
+    on this server's event pages. It cheers when someone joins, sighs when they leave, and waves hello. Only the
+    server's owner can change it.</p>
+
+  <div class="hero" style="margin-top:12px">
+    <img class="hero-art small" src="{{.Mascot.Large}}" alt="{{.Mascot.Alt}}" width="130" height="130">
+    <div>
+      {{if $current}}
+        <p>{{if $current.AvatarDrawingID}}A member's avatar is the mascot.{{else}}A drawing made for this server is the mascot.{{end}}</p>
+        {{if ne $current.Format "character"}}<p class="meta">It is a head-and-shoulders drawing, so it cannot be posed: it hops and
+          wobbles instead of playing its own reactions.</p>
+        {{else if $current.ReactionsReady}}<p class="meta">Its reactions are printed.</p>
+        {{else if $current.ReactionFailure}}<p class="err">Its reactions would not print: {{$current.ReactionFailure}}. They are tried again within the hour.</p>
+        {{else}}<p class="meta">Its reactions are being printed; until then it hops and wobbles.</p>{{end}}
+        <form method="post" action="/mascot/choose" style="margin:0">
+          <input type="hidden" name="guild_id" value="{{$guild}}"><input type="hidden" name="source" value="site">
+          <button class="ghost btn-sm">Use the site's own mascot</button></form>
+      {{else}}
+        <p>This server shows the site's own mascot, Maleeha. Make one below, or choose a member's avatar.</p>
+      {{end}}
+      <p class="row" style="gap:6px;margin-top:10px">
+        <span class="meta">Try it:</span>
+        {{range $page.Reactions}}<button type="button" class="btn-sm ghost" data-mascot-react="{{.}}">{{.}}</button>{{end}}
+      </p>
+    </div>
+  </div>
+
+  {{with $page.Request}}
+  <div class="avatar-progress" id="mascot-progress" data-request-id="{{.ID}}"{{if not .Open}} hidden{{end}}>
+    <span class="spinner" aria-hidden="true"></span>
+    <span>Drawing{{if eq .Kind "edit_drawing"}} a change{{end}}{{if .Comment}}: “{{.Comment}}”{{end}}. Usually under ten
+      minutes; the page shows it when it is done.</span>
+  </div>
+  {{if eq .State "failed"}}<div class="err">The last drawing did not come out: {{.Failure}}</div>{{end}}
+  {{end}}
+
+  <h4 class="avatar-heading">Drawings for this server</h4>
+  {{if not $page.Drawings}}<p class="meta">None yet.</p>{{end}}
+  <div class="avatar-gallery">
+    {{range $page.Drawings}}
+    {{$isCurrent := and $current (eq $current.MascotDrawingID .ID)}}
+    <figure class="avatar-tile{{if $isCurrent}} is-chosen{{end}}">
+      <div class="tile-images">
+        <img src="/mascot/drawings/{{.ID}}.webp" alt="Drawing {{.Number}}" width="180" height="180" loading="lazy">
+        <img class="tile-full" src="/mascot/drawings/{{.ID}}-full.webp" alt="Drawing {{.Number}}, whole" width="100" height="180" loading="lazy">
+      </div>
+      <figcaption>
+        <strong>#{{.Number}}</strong>{{if $isCurrent}} <span class="pill open">mascot</span>{{end}}
+        <span class="tile-how">{{if eq .Kind "edit_drawing"}}a change{{else if eq .Kind "from_photo"}}from a photo{{else}}from a description{{end}}{{if .Comment}}: “{{.Comment}}”{{end}}</span>
+      </figcaption>
+      <div class="row tile-actions">
+        {{if not $isCurrent}}
+        <form method="post" action="/mascot/choose">
+          <input type="hidden" name="guild_id" value="{{$guild}}"><input type="hidden" name="source" value="drawing">
+          <input type="hidden" name="drawing_id" value="{{.ID}}">
+          <button class="btn-sm">Make it the mascot</button></form>
+        {{end}}
+        <button type="button" class="btn-sm ghost" data-change-drawing="{{.ID}}">Change this</button>
+        <form method="post" action="/mascot/drawings/delete" data-confirm="Delete this drawing?">
+          <input type="hidden" name="guild_id" value="{{$guild}}"><input type="hidden" name="drawing_id" value="{{.ID}}">
+          <button class="btn-sm danger">Delete</button></form>
+      </div>
+    </figure>
+    {{end}}
+  </div>
+
+  <h4 class="avatar-heading">Ask for a drawing</h4>
+  <form method="post" action="/mascot/requests" enctype="multipart/form-data" class="avatar-upload" id="mascot-ask">
+    <input type="hidden" name="guild_id" value="{{$guild}}">
+    <fieldset class="avatar-kinds">
+      <label class="check"><input type="radio" name="kind" value="describe" checked> Draw it from a description</label>
+      {{if $page.PhotosReady}}<label class="check"><input type="radio" name="kind" value="from_photo"> Draw it from a photo</label>{{end}}
+      {{if $page.Drawings}}
+      <label class="check"><input type="radio" name="kind" value="edit_drawing">
+        Change drawing <select name="base_drawing_id" aria-label="Which drawing">
+          {{range $page.Drawings}}<option value="{{.ID}}"{{if and $current (eq $current.MascotDrawingID .ID)}} selected{{end}}>#{{.Number}}</option>{{end}}
+        </select></label>
+      {{end}}
+    </fieldset>
+    <div data-photo-fields hidden>
+      <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" aria-label="The photo">
+      <p class="hint">A person, a pet, a toy, a logo. JPEG, PNG or WebP. It is deleted once the drawing is done.</p>
+      <label class="check"><input type="checkbox" name="consent" value="yes">
+        I may use this photo, and anyone in it agreed to be the server's mascot.</label>
+    </div>
+    <label for="mascot-comment">What should it look like?</label>
+    <textarea id="mascot-comment" name="comment" rows="3" maxlength="{{$page.CommentLimit}}"
+      placeholder="For example: a raccoon in a cowboy hat and a sparkly vest, holding a string of fairy lights"></textarea>
+    <p class="hint">Needed for a description or a change; optional with a photo. An AI model on this site's server reads
+      it, and the photo, to draw the mascot. A server's first drawing becomes its mascot when it is done; after that,
+      choose. {{$page.PerDay}} drawings a day; {{$page.DrawingsLeft}} left today.</p>
+    <button{{if or (not $page.DrawingsLeft) (and $page.Request $page.Request.Open)}} disabled{{end}}>Draw it</button>
+  </form>
+
+  <h4 class="avatar-heading">Or use a member's avatar</h4>
+  <p class="meta">The avatars members of this server show beside their names. If they delete the drawing, the server
+    goes back to the site's own mascot.</p>
+  {{if not $page.MemberAvatars}}<p class="meta">No member of this server shows an avatar yet.</p>{{end}}
+  <div class="avatar-gallery">
+    {{range $page.MemberAvatars}}
+    {{$isCurrent := and $current (eq $current.AvatarDrawingID .DrawingID)}}
+    <figure class="avatar-tile{{if $isCurrent}} is-chosen{{end}}">
+      <div class="tile-images"><img src="/avatars/{{.DiscordUserID}}.webp" alt="" width="180" height="180" loading="lazy"></div>
+      <figcaption><strong>{{if .DisplayName}}{{.DisplayName}}{{else}}You{{end}}</strong>{{if $isCurrent}} <span class="pill open">mascot</span>{{end}}
+        {{if ne .Format "character"}}<span class="pill" title="Drawn before whole bodies, so it cannot be posed">portrait only</span>{{end}}</figcaption>
+      {{if not $isCurrent}}
+      <form method="post" action="/mascot/choose">
+        <input type="hidden" name="guild_id" value="{{$guild}}"><input type="hidden" name="source" value="avatar">
+        <input type="hidden" name="drawing_id" value="{{.DrawingID}}">
+        <button class="btn-sm">Make it the mascot</button></form>
+      {{end}}
+    </figure>
+    {{end}}
+  </div>
+</div>
+
+<script>
+(function () {
+  var form = document.getElementById("mascot-ask");
+  var photoFields = form.querySelector("[data-photo-fields]");
+  var comment = form.querySelector("textarea[name=comment]");
+  var sync = function () {
+    var kind = (form.querySelector("input[name=kind]:checked") || {}).value;
+    photoFields.hidden = kind !== "from_photo";
+    photoFields.querySelectorAll("input").forEach(function (i) { i.required = kind === "from_photo"; });
+    comment.required = kind !== "from_photo";
+  };
+  form.addEventListener("change", sync);
+  sync();
+  document.addEventListener("click", function (e) {
+    var button = e.target.closest("[data-change-drawing]");
+    if (!button) return;
+    form.querySelector("input[value=edit_drawing]").checked = true;
+    form.querySelector("select[name=base_drawing_id]").value = button.getAttribute("data-change-drawing");
+    sync();
+    comment.focus();
+    comment.scrollIntoView({ block: "center", behavior: "smooth" });
+  });
+
+  // While a drawing is under way, ask every few seconds, and show the page
+  // again when it is done.
+  var progress = document.getElementById("mascot-progress");
+  if (!progress || progress.hidden) return;
+  var requestID = progress.getAttribute("data-request-id");
+  var poll = function () {
+    fetch("/mascot/status?guild_id=" + encodeURIComponent({{$guild}}), { headers: { Accept: "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (body) {
+        var request = body.request;
+        if (request && String(request.id) === requestID && (request.state === "waiting" || request.state === "drawing")) {
+          return setTimeout(poll, 5000);
+        }
+        location.reload();
+      })
+      .catch(function () { setTimeout(poll, 10000); });
+  };
+  setTimeout(poll, 5000);
+})();
+</script>
+{{end}}

@@ -73,10 +73,41 @@ h2,h3{font-family:var(--display);font-weight:400;letter-spacing:.3px}
 .pill.closed{color:var(--ink);background:var(--warn)}
 .pill.cancelled{color:var(--paper-light);background:var(--bad)}
 .pill.completed{color:var(--dim);border-color:var(--dim);background:transparent}
-/* Maleeha, the mascot: a sticker in the masthead that tips when pointed at,
-   and a larger drawing beside the words on the sign-in and empty pages. */
+/* The mascot — the server's own, or Maleeha, the site's: a sticker in the
+   masthead that tips when pointed at, and a larger drawing beside the words
+   on the sign-in and empty pages. */
+header .mascot-link,header .mascot-link:hover,header .mascot-link:active{display:block;padding:0;margin:0;border:0;
+  background:none;box-shadow:none;transform:none;cursor:pointer;min-height:0}
 .mascot{display:block;width:64px;height:64px;margin:-6px -4px -10px -6px;filter:drop-shadow(2px 2px 0 var(--ink));transition:transform .15s}
 .mascot-link:hover .mascot{transform:rotate(-8deg) scale(1.06)}
+/* Its reactions: the sticker jumps, and the mascot pops up in the corner,
+   playing its loop or moving its still drawing. */
+.mascot-link.react .mascot{animation:sticker-hop .5s ease-out 2}
+.mascot-link.react-left .mascot{animation:sticker-sag 1.2s ease-in-out 1 forwards}
+.mascot-pop{position:fixed;right:18px;bottom:0;z-index:50;pointer-events:none;
+  animation:pop-up .35s cubic-bezier(.2,1.4,.5,1) both}
+.mascot-pop.leaving{animation:pop-down .35s ease-in both}
+.mascot-pop img{display:block;filter:drop-shadow(3px 3px 0 var(--ink))}
+.mascot-pop.is-loop img{width:180px;height:auto;margin-bottom:-6px}
+.mascot-pop.is-still{bottom:16px}
+.mascot-pop.is-still img{width:150px;height:150px;border-radius:50%}
+.mascot-pop.is-still.react-hello img{animation:still-wave .6s ease-in-out 3;transform-origin:50% 90%}
+.mascot-pop.is-still.react-joined img{animation:still-hop .45s ease-out 4}
+.mascot-pop.is-still.react-created img{animation:still-spin 1.1s cubic-bezier(.3,1.3,.6,1) 2}
+.mascot-pop.is-still.react-waitlisted img{animation:still-shrug .8s ease-in-out 2;transform-origin:50% 100%}
+.mascot-pop.is-still.react-left img{animation:still-sigh 2.2s ease-in-out 1 forwards;transform-origin:50% 100%}
+.mascot-pop.is-still.react-poked img{animation:still-wobble .5s ease-in-out 2}
+@keyframes pop-up{from{transform:translateY(110%)}to{transform:none}}
+@keyframes pop-down{from{transform:none}to{transform:translateY(120%)}}
+@keyframes sticker-hop{0%,100%{transform:none}40%{transform:translateY(-9px) rotate(-6deg)}}
+@keyframes sticker-sag{0%{transform:none}50%,100%{transform:translateY(4px) rotate(8deg) scale(.94)}}
+@keyframes still-wave{0%,100%{transform:rotate(0)}30%{transform:rotate(-12deg)}70%{transform:rotate(10deg)}}
+@keyframes still-hop{0%,100%{transform:translateY(0) scale(1,1)}15%{transform:translateY(0) scale(1.1,.9)}50%{transform:translateY(-38px) scale(.95,1.06)}85%{transform:translateY(0) scale(1.06,.94)}}
+@keyframes still-spin{0%{transform:translateY(0) rotate(0)}50%{transform:translateY(-40px) rotate(180deg)}100%{transform:translateY(0) rotate(360deg)}}
+@keyframes still-shrug{0%,100%{transform:none}35%{transform:rotate(-7deg) translateY(-6px)}65%{transform:rotate(7deg) translateY(-6px)}}
+@keyframes still-sigh{0%{transform:none;filter:drop-shadow(3px 3px 0 var(--ink))}40%{transform:translateY(-6px) scale(1.03,.97)}100%{transform:translateY(18px) rotate(-6deg) scale(.92);filter:drop-shadow(3px 3px 0 var(--ink)) grayscale(.7)}}
+@keyframes still-wobble{0%,100%{transform:rotate(0)}20%{transform:rotate(-14deg) scale(1.05)}40%{transform:rotate(11deg)}60%{transform:rotate(-7deg)}80%{transform:rotate(4deg)}}
+@media (prefers-reduced-motion:reduce){.mascot-pop{display:none}.mascot-link.react .mascot{animation:none}}
 .hero{display:flex;align-items:center;gap:22px}
 .hero-art{flex:none;width:200px;height:200px;margin:-8px -6px -12px -10px}
 .hero-art.small{width:130px;height:130px}
@@ -579,7 +610,7 @@ header .header-me .avatar{border-color:var(--paper-light)}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style></head><body>
 <header>
-  <a href="/" class="mascot-link" aria-hidden="true" tabindex="-1"><img class="mascot" src="/art/maleeha-128.webp" alt="" width="64" height="64"></a>
+  <button type="button" class="mascot-link" id="mascot" data-guild="{{.Mascot.GuildID}}" aria-hidden="true" tabindex="-1" title="Poke"><img class="mascot" src="{{.Mascot.Small}}" alt="" width="64" height="64"></button>
   <h1><a href="/">Events</a></h1>
   <span class="kana" aria-hidden="true">イベント</span>
   <span class="spacer"></span>
@@ -592,6 +623,71 @@ header .header-me .avatar{border-color:var(--paper-light)}
 {{if .Notice}}<div class="ok">{{.Notice}}</div>{{end}}
 {{template "content" .}}
 </main>
+<div class="mascot-pop" id="mascot-pop" aria-hidden="true" hidden><img alt=""></div>
+<script type="application/json" id="mascot-reactions">{{.Mascot.Reactions}}</script>
+<script>
+// The mascot reacts to what the viewer just did. The page before names the
+// reaction in ?mascot= (joined, waitlisted, left, created); the home page
+// says hello once a browser session; a click on the masthead mascot pokes
+// it. A character mascot plays its printed loop for the reaction; any other
+// — the site's own, a portrait, one whose loops are still printing — moves
+// its still drawing instead. Nothing moves for a reader who asked for less
+// motion.
+(function () {
+  var sticker = document.getElementById("mascot");
+  var pop = document.getElementById("mascot-pop");
+  if (!sticker || !pop) return;
+  var loops = JSON.parse(document.getElementById("mascot-reactions").textContent || "null") || {};
+  var still = {{.Mascot.Large}};
+  var names = ["hello", "joined", "waitlisted", "left", "created", "poked"];
+  var quiet = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var timer = null;
+  function react(name) {
+    if (quiet || names.indexOf(name) < 0) return;
+    var img = pop.querySelector("img");
+    var loop = loops[name];
+    pop.className = "mascot-pop " + (loop ? "is-loop" : "is-still") + " react-" + name;
+    // Setting src again restarts an animated WebP from its first frame.
+    img.src = "";
+    img.src = loop || still;
+    pop.hidden = false;
+    sticker.classList.remove("react");
+    void sticker.offsetWidth;
+    sticker.classList.add("react", "react-" + name);
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      pop.classList.add("leaving");
+      timer = setTimeout(function () {
+        pop.hidden = true;
+        sticker.className = "mascot-link";
+      }, 350);
+    }, name === "poked" ? 1800 : 2600);
+  }
+  window.mascotReact = react;
+  sticker.addEventListener("click", function () { react("poked"); });
+  document.addEventListener("click", function (e) {
+    var button = e.target.closest("[data-mascot-react]");
+    if (button) react(button.getAttribute("data-mascot-react"));
+  });
+  var params = new URLSearchParams(location.search);
+  var asked = params.get("mascot");
+  if (asked) {
+    // Drop it from the address so a reload does not play it again.
+    params.delete("mascot");
+    var rest = params.toString();
+    history.replaceState(null, "", location.pathname + (rest ? "?" + rest : "") + location.hash);
+    setTimeout(function () { react(asked); }, 250);
+  } else if (location.pathname === "/") {
+    try {
+      var key = "mascot-hello-" + (sticker.getAttribute("data-guild") || "site");
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "1");
+        setTimeout(function () { react("hello"); }, 400);
+      }
+    } catch (e) { /* storage refused: no hello, nothing else lost */ }
+  }
+})();
+</script>
 <script>
 // Rewrite every server-rendered UTC timestamp into the reader's own timezone.
 // Intl.DateTimeFormat with an undefined locale uses the browser's settings, so

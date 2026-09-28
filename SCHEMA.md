@@ -261,6 +261,20 @@ Drawings of a person, kept in a gallery; they choose which shows beside their na
 
 **`avatar_updates`** — append-only: `id`, `discord_user_id`, `action` (`requested_<kind>`, `drawing_started`, `drawing_saved`, `drawing_failed`, `chose`, `deleted_drawing`, `deleted_photo`, `removed`, `set_by_operator`), `detail` and `at`. Kept after everything else is removed.
 
+### Mascots, new 2026-09-28
+
+Each server's own mascot; a server with no row shows the site's own, Maleeha, built into the binary. Set by the server's owner (`bot_guilds.owner_id`) or a site admin.
+
+**`guild_mascots`** — `guild_id` PK; exactly one of `mascot_drawing_id` (a drawing made for the server) and `avatar_drawing_id` (a member's shown avatar) is set, the other 0; `set_by`, `set_at` (the pages put it in the image address, so a new mascot is a new address); `reaction_failure`, `reaction_failed_at`, the last time its reaction loops would not print, so the drawer waits an hour. Deleting a member's drawing, or all of theirs, deletes the row that shows it.
+
+**`guild_mascot_reactions`** — `(guild_id, reaction)` PK; `reaction` one of `mascotReactions` (`hello`, `joined`, `waitlisted`, `left`, `created`, `poked`); `image_webp`, a 2-second animated loop of the character at 270 by 360; `printed_at`. They belong to the choice in `guild_mascots` and go when it changes. A portrait mascot has none.
+
+**`mascot_drawings`** — as `avatar_drawings`, keyed by `guild_id` instead of a person; always a `character`; `request_id` always set.
+
+**`mascot_requests`** — as `avatar_requests`, keyed by `guild_id`, with `requested_by`; `kind` (`describe`, from `comment` alone; `from_photo`; `edit_drawing`); `photo_file_id`, the photo sent with a `from_photo` request (`owner_ref` `mascot:<guild id>`), purged and cleared when the drawing is done or fails. At most one waiting or drawing per server, six a day.
+
+**`guild_mascot_updates`** — append-only: `guild_id`, `discord_user_id` (who; `drawer` for the drawer's steps), `action` (`requested_<kind>`, `drawing_started`, `drawing_saved`, `drawing_failed`, `chose_mascot_drawing`, `chose_member_avatar`, `cleared`, `deleted_drawing`, `avatar_deleted`), `detail`, `at`.
+
 `events.pictures_disabled` (INTEGER, 0): no picture of who is going shown or painted for this event; its scene and pictures are kept, inactive, and come back when pictures are switched on again. Logged in `event_updates` as `picture`.
 
 ### `event_scenes` — the scene an event's picture is set in, new 2026-09-28

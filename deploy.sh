@@ -59,11 +59,11 @@ step "Building $BINARY…"
 go build -o "$BINARY" ./cmd/discord-signup-store
 echo "    built: $(ls -lh "$BINARY" | awk '{print $5}')"
 
-# The avatar drawer and the event picture painter run from the scheduler, read
-# art/kit.js and print with art/render-*.mjs, whose playwright-core lives in
-# art/node_modules.
-step "Building discord-avatar-drawer, discord-event-picture-painter and the art kit's modules…"
-go build -o discord-avatar-drawer ./cmd/discord-avatar-drawer
+# The character drawer (avatars and mascots) and the event picture painter run
+# from the scheduler, read art/kit.js and print with art/render-*.mjs, whose
+# playwright-core lives in art/node_modules.
+step "Building discord-character-drawer, discord-event-picture-painter and the art kit's modules…"
+go build -o discord-character-drawer ./cmd/discord-character-drawer
 go build -o discord-event-picture-painter ./cmd/discord-event-picture-painter
 ( cd art && npm ci --silent )
 
@@ -93,7 +93,7 @@ mkdir -p "$BIN_DIR"
 # onto a running binary fails with "Text file busy" and left the service
 # stopped on 2026-09-28. A rename swaps the name and the running process keeps
 # the old file.
-for installed in "$BINARY" discord-avatar-drawer discord-event-picture-painter; do
+for installed in "$BINARY" discord-character-drawer discord-event-picture-painter; do
   cp "$installed" "$BIN_DIR/$installed.new"
   mv -f "$BIN_DIR/$installed.new" "$BIN_DIR/$installed"
 done

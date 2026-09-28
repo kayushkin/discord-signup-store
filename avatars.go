@@ -21,7 +21,7 @@ import (
 // one shows beside their name on the event pages, or none. They get a new
 // drawing by asking for one — from a new photo, again from the photo they
 // uploaded before, or by changing a drawing they have — each with a comment on
-// what they want it to look like. cmd/discord-avatar-drawer, which the
+// what they want it to look like. cmd/discord-character-drawer, which the
 // scheduler runs, takes each request, has a model draw it in art/kit.js's
 // form, prints it and hands back the code and the print. Only the person can
 // ask, choose or delete. Their photo is kept in file-store until they delete
@@ -540,9 +540,13 @@ func (s *Store) ChooseAvatarDrawing(discordUserID string, drawingID int64) error
 }
 
 // DeleteAvatarDrawing deletes one of the person's drawings. The one shown is
-// no longer shown.
+// no longer shown, and a server showing it as its mascot shows the site's
+// own again.
 func (s *Store) DeleteAvatarDrawing(discordUserID string, drawingID int64) error {
 	return s.changeAvatar(discordUserID, "deleted_drawing", strconv.FormatInt(drawingID, 10), func(tx *sql.Tx) error {
+		if err := dropMascotsShowingAvatarDrawings(tx, discordUserID, drawingID); err != nil {
+			return err
+		}
 		result, err := tx.Exec(`DELETE FROM avatar_drawings WHERE id = ? AND discord_user_id = ?`, drawingID, discordUserID)
 		if err != nil {
 			return fmt.Errorf("delete avatar drawing: %w", err)
@@ -579,10 +583,14 @@ func (s *Store) ForgetAvatarPhoto(discordUserID string) error {
 	})
 }
 
-// RemoveAvatarEverything deletes the person's drawings, requests and row.
-// The caller purges the photo first. The history stays.
+// RemoveAvatarEverything deletes the person's drawings, requests and row,
+// and any server's mascot that was one of them. The caller purges the photo
+// first. The history stays.
 func (s *Store) RemoveAvatarEverything(discordUserID string) error {
 	return s.changeAvatar(discordUserID, "removed", "", func(tx *sql.Tx) error {
+		if err := dropMascotsShowingAvatarDrawings(tx, discordUserID, 0); err != nil {
+			return err
+		}
 		for _, table := range []string{"avatar_drawings", "avatar_requests", "avatar_people"} {
 			if _, err := tx.Exec(`DELETE FROM `+table+` WHERE discord_user_id = ?`, discordUserID); err != nil {
 				return fmt.Errorf("remove from %s: %w", table, err)
