@@ -17,6 +17,11 @@
 // roster change only adds someone. CHROME_PATH names the Chrome or Chromium to use; img2webp
 // (libwebp's tools) joins the frames.
 //
+// A scene gives fixed places for each stage of the crowd (SCENE.stages, keyed
+// by size; --stages says which sizes): the page takes the smallest stage that
+// holds everyone and fills its first places. An older scene gives cast(n, t)
+// instead, a place for each of n people.
+//
 // The loop is SCENE.seconds long (2 unless it says), at 12 frames a second.
 // Every frame is the scene at a moment t from 0 up to 1: the scene's cast,
 // background and foreground are given t, and each person also sways a little
@@ -37,8 +42,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const flags = process.argv.slice(2).filter(a => a.startsWith('--'));
 const [sceneFile, peopleFile, outFile, countArgument] = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const mode = flags.includes('--still') ? 'still' : flags.includes('--sheet') ? 'sheet' : flags.includes('--cast-report') ? 'cast-report' : 'loop';
-if (!sceneFile || !peopleFile || !outFile || flags.some(f => !['--still', '--sheet', '--cast-report'].includes(f))) {
-  console.error('usage: node render-event-picture.mjs <scene.js> <people.json> <out.webp> [count] [--still | --sheet | --cast-report]');
+// --stages=5,10,20,40: the crowd sizes the scene lays out places for.
+const stagesFlag = flags.find(f => f.startsWith('--stages='));
+const STAGES = stagesFlag ? stagesFlag.slice('--stages='.length).split(',').map(Number) : null;
+if (!sceneFile || !peopleFile || !outFile || (STAGES && STAGES.some(n => !(n > 0))) ||
+    flags.some(f => !['--still', '--sheet', '--cast-report'].includes(f) && !f.startsWith('--stages='))) {
+  console.error('usage: node render-event-picture.mjs <scene.js> <people.json> <out.webp> [count] [--still | --sheet | --cast-report] [--stages=5,10,20,40]');
   process.exit(2);
 }
 const FRAMES_PER_SECOND = 12;
@@ -60,6 +69,7 @@ try {
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.setContent('<!doctype html><meta charset="utf-8"><body></body>');
   await page.addScriptTag({ content: kit + `\nwindow.people = []; var PEOPLE_COUNT = ${people.length}, CAST = [], JOINTS = [], T = 0,
+    STAGES = ${JSON.stringify(STAGES)},
     PEOPLE = ${JSON.stringify(people.map(p => ({ avatar: p.format !== 'background' })))};` });
   // Each person, and the scene, declares its own constant, so each runs in a
   // function of its own and hands the constant back.
@@ -76,10 +86,38 @@ try {
   if (errors.length) throw new Error(errors.join('\n'));
   const seconds = await page.evaluate(() => {
     const scene = window.SCENE_DEFINED;
-    if (typeof scene !== 'object' || !(scene.width > 0) || !(scene.height > 0) ||
-        typeof scene.background !== 'function' || typeof scene.cast !== 'function') {
-      throw new Error('scene.js does not define SCENE with width, height, background() and cast(n)');
+    if (typeof scene !== 'object' || !(scene.width > 0) || !(scene.height > 0) || typeof scene.background !== 'function' ||
+        (typeof scene.stages !== 'object' && typeof scene.cast !== 'function')) {
+      throw new Error('scene.js does not define SCENE with width, height, background() and stages');
     }
+    // Fixed places for each stage: check them all, whoever is going now.
+    if (typeof scene.stages === 'object') {
+      if (!STAGES) throw new Error('the scene gives stages, and the painter named none');
+      const problems = [];
+      for (const size of STAGES) {
+        const places = scene.stages[size];
+        if (!Array.isArray(places) || places.length !== size) { problems.push(`SCENE.stages[${size}] must list exactly ${size} places`); continue; }
+        places.forEach((p, i) => {
+          if (![p && p.x, p && p.y, p && p.height].every(Number.isFinite) || !(p.height > 0)) problems.push(`SCENE.stages[${size}][${i}] needs a finite x, y and height`);
+          else if (p.x < 0 || p.x > scene.width || p.y < 0 || p.y > scene.height + 40) problems.push(`SCENE.stages[${size}][${i}] stands outside the picture, at ${Math.round(p.x)}, ${Math.round(p.y)}`);
+          if (p && p.pose !== undefined && typeof p.pose !== 'object' && typeof p.pose !== 'function') problems.push(`SCENE.stages[${size}][${i}].pose must be a pose or a function of t`);
+          // Front to back: the first places go to people with avatars, so
+          // nobody listed later may stand nearer (lower) than one before.
+          if (i > 0 && Number.isFinite(p && p.y) && p.y > places[i - 1].y + 1) problems.push(`SCENE.stages[${size}][${i}] stands nearer (y ${Math.round(p.y)}) than place ${i - 1} (y ${Math.round(places[i - 1].y)}): list places front to back`);
+        });
+      }
+      const extra = Object.keys(scene.stages).map(Number).filter(size => !STAGES.includes(size));
+      if (extra.length) problems.push(`SCENE.stages has places for ${extra.join(', ')}, which are not this event's stages (${STAGES.join(', ')})`);
+      if (problems.length) throw new Error(problems.slice(0, 8).join('; '));
+    }
+    // The places for n people at moment t.
+    const castFor = (n, t) => {
+      if (typeof scene.stages !== 'object') return scene.cast(n, t);
+      const stage = STAGES.find(size => size >= n);
+      if (stage === undefined) throw new Error(`${n} people is more than the largest stage, ${STAGES[STAGES.length - 1]}`);
+      return scene.stages[stage].slice(0, n).map(p => ({ ...p, pose: typeof p.pose === 'function' ? p.pose(t) : p.pose }));
+    };
+    window.castFor = castFor;
     const seconds = scene.seconds ?? 2;
     if (!(seconds >= 1 && seconds <= 4)) throw new Error('SCENE.seconds must be from 1 to 4');
     // A portrait-only person is placed as a grown-up character would be.
@@ -97,7 +135,7 @@ try {
     };
     // One frame, at moment t, as a canvas.
     window.frameAt = t => {
-      const n = window.people.length, cast = scene.cast(n, t);
+      const n = window.people.length, cast = castFor(n, t);
       if (!Array.isArray(cast) || cast.length !== n ||
           cast.some(c => ![c && c.x, c && c.y, c && c.height].every(Number.isFinite) || !(c.height > 0))) {
         throw new Error(`SCENE.cast(${n}, ${t}) must give ${n} people, each with a finite x, y and height`);
@@ -131,6 +169,9 @@ try {
     const withAvatars = people.filter(p => p.format !== 'background').length;
     writeFileSync(outFile, JSON.stringify(await page.evaluate(withAvatars => {
       const scene = window.SCENE_DEFINED, moves = [];
+      // Fixed places cannot move within a stage; the check above has read
+      // them. Only an older scene's cast(n) is measured.
+      if (typeof scene.stages === 'object') return { moves };
       const castOf = n => {
         PEOPLE = Array.from({ length: n }, (_, i) => ({ avatar: i < withAvatars }));
         const cast = scene.cast(n, 0);

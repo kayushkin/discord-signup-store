@@ -10,13 +10,13 @@ const SCENE = {
   width: 1200, height: 400,          // always this size: a wide banner
   // Everything behind the people: sky, room, furniture, props, lettering.
   background() { part(…); stroke(…); … },
-  // Who stands where, doing what, for any n from 1 to 12.
-  cast(n) {
-    return [
-      { x: 300, y: 370, height: 260, pose: { ...POSES.sit, expression: 'laugh' } },
-      { x: 520, y: 370, height: 260, pose: { ...POSES.hold, look: 'left' }, mirror: true },
-      …
-    ];
+  // Fixed places for each stage of the crowd: event.txt names the stages.
+  // For stages 5, 10, 20, 40:
+  stages: {
+    5:  [ { x: 300, y: 370, height: 260, pose: { ...POSES.sit, expression: 'laugh' } },
+          { x: 520, y: 370, height: 260, pose: t => addToPose(POSES.wave, 'upperArmR', 20 * loop(t)), mirror: true },
+          … five in all ],
+    10: [ … ten ], 20: [ … twenty ], 40: [ … forty ],
   },
   // Optional: anything in front of the people — a table's edge, a prop in a
   // hand, confetti, a banner across the bottom.
@@ -27,17 +27,16 @@ const SCENE = {
 
 ## Motion
 
-The picture is a short loop, printed at 12 frames a second. `cast(n, t)`,
-`background(t)` and `foreground(t)` are called for every frame with `t`, the
+The picture is a short loop, printed at 12 frames a second. `background(t)`,
+`foreground(t)` and every function `pose` are called for every frame with `t`, the
 moment in the loop, from 0 up to 1 — and 1 is 0 again, so the loop must join
 up. `loop(t, turns, offset)` is `sin(2π(turns·t + offset))`: anything moved by
 whole turns of it joins up. `T` holds `t` too.
 
 Make the scene move the way the event does: a flashlight sweeping, a ghost
 bobbing, candles flickering, someone waving, dancers stepping, a ball flying
-between two players, steam off a mug. Move people by changing their pose with
-`t` in `cast` — `addToPose(pose, 'upperArmR', 25 * loop(t))` — or their `x` and
-`y`. Keep it gentle and readable: one or two things moving clearly, the rest
+between two players, steam off a mug. Move people by giving a place's `pose` as a function of
+`t` — `t => addToPose(POSES.wave, 'upperArmR', 25 * loop(t))`. Keep it gentle and readable: one or two things moving clearly, the rest
 still. Props held follow the hands by themselves, since `JOINTS` is worked out
 again for every frame.
 
@@ -46,13 +45,23 @@ step with the others. Cast someone `idle: false` to stop that, for a pose that
 must hold exactly.
 
 Each person is a **character** (`CHARACTER.md`): a whole body the page paints
-for you, posed. For each one `cast(n)` gives:
+for you, posed. You give **places**, a fixed list for each **stage** of the
+crowd. event.txt names the event's stages, from its limit: an event for 6 has
+one stage of 6 places; one for 12 has stages of 6 and 12; one with no limit
+has 5, 10, 20 and 40. The page takes the smallest stage that holds everyone
+going and puts person `i` in place `i`, leaving the rest of the places empty;
+so people keep their places as others join, and move only when the crowd
+passes into the next stage. **List each stage's places front to back** —
+no place nearer the viewer (lower in the picture) than one listed before it —
+and best first: the first places go to people with avatars, so they stand in
+front and nobody covers them. The painter checks the order. Lay out each stage as a whole, so it looks right
+full and with only its first few places filled. For each place:
 
 - `x`, `y`: where their feet stand. The kit puts their lowest foot on `y`,
   whatever the pose — a seated person's legs fold and they come down with them.
 - `height`: how tall they would stand, in pixels. Nearer people taller; at
   least 150 so faces read.
-- `pose`: one of the kit's `POSES` — `stand`, `wave`, `cheer`, `point`, `sit`,
+- `pose`: a pose, or a function of `t` giving one for moving: one of the kit's `POSES` — `stand`, `wave`, `cheer`, `point`, `sit`,
   `walk`, `dance`, `hold`, `scared`, `shrug`, `jump` — changed as you like, or
   your own. A pose turns bones at their joints, in degrees from standing with
   arms at the sides: `upperArmL`, `forearmL`, `handL`, `upperArmR`, `forearmR`,
@@ -70,11 +79,15 @@ for you, posed. For each one `cast(n)` gives:
   them off the ground (0.1 is a jump), `behind: ['armL']` to put an arm behind
   the body.
 - `mirror`: flip them left to right, to face or turn toward someone.
+- `idle: false` stops the kit's own sway for someone whose pose must hold.
+
+A big stage is a crowd: 40 people in a 1200 by 400 picture stand in rows,
+the back rows smaller, faces never covered.
 
 People are painted after `background()`, back to front by where their feet
 are: whoever stands higher up the picture is further away and is painted
 first, overlapped by those nearer. While `background()` and `foreground()` run,
-`CAST` is what `cast(PEOPLE_COUNT)` returned and `JOINTS[i]` is where person
+`CAST` is the places in use now, one per person, and `JOINTS[i]` is where person
 `i`'s joints landed: `head`, `top`, `pelvis`, `handL`, `handR`, `footL`,
 `footR` (each `[x, y]`), and `scale`, pixels per character unit. Draw a torch in
 `JOINTS[i].handR`, a chair under `JOINTS[i].pelvis`, a hat on `JOINTS[i].top`.
@@ -93,13 +106,10 @@ scene need do nothing different for them.
 
 Rules:
 
-- `cast(n)` must return exactly `n` people for every `n` from 1 to 12, all
-  inside the picture, faces not covered by one another or by the foreground.
-- **People stay where they are as the crowd grows.** `cast(n + 1)` gives the
-  first `n` people the same places and heights `cast(n)` gave them, and only
-  adds one: someone joining the event adds a person to the picture and moves
-  nobody. Plan every place from the start — who stands where when there are
-  12 — and have `cast(n)` take the first `n` of them. The painter checks this.
+- `stages` has exactly one list per stage event.txt names, each with exactly
+  that many places, all inside the picture, faces not covered by one another
+  or by the foreground, whether the stage is full or only its first places
+  are used. The painter prints every stage full, and checks the counts.
 - Paint only with the kit's functions and inks (`part`, `stroke`, `capsule`,
   `ellipsePoints`, `halftone`, `harlequin`, `tilt`, `pushTransform`,
   `translateBy`, `rotateBy`, `scaleBy`, `popTransform`, `INK` …). Extra colours

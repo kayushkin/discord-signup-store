@@ -26,9 +26,39 @@ import (
 //     their place, by art/render-event-picture.mjs. No model: someone joining
 //     or leaving costs a few seconds of Chrome.
 
-// eventPictureMaximumPeople is the most people one picture shows: the first
-// to sign up among those going with an avatar.
-const eventPictureMaximumPeople = 12
+// eventPictureStages are the crowd sizes a scene lays out places for, from
+// the event's limit (0 for none). A scene gives each stage a fixed list of
+// places; a picture uses the smallest stage that holds everyone going and
+// fills its first places, so people move only when the crowd passes into the
+// next stage. The last stage is the most people a picture shows.
+//
+//   - A limit of 6 or fewer: one stage, the limit.
+//   - A limit up to 12: half of it, then all of it (12: 6, 12).
+//   - More, or none: 5, 10, 20, 40, stopping at the limit (20: 5, 10, 20;
+//     30: 5, 10, 20, 30; none: 5, 10, 20, 40).
+func eventPictureStages(capacity int) []int {
+	switch {
+	case capacity > 0 && capacity <= 6:
+		return []int{capacity}
+	case capacity > 0 && capacity <= 12:
+		return []int{(capacity + 1) / 2, capacity}
+	}
+	var stages []int
+	for _, size := range []int{5, 10, 20, 40} {
+		if capacity > 0 && size >= capacity {
+			return append(stages, capacity)
+		}
+		stages = append(stages, size)
+	}
+	return stages
+}
+
+// eventPictureMostPeople is the largest stage: the most people a picture
+// of the event shows, the first to sign up among those with avatars first.
+func eventPictureMostPeople(capacity int) int {
+	stages := eventPictureStages(capacity)
+	return stages[len(stages)-1]
+}
 
 // eventPictureMaximumBytes bounds a painted picture handed back: a loop of
 // frames, 700 KB for two seconds of the haunted house on 2026-09-28.
@@ -114,19 +144,22 @@ func shortHash(parts ...string) string {
 // is part of every details signature, so a new version asks every event for a
 // new scene: on 2026-09-28 scenes went from placing round portraits to casting
 // posed characters, then to moving in a loop, then to crowds with faceless
-// stand-ins for the people going without avatars.
-const eventSceneFormat = "cast-crowd"
+// stand-ins for the people going without avatars, then to fixed places for
+// each stage of the crowd (eventPictureStages).
+const eventSceneFormat = "stages"
 
-// eventDetailsSignature names the details a scene is made from. The date
-// counts only as far as its day and time of day, so a repeating event's
-// scene lasts from one date to the next.
+// eventDetailsSignature names the details a scene is made from, and its
+// stages, since a new limit can ask for other places. The date counts only as
+// far as its day and time of day, so a repeating event's scene lasts from one
+// date to the next.
 func eventDetailsSignature(ev Event) string {
 	d := sceneDetailsOf(ev)
 	when := ""
 	if zone, err := time.LoadLocation(d.Timezone); err == nil && d.StartsAt != 0 {
 		when = time.Unix(d.StartsAt, 0).In(zone).Format("Monday 15:04")
 	}
-	return shortHash(eventSceneFormat, d.Name, d.Description, d.Location, when, d.RecurrenceRule)
+	return shortHash(eventSceneFormat, d.Name, d.Description, d.Location, when, d.RecurrenceRule,
+		fmt.Sprint(eventPictureStages(ev.Capacity)))
 }
 
 // eventPictureSignature names what a picture should show: the scene and who
@@ -155,7 +188,7 @@ func int64Placeholders(ids []int64) (string, []any) {
 
 // EventPictureSubjects is, for each event, who its picture shows: the people
 // going who chose an avatar, in sign-up order, then a faceless stand-in for
-// each of the rest going, at most eventPictureMaximumPeople in all. An event
+// each of the rest going, at most the event's largest stage in all. An event
 // with nobody going who chose an avatar has none: a picture of stand-ins alone
 // would show nobody.
 func (s *Store) EventPictureSubjects(eventIDs []int64) (map[int64][]eventPictureSubject, error) {
@@ -164,6 +197,21 @@ func (s *Store) EventPictureSubjects(eventIDs []int64) (map[int64][]eventPicture
 		return out, nil
 	}
 	placeholders, args := int64Placeholders(eventIDs)
+	most := map[int64]int{}
+	capacities, err := s.db.Query(`SELECT id, capacity FROM events WHERE id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("read event limits: %w", err)
+	}
+	for capacities.Next() {
+		var eventID int64
+		var capacity int
+		if err := capacities.Scan(&eventID, &capacity); err != nil {
+			capacities.Close()
+			return nil, fmt.Errorf("scan event limit: %w", err)
+		}
+		most[eventID] = eventPictureMostPeople(capacity)
+	}
+	capacities.Close()
 	rows, err := s.db.Query(`
 		SELECT s.event_id, s.discord_user_id, d.format, d.drawing_code, d.id
 		FROM signups s
@@ -181,7 +229,7 @@ func (s *Store) EventPictureSubjects(eventIDs []int64) (map[int64][]eventPicture
 		if err := rows.Scan(&eventID, &subject.DiscordUserID, &subject.Format, &subject.DrawingCode, &subject.drawingID); err != nil {
 			return nil, fmt.Errorf("scan event picture subject: %w", err)
 		}
-		if len(out[eventID]) < eventPictureMaximumPeople {
+		if len(out[eventID]) < most[eventID] {
 			out[eventID] = append(out[eventID], subject)
 		}
 	}
@@ -204,7 +252,7 @@ func (s *Store) EventPictureSubjects(eventIDs []int64) (map[int64][]eventPicture
 		if withAvatars == 0 {
 			continue
 		}
-		for range min(going, eventPictureMaximumPeople) - withAvatars {
+		for range min(going, most[eventID]) - withAvatars {
 			out[eventID] = append(out[eventID], eventPictureSubject{Format: eventPictureStandIn})
 		}
 	}
@@ -496,7 +544,9 @@ type eventPictureDue struct {
 	// UpdateExisting says, with NeedsScene, that the event has a scene
 	// already, in SceneCode: change only what no longer fits the details
 	// or the scene format, rather than write a new one.
-	UpdateExisting   bool              `json:"update_existing"`
+	UpdateExisting bool `json:"update_existing"`
+	// Stages are the crowd sizes the scene lays out places for.
+	Stages           []int             `json:"stages"`
 	Details          eventSceneDetails `json:"details"`
 	DetailsSignature string            `json:"details_signature"`
 	// Request is an organiser asking for the scene again: with NeedsScene,
@@ -539,7 +589,8 @@ func (s *Server) handleEventPicturesDue(w http.ResponseWriter, r *http.Request) 
 		}
 		ev, scene := live[id], state.scenes[id]
 		details := eventDetailsSignature(ev)
-		item := eventPictureDue{EventID: id, People: people, Details: sceneDetailsOf(ev), DetailsSignature: details}
+		item := eventPictureDue{EventID: id, People: people, Details: sceneDetailsOf(ev), DetailsSignature: details,
+			Stages: eventPictureStages(ev.Capacity)}
 		if scene != nil && scene.Request != nil {
 			// An organiser asked: write it now, whatever else holds.
 			item.NeedsScene, item.Request = true, scene.Request

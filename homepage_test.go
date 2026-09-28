@@ -294,3 +294,17 @@ func TestAPictureOfTheSameCrowdIsNotPaintedTwice(t *testing.T) {
 		t.Error("the home page does not show the picture saved for this crowd")
 	}
 }
+
+// TestAPicturesStagesFollowTheLimit: a small event is one stage, a middling
+// one two halves, and a large one or one without a limit the ladder 5, 10,
+// 20, 40, stopped at the limit.
+func TestAPicturesStagesFollowTheLimit(t *testing.T) {
+	for capacity, want := range map[int]string{
+		0: "[5 10 20 40]", 3: "[3]", 6: "[6]", 8: "[4 8]", 12: "[6 12]",
+		15: "[5 10 15]", 20: "[5 10 20]", 30: "[5 10 20 30]", 40: "[5 10 20 40]", 100: "[5 10 20 40]",
+	} {
+		if got := fmt.Sprint(eventPictureStages(capacity)); got != want {
+			t.Errorf("stages for a limit of %d = %s, want %s", capacity, got, want)
+		}
+	}
+}
