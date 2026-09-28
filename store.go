@@ -417,6 +417,11 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// Join is never turned away or waitlisted. See holds.go.
 	{"event_invites", "past_limit", "INTEGER NOT NULL DEFAULT 0"},
 
+	// A drawing is a whole poseable character or, as every drawing before
+	// these was, a portrait only. See avatars.go.
+	{"avatar_drawings", "format", "TEXT NOT NULL DEFAULT 'portrait'"},
+	{"avatar_drawings", "full_body_webp", "BLOB"},
+
 	// How this person got onto the roster. Not cosmetic: it decides what
 	// un-marking Interested on Discord does to them. Someone who pressed Join
 	// keeps their place regardless of their Discord RSVP; someone who only ever

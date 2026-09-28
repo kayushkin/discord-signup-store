@@ -174,7 +174,7 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 	"tile": func(d AvatarDrawing, chosen bool) avatarTile { return avatarTile{Drawing: d, Chosen: chosen} },
 	// newDrawingTile is the gallery tile the avatar page's script fills in
 	// when a drawing finishes: its id and number are placeholders.
-	"newDrawingTile": func() AvatarDrawing { return AvatarDrawing{ID: -1, Number: -1} },
+	"newDrawingTile": func() AvatarDrawing { return AvatarDrawing{ID: -1, Number: -1, Format: AvatarFormatCharacter} },
 	// avatar is a person's approved avatar, for beside their name, or
 	// nothing when they have none.
 	"avatar": avatarHTML,

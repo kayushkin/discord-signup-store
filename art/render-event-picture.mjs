@@ -1,20 +1,17 @@
-// Prints an event's picture: its scene, with each person going painted in
-// their place from their avatar's drawing code, and saves it as WebP.
+// Prints an event's picture: its scene, with each person going posed in it,
+// and saves it as WebP.
 // Run: node render-event-picture.mjs <scene.js> <people.json> <out.webp> [count]
-// people.json is [{"discord_user_id": "…", "drawing_code": "…"}, …], in the
-// order they signed up. count, when given, prints that many people, taking
-// people.json round again if it holds fewer — to see how a scene holds a
-// crowd. CHROME_PATH names the Chrome or Chromium to use.
+// people.json is [{"discord_user_id", "format", "drawing_code"}, …] in the
+// order they signed up; format is "character" (CHARACTER.md), painted whole
+// and posed as the scene casts them, or "portrait", an older head-and-shoulders
+// drawing, painted round where their head would be. count, when given, prints
+// that many people, taking people.json round again if it holds fewer — to see
+// how a scene holds a crowd. CHROME_PATH names the Chrome or Chromium to use.
 //
-// scene.js defines SCENE (see SCENE.md in this folder): its size, background()
-// and foreground() painted with the kit, and places(n), where each of n people
-// stands. While either paint runs, PEOPLE_COUNT and PLACES say how many people
-// there are and where, so a scene can draw a chair or a body for each.
-//
-// A model wrote the scene from an event's description, and each drawing from
-// a stranger's photo, so none of this code is trusted. The page is blank
-// rather than file://, and every network request is refused: the code can
-// paint and do nothing else.
+// A model wrote the scene from an event's description, and each person from a
+// stranger's photo, so none of this code is trusted. The page is blank rather
+// than file://, and every network request is refused: the code can paint and
+// do nothing else.
 import { chromium } from 'playwright-core';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -43,58 +40,55 @@ try {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.setContent('<!doctype html><meta charset="utf-8"><body></body>');
-  await page.addScriptTag({ content: kit + `\nwindow.drawings = []; var PEOPLE_COUNT = ${people.length}, PLACES = [];` });
-  // Each drawing, and the scene, declares its own constant, so each runs in
-  // a function of its own and hands the constant back.
+  await page.addScriptTag({ content: kit + `\nwindow.people = []; var PEOPLE_COUNT = ${people.length}, CAST = [], JOINTS = [];` });
+  // Each person, and the scene, declares its own constant, so each runs in a
+  // function of its own and hands the constant back.
   for (const person of people) {
-    await page.addScriptTag({ content: `window.drawings.push((function () {\n${person.drawing_code}\n;return DRAWING;})());` });
+    const name = person.format === 'character' ? 'CHARACTER' : 'DRAWING';
+    await page.addScriptTag({ content: `window.people.push({ format: ${JSON.stringify(person.format)}, it: (function () {\n${person.drawing_code}\n;return ${name};})() });` });
   }
   await page.addScriptTag({ content: `window.SCENE_DEFINED = (function () {\n${scene}\n;return SCENE;})();` });
   if (errors.length) throw new Error(errors.join('\n'));
   const dataURL = await page.evaluate(() => {
-    const scene = window.SCENE_DEFINED, n = window.drawings.length;
+    const scene = window.SCENE_DEFINED, n = window.people.length;
     if (typeof scene !== 'object' || !(scene.width > 0) || !(scene.height > 0) ||
-        typeof scene.background !== 'function' || typeof scene.places !== 'function') {
-      throw new Error('scene.js does not define SCENE with width, height, background() and places(n)');
+        typeof scene.background !== 'function' || typeof scene.cast !== 'function') {
+      throw new Error('scene.js does not define SCENE with width, height, background() and cast(n)');
     }
-    const places = scene.places(n);
-    if (!Array.isArray(places) || places.length !== n ||
-        places.some(p => ![p && p.x, p && p.y, p && p.size].every(Number.isFinite) || !(p.size > 0))) {
-      throw new Error(`SCENE.places(${n}) must give ${n} places, each with a finite x, y and size`);
+    const cast = scene.cast(n);
+    if (!Array.isArray(cast) || cast.length !== n ||
+        cast.some(c => ![c && c.x, c && c.y, c && c.height].every(Number.isFinite) || !(c.height > 0))) {
+      throw new Error(`SCENE.cast(${n}) must give ${n} people, each with a finite x, y and height`);
     }
-    PLACES = places;
-    const { width, height } = scene;
-    const layer = paint => {
-      const canvas = document.createElement('canvas');
-      printDrawing(canvas, { width, height, misregister: scene.misregister, paint });
-      return canvas;
+    // A portrait-only person is placed as a grown-up character would be.
+    const bodyOf = person => person.format === 'character' ? person.it : { proportions: STANDARD_PROPORTIONS };
+    CAST = cast;
+    JOINTS = cast.map((c, i) => characterJoints(bodyOf(window.people[i]), c.pose ?? {}, c));
+    const paintPerson = (person, c, joints) => {
+      if (person.format === 'character') { paintCharacter(person.it, c.pose ?? {}, c); return; }
+      // Their round portrait where the head would be, a little bigger than one.
+      const d = STANDARD_PROPORTIONS.head * joints.scale * 1.5, [cx, cy] = joints.head;
+      pushTransform();
+      translateBy(cx - d / 2, cy - d / 2); scaleBy(d / person.it.width);
+      person.it.paint({});
+      tilt(null);
+      popTransform();
+      part(ellipsePoints(cx, cy, d / 2, d / 2, 32), { line: Math.max(2, d / 45) });
     };
-    const out = document.createElement('canvas'); out.width = width; out.height = height;
-    const ctx = out.getContext('2d');
-    ctx.fillStyle = INK.paperLight; ctx.fillRect(0, 0, width, height);
-    ctx.drawImage(layer(() => scene.background()), 0, 0);
-    // Each person: their drawing cropped round, with an ink rim and the
-    // offset shadow the site's cards have, turned by their place's tilt.
-    window.drawings.forEach((drawing, i) => {
-      const print = document.createElement('canvas');
-      printDrawing(print, drawing);
-      const { x, y, size } = places[i], r = size / 2, tilt = places[i].tilt || 0;
-      ctx.save();
-      ctx.translate(x, y); ctx.rotate(tilt);
-      ctx.fillStyle = INK.black;
-      ctx.beginPath(); ctx.arc(r * .05, r * .05, r, 0, Math.PI * 2); ctx.fill();
-      ctx.save();
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.clip();
-      ctx.fillStyle = INK.paperLight; ctx.fillRect(-r, -r, size, size);
-      const scale = size / Math.min(print.width, print.height);
-      ctx.drawImage(print, -print.width * scale / 2, -print.height * scale / 2, print.width * scale, print.height * scale);
-      ctx.restore();
-      ctx.strokeStyle = INK.black; ctx.lineWidth = Math.max(2, size / 45);
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
-      ctx.restore();
+    const out = document.createElement('canvas');
+    printDrawing(out, {
+      width: scene.width, height: scene.height, misregister: scene.misregister,
+      paint() {
+        scene.background();
+        window.people.forEach((person, i) => paintPerson(person, cast[i], JOINTS[i]));
+        if (typeof scene.foreground === 'function') scene.foreground();
+      },
     });
-    if (typeof scene.foreground === 'function') ctx.drawImage(layer(() => scene.foreground()), 0, 0);
-    return out.toDataURL('image/webp', .88);
+    const flat = document.createElement('canvas'); flat.width = scene.width; flat.height = scene.height;
+    const ctx = flat.getContext('2d');
+    ctx.fillStyle = INK.paperLight; ctx.fillRect(0, 0, scene.width, scene.height);
+    ctx.drawImage(out, 0, 0);
+    return flat.toDataURL('image/webp', .88);
   });
   if (errors.length) throw new Error(errors.join('\n'));
   if (!dataURL.startsWith('data:image/webp;base64,')) throw new Error(`the canvas gave ${dataURL.slice(0, 40)}`);

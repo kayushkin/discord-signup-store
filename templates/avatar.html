@@ -1,8 +1,12 @@
 {{define "avatartile"}}
     <figure class="avatar-tile{{if .Chosen}} is-chosen{{end}}" data-drawing-id="{{.Drawing.ID}}">
-      <img src="/avatar/drawings/{{.Drawing.ID}}.webp" alt="Drawing {{.Drawing.Number}}" width="180" height="180" loading="lazy">
+      <div class="tile-images">
+        <img src="/avatar/drawings/{{.Drawing.ID}}.webp" alt="Drawing {{.Drawing.Number}}" width="180" height="180" loading="lazy">
+        {{if eq .Drawing.Format "character"}}<img class="tile-full" src="/avatar/drawings/{{.Drawing.ID}}-full.webp" alt="Drawing {{.Drawing.Number}}, whole" width="100" height="180" loading="lazy">{{end}}
+      </div>
       <figcaption>
         <strong>#{{.Drawing.Number}}</strong>{{if .Chosen}} <span class="pill open">shown</span>{{end}}
+        {{if ne .Drawing.Format "character"}}<span class="pill" title="Drawn before whole bodies: group pictures show it as a round portrait. Change it to get a whole body.">portrait only</span>{{end}}
         <span class="tile-how">{{if eq .Drawing.Kind "edit_drawing"}}a change{{else if eq .Drawing.Kind "redraw_photo"}}drawn again{{else if eq .Drawing.Kind "new_photo"}}from a photo{{else}}set by the site{{end}}{{if .Drawing.Comment}}: “{{.Drawing.Comment}}”{{end}}</span>
       </figcaption>
       <div class="row tile-actions">
@@ -22,8 +26,10 @@
 {{$chosen := 0}}{{with $page.Person}}{{$chosen = .ChosenDrawingID}}{{end}}
 <div class="card">
   <h3>{{if .ViewerHasAvatar}}Your avatar{{else}}Add an avatar{{end}}</h3>
-  <p class="meta">Drawings of you in this site's print style, made from a photo you upload. Every drawing
-    is kept here. Choose one to show beside your name on event pages and in pictures of who is going.</p>
+  <p class="meta">Drawings of you in this site's print style, made from a photo you upload: the whole of
+    you, so pictures of who is going can show you doing what the event is about, and your round portrait
+    from the same drawing. Every drawing is kept here. Choose one to show beside your name and in those
+    pictures.</p>
 
   {{with $page.Request}}
   <div class="avatar-progress" id="avatar-progress" data-request-id="{{.ID}}"{{if not .Open}} hidden{{end}}>

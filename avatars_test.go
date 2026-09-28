@@ -155,7 +155,7 @@ func drawRequest(t *testing.T, mux http.Handler, requestID int64, code string) i
 	if rec := callAPI(mux, http.MethodPost, base+"/started", ""); rec.Code != http.StatusNoContent {
 		t.Fatalf("started = %d %s", rec.Code, rec.Body.String())
 	}
-	body, _ := json.Marshal(map[string]any{"drawing_code": code, "image_webp": testWebP})
+	body, _ := json.Marshal(map[string]any{"format": AvatarFormatCharacter, "drawing_code": code, "image_webp": testWebP, "full_body_webp": testWebP})
 	rec := callAPI(mux, http.MethodPut, base+"/drawing", string(body))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("drawing = %d %s", rec.Code, rec.Body.String())
@@ -202,11 +202,11 @@ func TestDrawingsAreKeptAndThePersonChoosesWhichShows(t *testing.T) {
 	if rec := callAPI(mux, http.MethodGet, fmt.Sprintf("/api/avatar-requests/%d/photo", first.ID), ""); rec.Code != http.StatusOK || !bytes.Equal(rec.Body.Bytes(), testPhoto) {
 		t.Fatalf("photo while drawing = %d", rec.Code)
 	}
-	notWebP, _ := json.Marshal(map[string]any{"drawing_code": "x", "image_webp": testPhoto})
+	notWebP, _ := json.Marshal(map[string]any{"format": AvatarFormatPortrait, "drawing_code": "x", "image_webp": testPhoto})
 	if rec := callAPI(mux, http.MethodPut, fmt.Sprintf("/api/avatar-requests/%d/drawing", first.ID), string(notWebP)); rec.Code != http.StatusBadRequest {
 		t.Errorf("a PNG as the print = %d, want 400", rec.Code)
 	}
-	body, _ := json.Marshal(map[string]any{"drawing_code": "const DRAWING = 1", "image_webp": testWebP})
+	body, _ := json.Marshal(map[string]any{"format": AvatarFormatCharacter, "drawing_code": "const DRAWING = 1", "image_webp": testWebP, "full_body_webp": testWebP})
 	callAPI(mux, http.MethodPut, fmt.Sprintf("/api/avatar-requests/%d/drawing", first.ID), string(body))
 	status := getPage(t, mux, member.Token, "/avatar/status").Body.String()
 	if !strings.Contains(status, `"state":"done"`) || !strings.Contains(status, `"drawing_id":`) {
@@ -404,5 +404,37 @@ func TestTheOldAvatarsTableMovesToTheGallery(t *testing.T) {
 	store.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'avatars'`).Scan(&tables)
 	if tables != 0 {
 		t.Error("the old table is still there")
+	}
+}
+
+// TestACharacterComesWithItsWholeBody: a character is refused without its
+// full-body print, the gallery serves both prints to its owner, and a change
+// to it tells the drawer it starts from a character.
+func TestACharacterComesWithItsWholeBody(t *testing.T) {
+	store, _, mux := avatarTestServer(t)
+	member, _ := store.CreateWebSession("u-ann", "Ann", "", map[string]uint64{"g1": 0})
+	askForDrawing(t, mux, member.Token, newPhotoRequest(""), testPhoto)
+	id := latestRequest(t, store, "u-ann").ID
+	callAPI(mux, http.MethodPost, fmt.Sprintf("/api/avatar-requests/%d/started", id), "")
+	noBody, _ := json.Marshal(map[string]any{"format": AvatarFormatCharacter, "drawing_code": "const CHARACTER = {}", "image_webp": testWebP})
+	if rec := callAPI(mux, http.MethodPut, fmt.Sprintf("/api/avatar-requests/%d/drawing", id), string(noBody)); rec.Code != http.StatusBadRequest {
+		t.Errorf("a character with no whole body = %d, want 400", rec.Code)
+	}
+	full := append(append([]byte{}, testWebP...), 'F')
+	withBody, _ := json.Marshal(map[string]any{"format": AvatarFormatCharacter, "drawing_code": "const CHARACTER = {}", "image_webp": testWebP, "full_body_webp": full})
+	rec := callAPI(mux, http.MethodPut, fmt.Sprintf("/api/avatar-requests/%d/drawing", id), string(withBody))
+	var saved struct {
+		DrawingID int64 `json:"drawing_id"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &saved)
+	if rec := getPage(t, mux, member.Token, fmt.Sprintf("/avatar/drawings/%d-full.webp", saved.DrawingID)); rec.Code != http.StatusOK || !bytes.Equal(rec.Body.Bytes(), full) {
+		t.Errorf("whole body = %d", rec.Code)
+	}
+	if page := getPage(t, mux, member.Token, "/avatar").Body.String(); !strings.Contains(page, fmt.Sprintf("/avatar/drawings/%d-full.webp", saved.DrawingID)) || strings.Contains(page, ">portrait only<") {
+		t.Error("the gallery does not show the character's whole body")
+	}
+	askForDrawing(t, mux, member.Token, map[string]string{"kind": AvatarRequestEditDrawing, "base_drawing_id": fmt.Sprint(saved.DrawingID), "comment": "a hat"}, nil)
+	if toDraw := callAPI(mux, http.MethodGet, "/api/avatar-requests/to-draw", "").Body.String(); !strings.Contains(toDraw, `"base_drawing_format":"character"`) {
+		t.Errorf("to-draw = %s", toDraw)
 	}
 }

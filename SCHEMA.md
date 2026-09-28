@@ -255,7 +255,7 @@ Drawings of a person, kept in a gallery; they choose which shows beside their na
 
 **`avatar_people`** — `discord_user_id` PK; `photo_file_id`, the kept photo's file-store id (`owner_service` `discord-signup-store`, `owner_ref` `avatar:<user id>`), `''` once deleted; `photo_consented_at`, when they ticked consent with it; `chosen_drawing_id`, the drawing shown, 0 for none; `updated_at`.
 
-**`avatar_drawings`** — `id`; `discord_user_id`; `drawing_code`, the drawing in `art/kit.js`'s form, defining `DRAWING`; `image_webp`, it printed at 256 pixels; `request_id`, 0 for one an operator set; `created_at`. Kept until the person deletes it.
+**`avatar_drawings`** — `id`; `discord_user_id`; `format`, `character` (a whole person on the kit's skeleton, `CHARACTER` in `art/CHARACTER.md`'s form, which scenes pose) or `portrait` (a `DRAWING` of head and shoulders, every drawing before 2026-09-28's characters); `drawing_code`; `image_webp`, the round portrait printed at 256 pixels; `full_body_webp`, a character standing, NULL for a portrait; `request_id`, 0 for one an operator set; `created_at`. Kept until the person deletes it.
 
 **`avatar_requests`** — `id`; `discord_user_id`; `kind` (`new_photo`, `redraw_photo`, `edit_drawing`); `base_drawing_id` for an edit; `comment`, in their words; `state` (`waiting`, `drawing`, `done`, `failed`), at most one `waiting` or `drawing` per person; `failure`; `requested_at`, `started_at`, `finished_at`; `drawing_id`, what it made. The six-a-day limit counts `requested_at`.
 
@@ -263,7 +263,7 @@ Drawings of a person, kept in a gallery; they choose which shows beside their na
 
 ### `event_scenes` — the scene an event's picture is set in, new 2026-09-28
 
-`event_id` PK; `details_signature`, the name, description, place, weekday and time and repeat rule it was written from (`eventDetailsSignature`); `scene_code`, the scene in `art/SCENE.md`'s form; `failure`, `failed_details_signature` and `failed_at`, the last scene that did not come out and from which details, tried again an hour later; `updated_at`. A model writes it; a change to the details asks for a new one, a change to who is going does not.
+`event_id` PK; `details_signature`, the name, description, place, weekday and time and repeat rule it was written from, and the scene format (`eventDetailsSignature`, `eventSceneFormat`: a new format asks every event for a new scene); `scene_code`, the scene in `art/SCENE.md`'s form, casting each person as a posed character; `failure`, `failed_details_signature` and `failed_at`, the last scene that did not come out and from which details, tried again an hour later; `updated_at`. A model writes it; a change to the details asks for a new one, a change to who is going does not.
 
 ### `event_pictures` — a picture of who is going, new 2026-09-28
 

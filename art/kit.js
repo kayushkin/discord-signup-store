@@ -46,8 +46,28 @@ function ellipsePoints(cx, cy, rx, ry, steps = 24, rotation = 0) {
 let PARTS = [], TILT = null;
 // Parts drawn while a tilt is set turn with it: tilt(angle, [x, y]) … tilt(null).
 function tilt(angle, pivot) { TILT = angle === null ? null : { angle, pivot }; }
-function part(points, options) { PARTS.push({ points, tilt: TILT, ...options }); }
-function stroke(points, options) { PARTS.push({ points, tilt: TILT, openStroke: true, ...options }); }
+function part(points, options) { PARTS.push({ points, tilt: TILT, xform: XFORM, ...options }); }
+function stroke(points, options) { PARTS.push({ points, tilt: TILT, xform: XFORM, openStroke: true, ...options }); }
+
+// Parts are drawn through the current transform, so a character's arm can
+// be drawn once in its own frame and posed anywhere. [a, b, c, d, e, f] as
+// the canvas takes it: x' = a·x + c·y + e, y' = b·x + d·y + f. Each change
+// makes a new array, so a part keeps the transform it was drawn under.
+const IDENTITY = [1, 0, 0, 1, 0, 0];
+let XFORM = IDENTITY;
+const XFORM_STACK = [];
+function multiplyTransforms(m, n) {
+  return [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3],
+          m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
+}
+function applyTransform(m, [x, y]) { return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]; }
+function pushTransform() { XFORM_STACK.push(XFORM); }
+function popTransform() { XFORM = XFORM_STACK.pop() ?? IDENTITY; }
+function translateBy(x, y) { XFORM = multiplyTransforms(XFORM, [1, 0, 0, 1, x, y]); }
+function rotateBy(angle) { const c = Math.cos(angle), s = Math.sin(angle); XFORM = multiplyTransforms(XFORM, [c, s, -s, c, 0, 0]); }
+function scaleBy(sx, sy = sx) { XFORM = multiplyTransforms(XFORM, [sx, 0, 0, sy, 0, 0]); }
+// Draws with paint() flipped left to right about x = 0: a right arm from a left one.
+function mirrored(paint) { return (...args) => { pushTransform(); scaleBy(-1, 1); paint(...args); popTransform(); }; }
 // A thick rounded bar from a to b, for arms and fingers.
 function capsule(a, b, width) {
   const angle = Math.atan2(b[1] - a[1], b[0] - a[0]), r = width / 2, points = [];
@@ -102,7 +122,7 @@ function harlequin(ctx, box, size, angle, offset = 0) {
 function printDrawing(canvas, drawing, paintOptions) {
   const { width, height } = drawing;
   canvas.width = width; canvas.height = height;
-  PARTS = [];
+  PARTS = []; TILT = null; XFORM = IDENTITY; XFORM_STACK.length = 0;
   drawing.paint(paintOptions);
   const layer = () => { const c = document.createElement('canvas'); c.width = width; c.height = height; return c; };
   const colourLayer = layer(), blackLayer = layer();
@@ -110,6 +130,7 @@ function printDrawing(canvas, drawing, paintOptions) {
   PARTS.forEach((p, index) => {
     for (const ctx of [colour, black]) {
       ctx.save();
+      if (p.xform && p.xform !== IDENTITY) ctx.transform(...p.xform);
       if (p.tilt) { ctx.translate(...p.tilt.pivot); ctx.rotate(p.tilt.angle); ctx.translate(-p.tilt.pivot[0], -p.tilt.pivot[1]); }
     }
     printPart(p, index, colour, black);
@@ -151,4 +172,167 @@ function printDrawing(canvas, drawing, paintOptions) {
     d[i + 3] = Math.round(d[i + 3] * (1 - .12 * blotch - (speck > .93 ? .5 : 0)));
   }
   out.putImageData(image, 0, 0);
+}
+
+// ---------------------------------------------------------------- characters
+// A character is a whole person, drawn once, part by part, each part in its
+// own bone's frame, and posed anywhere: a portrait, a group picture, sitting
+// at a table or cheering. CHARACTER.md is the contract. The skeleton is the
+// same for everyone; a character sets its proportions and draws its parts.
+//
+// Every bone's frame has its origin at the joint with its parent. Limbs hang
+// down: an arm or a leg runs from its joint along +y. The torso, neck and head
+// run up, along -y. L is the limb on the viewer's left. A pose turns bones at
+// their joints, in degrees; for the right side the angle is mirrored, so the
+// same number raises either arm outward.
+const CHARACTER_BONES = [
+  ['pelvis', null], ['torso', 'pelvis'], ['neck', 'torso'], ['head', 'neck'],
+  ['upperArmL', 'torso'], ['forearmL', 'upperArmL'], ['handL', 'forearmL'],
+  ['upperArmR', 'torso'], ['forearmR', 'upperArmR'], ['handR', 'forearmR'],
+  ['thighL', 'pelvis'], ['shinL', 'thighL'], ['footL', 'shinL'],
+  ['thighR', 'pelvis'], ['shinR', 'thighR'], ['footR', 'shinR'],
+];
+const CHARACTER_PARENT = Object.fromEntries(CHARACTER_BONES);
+
+// Where a bone starts, in its parent's frame.
+function characterJointOffset(bone, P) {
+  const shoulderY = -P.torso + (P.shoulderDrop ?? 0);
+  switch (bone) {
+    case 'pelvis': case 'torso': return [0, 0];
+    case 'neck': return [0, -P.torso];
+    case 'head': return [0, -P.neck];
+    case 'upperArmL': return [-P.shoulderWidth / 2, shoulderY];
+    case 'upperArmR': return [P.shoulderWidth / 2, shoulderY];
+    case 'forearmL': case 'forearmR': return [0, P.upperArm];
+    case 'handL': case 'handR': return [0, P.forearm];
+    case 'thighL': return [-P.hipWidth / 2, 0];
+    case 'thighR': return [P.hipWidth / 2, 0];
+    case 'shinL': case 'shinR': return [0, P.thigh];
+    case 'footL': case 'footR': return [0, P.shin];
+  }
+  throw new Error(`no bone ${bone}`);
+}
+// A grown-up's proportions, for placing someone whose avatar is only a
+// portrait: their portrait goes where a character's head would be.
+const STANDARD_PROPORTIONS = {
+  head: 240, neck: 40, torso: 300, shoulderWidth: 188, shoulderDrop: 34, hipWidth: 140,
+  upperArm: 170, forearm: 150, hand: 70, thigh: 230, shin: 220, footHeight: 40,
+};
+function characterStandingHeight(P) { return P.head + P.neck + P.torso + P.thigh + P.shin + (P.footHeight ?? 0); }
+
+// Poses: angles in degrees; a value may be { angle, stretch }, stretch
+// shortening the bone as it points toward or away from the viewer — a seated
+// thigh is one. The lowest foot always stands on the ground; lift raises the
+// whole character off it. expression and look go to the head; open and hold
+// to the hands. behind lists limbs to draw behind the torso: 'armL', 'armR'.
+const POSES = {
+  stand: {},
+  wave: { upperArmR: 145, forearmR: 30, handR: 0, expression: 'smile' },
+  cheer: { upperArmL: 160, forearmL: 15, upperArmR: 160, forearmR: 15, expression: 'grin', open: true },
+  point: { upperArmL: 95, forearmL: 0, expression: 'smile' },
+  sit: { thighL: { angle: -8, stretch: .3 }, thighR: { angle: -8, stretch: .3 }, shinL: 6, shinR: 6 },
+  jump: { upperArmL: 150, forearmL: 20, upperArmR: 150, forearmR: 20, thighL: 20, shinL: -40, thighR: 20, shinR: -40, lift: .12, expression: 'laugh', open: true },
+  walk: { thighL: -12, shinL: 10, thighR: 14, shinR: 4, upperArmL: -14, forearmL: -10, upperArmR: -10, forearmR: -12 },
+  dance: { upperArmL: 130, forearmL: 40, upperArmR: 40, forearmR: 60, thighL: 18, shinL: -20, torso: 6, head: -8, expression: 'laugh' },
+  hold: { upperArmL: 12, forearmL: -85, upperArmR: 12, forearmR: -85, hold: true },
+  scared: { upperArmL: 70, forearmL: 110, upperArmR: 70, forearmR: 110, expression: 'scared', open: true },
+  shrug: { upperArmL: 40, forearmL: 80, upperArmR: 40, forearmR: 80, head: 6, expression: 'smile', open: true },
+};
+const CHARACTER_EXPRESSIONS = ['smile', 'grin', 'laugh', 'surprised', 'scared', 'wink', 'calm'];
+
+function poseAngle(pose, bone) {
+  const value = pose[bone];
+  const angle = typeof value === 'number' ? value : (value?.angle ?? 0);
+  const mirror = bone.endsWith('R') ? -1 : 1;
+  return mirror * angle * Math.PI / 180;
+}
+function poseStretch(pose, bone) { const value = pose[bone]; return typeof value === 'object' ? (value.stretch ?? 1) : 1; }
+
+// The frame of every bone, in the character's own units with the pelvis at
+// [0, 0], for a pose: frame is where its children hang from, draw is where
+// its own parts are drawn, shortened by its stretch. A child's joint moves
+// in as its parent is shortened.
+function characterFrames(C, pose = {}) {
+  const P = C.proportions, frames = {};
+  for (const [bone, parent] of CHARACTER_BONES) {
+    const [x, y] = characterJointOffset(bone, P);
+    const from = parent ? frames[parent] : { frame: IDENTITY, stretch: 1 };
+    const angle = poseAngle(pose, bone), c = Math.cos(angle), s = Math.sin(angle);
+    const frame = multiplyTransforms(multiplyTransforms(from.frame, [1, 0, 0, 1, x, y * from.stretch]), [c, s, -s, c, 0, 0]);
+    const stretch = poseStretch(pose, bone);
+    frames[bone] = { frame, stretch, draw: multiplyTransforms(frame, [1, 0, 0, stretch, 0, 0]) };
+  }
+  return frames;
+}
+
+// The transform from a character's units to the picture: standing height
+// pixels tall, flipped when mirror, with its lowest foot on the ground at
+// [x, y] whatever the pose — a seated character's shortened legs bring the
+// rest of them down with them. lift raises them off it, as a fraction of their
+// height: a jump.
+function characterPlacement(C, pose, placement) {
+  const P = C.proportions, s = placement.height / characterStandingHeight(P), frames = characterFrames(C, pose);
+  const sole = P.footHeight ?? 0;
+  const lowest = Math.max(...['footL', 'footR'].map(foot => applyTransform(frames[foot].draw, [0, sole])[1]));
+  const lift = (pose.lift ?? 0) * characterStandingHeight(P);
+  return multiplyTransforms([placement.mirror ? -s : s, 0, 0, s, placement.x, placement.y], [1, 0, 0, 1, 0, -lowest - lift]);
+}
+
+// Where a posed character's joints land in the picture: the head's middle,
+// each hand's and foot's end, the pelvis, and the top of the head — for a
+// scene to put a drink in a hand or a hat on a head.
+function characterJoints(C, pose = {}, placement) {
+  const P = C.proportions, frames = characterFrames(C, pose), base = characterPlacement(C, pose, placement);
+  const at = (bone, point) => applyTransform(multiplyTransforms(base, frames[bone].draw), point);
+  return {
+    head: at('head', [0, -P.head / 2]), top: at('head', [0, -P.head]), pelvis: at('pelvis', [0, 0]),
+    handL: at('handL', [0, P.hand]), handR: at('handR', [0, P.hand]),
+    footL: at('footL', [0, P.footHeight ?? 0]), footR: at('footR', [0, P.footHeight ?? 0]),
+    scale: placement.height / characterStandingHeight(P),
+  };
+}
+
+// Paints a character posed and placed. pose is one of POSES, changed as
+// wanted, or angles of its own.
+function paintCharacter(C, pose = {}, placement) {
+  const frames = characterFrames(C, pose), base = characterPlacement(C, pose, placement);
+  const behind = new Set(pose.behind ?? []);
+  const limb = { armL: ['upperArmL', 'forearmL', 'handL'], armR: ['upperArmR', 'forearmR', 'handR'],
+                 legL: ['thighL', 'shinL', 'footL'], legR: ['thighR', 'shinR', 'footR'] };
+  const order = [];
+  for (const name of ['armL', 'armR']) if (behind.has(name)) order.push(...limb[name]);
+  order.push(...limb.legL, ...limb.legR, 'pelvis', 'torso');
+  for (const name of ['armL', 'armR']) if (!behind.has(name)) order.push(...limb[name]);
+  order.push('neck', 'head');
+  const options = { expression: pose.expression ?? 'smile', look: pose.look ?? 'ahead', open: !!pose.open, hold: !!pose.hold };
+  pushTransform();
+  const outer = XFORM;
+  for (const bone of order) {
+    const draw = C.draw[bone];
+    if (!draw) continue;
+    XFORM = multiplyTransforms(multiplyTransforms(outer, base), frames[bone].draw);
+    draw(options);
+  }
+  popTransform();
+}
+
+// A character's portrait as a drawing: their badge, and them standing, head
+// and shoulders filling it, for the pages' round avatar.
+function characterPortrait(C) {
+  return {
+    width: 800, height: 800,
+    paint() {
+      if (C.badge) C.badge();
+      const P = C.proportions, headPixels = 300, height = characterStandingHeight(P) * headPixels / P.head;
+      // Put the middle of the head at [400, 360].
+      const pose = C.portraitPose ?? {};
+      const joints = characterJoints(C, pose, { x: 0, y: 0, height });
+      paintCharacter(C, pose, { x: 400 - joints.head[0], y: 360 - joints.head[1], height });
+    },
+  };
+}
+
+// A character standing, whole, for the gallery.
+function characterFullBody(C, pose = {}) {
+  return { width: 500, height: 900, paint() { paintCharacter(C, pose, { x: 250, y: 870, height: 820 }); } };
 }

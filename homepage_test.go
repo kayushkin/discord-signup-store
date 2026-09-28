@@ -73,7 +73,7 @@ func TestAnEventPictureIsItsSceneWithWhoIsGoing(t *testing.T) {
 	_, store, _, mux, _ := webTestServer(t)
 	ev := publishedEvent(t, store, 5, "ann", "bob")
 	member, _ := store.CreateWebSession("ann", "Ann", "", map[string]uint64{"g1": 0})
-	if _, err := store.SetAvatarByOperator("ann", "const DRAWING = {}", testWebP, "test"); err != nil {
+	if _, err := store.SetAvatarByOperator("ann", newAvatarDrawing{Format: AvatarFormatPortrait, Code: "const DRAWING = {}", ImageWebP: testWebP}, "test"); err != nil {
 		t.Fatal(err)
 	}
 	due := func() []eventPictureDue {
@@ -121,7 +121,7 @@ func TestAnEventPictureIsItsSceneWithWhoIsGoing(t *testing.T) {
 	}
 
 	// Someone else with an avatar joins: the same scene, printed again.
-	store.SetAvatarByOperator("bob", "const DRAWING = {}", testWebP, "test")
+	store.SetAvatarByOperator("bob", newAvatarDrawing{Format: AvatarFormatPortrait, Code: "const DRAWING = {}", ImageWebP: testWebP}, "test")
 	if next := due(); len(next) != 1 || next[0].NeedsScene || len(next[0].People) != 2 {
 		t.Errorf("after bob's avatar, due = %+v", next)
 	}
@@ -144,11 +144,11 @@ func TestAnEventPictureIsItsSceneWithWhoIsGoing(t *testing.T) {
 // person's own drawings.
 func TestAnOperatorSetsAnAvatarIntoTheGallery(t *testing.T) {
 	_, _, mux := avatarTestServer(t)
-	body, _ := json.Marshal(map[string]any{"drawing_code": "const DRAWING = {}", "image_webp": testWebP})
+	body, _ := json.Marshal(map[string]any{"format": AvatarFormatPortrait, "drawing_code": "const DRAWING = {}", "image_webp": testWebP})
 	if rec := callAPI(mux, http.MethodPut, "/api/avatars/u-bob", string(body)); rec.Code != http.StatusBadRequest {
 		t.Errorf("no reason = %d, want 400", rec.Code)
 	}
-	body, _ = json.Marshal(map[string]any{"drawing_code": "const DRAWING = {}", "image_webp": testWebP, "reason": "the mascot"})
+	body, _ = json.Marshal(map[string]any{"format": AvatarFormatPortrait, "drawing_code": "const DRAWING = {}", "image_webp": testWebP, "reason": "the mascot"})
 	if rec := callAPI(mux, http.MethodPut, "/api/avatars/u-bob", string(body)); rec.Code != http.StatusOK {
 		t.Fatalf("set = %d %s", rec.Code, rec.Body.String())
 	}

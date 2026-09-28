@@ -43,7 +43,10 @@ const eventSceneRetryAfter = time.Hour
 // eventPictureSubject is one person in a picture.
 type eventPictureSubject struct {
 	DiscordUserID string `json:"discord_user_id"`
-	DrawingCode   string `json:"drawing_code"`
+	// Format says whether DrawingCode is a poseable character or a
+	// portrait, which a scene can only show as it is.
+	Format      string `json:"format"`
+	DrawingCode string `json:"drawing_code"`
 	// drawingID is which of their drawings; it changes when they choose
 	// another.
 	drawingID int64
@@ -85,6 +88,12 @@ func shortHash(parts ...string) string {
 	return hex.EncodeToString(hash.Sum(nil))[:24]
 }
 
+// eventSceneFormat is the version of art/SCENE.md scenes are written to. It
+// is part of every details signature, so a new version asks every event for a
+// new scene: on 2026-09-28 scenes went from placing round portraits to casting
+// posed characters.
+const eventSceneFormat = "cast"
+
 // eventDetailsSignature names the details a scene is made from. The date
 // counts only as far as its day and time of day, so a repeating event's
 // scene lasts from one date to the next.
@@ -94,7 +103,7 @@ func eventDetailsSignature(ev Event) string {
 	if zone, err := time.LoadLocation(d.Timezone); err == nil && d.StartsAt != 0 {
 		when = time.Unix(d.StartsAt, 0).In(zone).Format("Monday 15:04")
 	}
-	return shortHash(d.Name, d.Description, d.Location, when, d.RecurrenceRule)
+	return shortHash(eventSceneFormat, d.Name, d.Description, d.Location, when, d.RecurrenceRule)
 }
 
 // eventPictureSignature names what a picture shows: the scene and who is in
@@ -127,7 +136,7 @@ func (s *Store) EventPictureSubjects(eventIDs []int64) (map[int64][]eventPicture
 	}
 	placeholders, args := int64Placeholders(eventIDs)
 	rows, err := s.db.Query(`
-		SELECT s.event_id, s.discord_user_id, d.drawing_code, d.id
+		SELECT s.event_id, s.discord_user_id, d.format, d.drawing_code, d.id
 		FROM signups s
 		JOIN avatar_people p ON p.discord_user_id = s.discord_user_id
 		JOIN avatar_drawings d ON d.id = p.chosen_drawing_id
@@ -140,7 +149,7 @@ func (s *Store) EventPictureSubjects(eventIDs []int64) (map[int64][]eventPicture
 	for rows.Next() {
 		var eventID int64
 		var subject eventPictureSubject
-		if err := rows.Scan(&eventID, &subject.DiscordUserID, &subject.DrawingCode, &subject.drawingID); err != nil {
+		if err := rows.Scan(&eventID, &subject.DiscordUserID, &subject.Format, &subject.DrawingCode, &subject.drawingID); err != nil {
 			return nil, fmt.Errorf("scan event picture subject: %w", err)
 		}
 		if len(out[eventID]) < eventPictureMaximumPeople {

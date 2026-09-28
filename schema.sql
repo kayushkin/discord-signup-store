@@ -485,15 +485,21 @@ CREATE TABLE IF NOT EXISTS avatar_people (
 );
 
 -- avatar_drawings: every drawing made for a person, until they delete it.
--- drawing_code is the drawing as code in art/kit.js's form, kept so a picture
--- of who is going can draw them again and a later request can change it;
--- image_webp is it printed at 256 pixels. request_id is the request that made
--- it, 0 for one an operator set.
+-- format says what drawing_code is: 'character', a whole person drawn part by
+-- part on the kit's skeleton, poseable in any scene (art/CHARACTER.md), or
+-- 'portrait', a head-and-shoulders DRAWING that can only be shown as it is —
+-- every drawing made before 2026-09-28's characters. The code is kept so a
+-- picture of who is going can draw them again and a later request can change
+-- it. image_webp is the round portrait printed at 256 pixels; full_body_webp
+-- the character standing, for the gallery, NULL for a portrait. request_id is
+-- the request that made it, 0 for one an operator set.
 CREATE TABLE IF NOT EXISTS avatar_drawings (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     discord_user_id TEXT NOT NULL,
+    format          TEXT NOT NULL DEFAULT 'portrait',
     drawing_code    TEXT NOT NULL,
     image_webp      BLOB NOT NULL,
+    full_body_webp  BLOB,
     request_id      INTEGER NOT NULL DEFAULT 0,
     created_at      INTEGER NOT NULL
 );

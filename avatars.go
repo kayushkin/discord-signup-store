@@ -40,6 +40,19 @@ const (
 
 var avatarRequestKinds = map[string]bool{AvatarRequestNewPhoto: true, AvatarRequestRedrawPhoto: true, AvatarRequestEditDrawing: true}
 
+// What a drawing's code is.
+const (
+	// AvatarFormatCharacter is a whole person drawn part by part on the
+	// kit's skeleton, which a scene can pose (art/CHARACTER.md). Every new
+	// drawing is one.
+	AvatarFormatCharacter = "character"
+	// AvatarFormatPortrait is a head-and-shoulders DRAWING that can only be
+	// shown as it is: the drawings made before characters.
+	AvatarFormatPortrait = "portrait"
+)
+
+var avatarFormats = map[string]bool{AvatarFormatCharacter: true, AvatarFormatPortrait: true}
+
 // The states a request moves through.
 const (
 	AvatarRequestWaiting = "waiting"
@@ -88,6 +101,7 @@ type AvatarPerson struct {
 type AvatarDrawing struct {
 	ID            int64  `json:"id"`
 	DiscordUserID string `json:"discord_user_id"`
+	Format        string `json:"format"`
 	DrawingCode   string `json:"drawing_code,omitempty"`
 	RequestID     int64  `json:"request_id"`
 	CreatedAt     int64  `json:"created_at"`
@@ -162,7 +176,7 @@ func (s *Store) AvatarDrawingsOf(discordUserID string, withCode bool) ([]AvatarD
 	if withCode {
 		code = `d.drawing_code`
 	}
-	rows, err := s.db.Query(`SELECT d.id, d.discord_user_id, `+code+`, d.request_id, d.created_at,
+	rows, err := s.db.Query(`SELECT d.id, d.discord_user_id, d.format, `+code+`, d.request_id, d.created_at,
 			COALESCE(r.kind, ''), COALESCE(r.comment, '')
 		FROM avatar_drawings d LEFT JOIN avatar_requests r ON r.id = d.request_id
 		WHERE d.discord_user_id = ? ORDER BY d.id DESC`, discordUserID)
@@ -173,7 +187,7 @@ func (s *Store) AvatarDrawingsOf(discordUserID string, withCode bool) ([]AvatarD
 	out := []AvatarDrawing{}
 	for rows.Next() {
 		var d AvatarDrawing
-		if err := rows.Scan(&d.ID, &d.DiscordUserID, &d.DrawingCode, &d.RequestID, &d.CreatedAt, &d.Kind, &d.Comment); err != nil {
+		if err := rows.Scan(&d.ID, &d.DiscordUserID, &d.Format, &d.DrawingCode, &d.RequestID, &d.CreatedAt, &d.Kind, &d.Comment); err != nil {
 			return nil, fmt.Errorf("scan avatar drawing: %w", err)
 		}
 		out = append(out, d)
@@ -184,8 +198,8 @@ func (s *Store) AvatarDrawingsOf(discordUserID string, withCode bool) ([]AvatarD
 // AvatarDrawingByID is one drawing with its code, or ErrNotFound.
 func (s *Store) AvatarDrawingByID(drawingID int64) (*AvatarDrawing, error) {
 	var d AvatarDrawing
-	err := s.db.QueryRow(`SELECT id, discord_user_id, drawing_code, request_id, created_at FROM avatar_drawings WHERE id = ?`, drawingID).
-		Scan(&d.ID, &d.DiscordUserID, &d.DrawingCode, &d.RequestID, &d.CreatedAt)
+	err := s.db.QueryRow(`SELECT id, discord_user_id, format, drawing_code, request_id, created_at FROM avatar_drawings WHERE id = ?`, drawingID).
+		Scan(&d.ID, &d.DiscordUserID, &d.Format, &d.DrawingCode, &d.RequestID, &d.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -195,12 +209,17 @@ func (s *Store) AvatarDrawingByID(drawingID int64) (*AvatarDrawing, error) {
 	return &d, nil
 }
 
-// AvatarDrawingImage is one drawing's print and whose drawing it is.
-func (s *Store) AvatarDrawingImage(drawingID int64) (string, []byte, error) {
+// AvatarDrawingImage is one drawing's print — the portrait, or the whole
+// body when fullBody — and whose drawing it is.
+func (s *Store) AvatarDrawingImage(drawingID int64, fullBody bool) (string, []byte, error) {
 	var owner string
 	var image []byte
-	err := s.db.QueryRow(`SELECT discord_user_id, image_webp FROM avatar_drawings WHERE id = ?`, drawingID).Scan(&owner, &image)
-	if errors.Is(err, sql.ErrNoRows) {
+	column := "image_webp"
+	if fullBody {
+		column = "full_body_webp"
+	}
+	err := s.db.QueryRow(`SELECT discord_user_id, `+column+` FROM avatar_drawings WHERE id = ?`, drawingID).Scan(&owner, &image)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && image == nil) {
 		return "", nil, ErrNotFound
 	}
 	if err != nil {
@@ -446,24 +465,40 @@ func (s *Store) StartAvatarRequest(requestID int64) error {
 
 // FinishAvatarRequest adds the finished drawing to the person's gallery. It
 // does not show it: the person chooses that.
-func (s *Store) FinishAvatarRequest(requestID int64, drawingCode string, imageWebP []byte) (drawingID int64, err error) {
+func (s *Store) FinishAvatarRequest(requestID int64, drawing newAvatarDrawing) (drawingID int64, err error) {
 	owner, err := s.avatarRequestOwner(requestID)
 	if err != nil {
 		return 0, err
 	}
 	err = s.changeAvatar(owner, "drawing_saved", strconv.FormatInt(requestID, 10), func(tx *sql.Tx) error {
-		result, err := tx.Exec(`INSERT INTO avatar_drawings (discord_user_id, drawing_code, image_webp, request_id, created_at)
-			VALUES (?, ?, ?, ?, ?)`, owner, drawingCode, imageWebP, requestID, now())
-		if err != nil {
-			return fmt.Errorf("store avatar drawing: %w", err)
-		}
-		if drawingID, err = result.LastInsertId(); err != nil {
+		if drawingID, err = insertAvatarDrawing(tx, owner, requestID, drawing); err != nil {
 			return err
 		}
 		return moveAvatarRequest(tx, requestID, AvatarRequestDrawing, `state = ?, finished_at = ?, drawing_id = ?`,
 			AvatarRequestDone, now(), drawingID)
 	})
 	return drawingID, err
+}
+
+// newAvatarDrawing is a drawing handed back to be kept.
+type newAvatarDrawing struct {
+	Format       string
+	Code         string
+	ImageWebP    []byte
+	FullBodyWebP []byte
+}
+
+func insertAvatarDrawing(tx *sql.Tx, owner string, requestID int64, d newAvatarDrawing) (int64, error) {
+	var fullBody any
+	if d.FullBodyWebP != nil {
+		fullBody = d.FullBodyWebP
+	}
+	result, err := tx.Exec(`INSERT INTO avatar_drawings (discord_user_id, format, drawing_code, image_webp, full_body_webp, request_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`, owner, d.Format, d.Code, d.ImageWebP, fullBody, requestID, now())
+	if err != nil {
+		return 0, fmt.Errorf("store avatar drawing: %w", err)
+	}
+	return result.LastInsertId()
 }
 
 // FailAvatarRequest records a drawing that did not come out, and why.
@@ -560,17 +595,12 @@ func (s *Store) RemoveAvatarEverything(discordUserID string) error {
 // SetAvatarByOperator adds a drawing made outside the requests — such as the
 // site's mascot, drawn from photos she is in — to someone's gallery and shows
 // it. reason is recorded in the history.
-func (s *Store) SetAvatarByOperator(discordUserID, drawingCode string, imageWebP []byte, reason string) (drawingID int64, err error) {
+func (s *Store) SetAvatarByOperator(discordUserID string, drawing newAvatarDrawing, reason string) (drawingID int64, err error) {
 	err = s.changeAvatar(discordUserID, "set_by_operator", reason, func(tx *sql.Tx) error {
 		if err := ensureAvatarPerson(tx, discordUserID); err != nil {
 			return err
 		}
-		result, err := tx.Exec(`INSERT INTO avatar_drawings (discord_user_id, drawing_code, image_webp, request_id, created_at)
-			VALUES (?, ?, ?, 0, ?)`, discordUserID, drawingCode, imageWebP, now())
-		if err != nil {
-			return fmt.Errorf("store avatar drawing: %w", err)
-		}
-		if drawingID, err = result.LastInsertId(); err != nil {
+		if drawingID, err = insertAvatarDrawing(tx, discordUserID, 0, drawing); err != nil {
 			return err
 		}
 		_, err = tx.Exec(`UPDATE avatar_people SET chosen_drawing_id = ?, updated_at = ? WHERE discord_user_id = ?`,
@@ -1009,19 +1039,21 @@ func writeWebPImage(w http.ResponseWriter, image []byte, cacheControl string) {
 }
 
 // handleWebOwnAvatarDrawing shows a person one of their own drawings, at
-// /avatar/drawings/{id}.webp. Anyone else's is a 404.
+// /avatar/drawings/{id}.webp, or the whole character at {id}-full.webp.
+// Anyone else's is a 404.
 func (s *Server) handleWebOwnAvatarDrawing(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {
 		return
 	}
 	idText, isWebP := strings.CutSuffix(r.PathValue("file"), ".webp")
+	idText, fullBody := strings.CutSuffix(idText, "-full")
 	drawingID, err := strconv.ParseInt(idText, 10, 64)
 	if !isWebP || err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	owner, image, err := s.store.AvatarDrawingImage(drawingID)
+	owner, image, err := s.store.AvatarDrawingImage(drawingID, fullBody)
 	if errors.Is(err, ErrNotFound) || (err == nil && owner != session.DiscordUserID) {
 		http.NotFound(w, r)
 		return
@@ -1104,8 +1136,10 @@ func (s *Server) handleAvatarImageForMachines(w http.ResponseWriter, r *http.Req
 // avatarRequestToDraw is a request with what the drawer needs to draw it.
 type avatarRequestToDraw struct {
 	AvatarRequest
-	// BaseDrawingCode is the drawing an edit_drawing request changes.
-	BaseDrawingCode string `json:"base_drawing_code,omitempty"`
+	// BaseDrawingCode is the drawing an edit_drawing request changes, and
+	// BaseDrawingFormat what it is: a portrait is turned into a character.
+	BaseDrawingCode   string `json:"base_drawing_code,omitempty"`
+	BaseDrawingFormat string `json:"base_drawing_format,omitempty"`
 	// HasPhoto is whether the person's photo is kept to draw from.
 	HasPhoto bool `json:"has_photo"`
 }
@@ -1129,7 +1163,7 @@ func (s *Server) handleAvatarRequestsToDraw(w http.ResponseWriter, r *http.Reque
 				log.Printf("[discord-signup] avatar request %d: base drawing %d: %v", request.ID, request.BaseDrawingID, err)
 				continue
 			}
-			item.BaseDrawingCode = base.DrawingCode
+			item.BaseDrawingCode, item.BaseDrawingFormat = base.DrawingCode, base.Format
 		}
 		out = append(out, item)
 	}
@@ -1203,40 +1237,49 @@ func isWebP(image []byte) bool {
 	return len(image) > 12 && bytes.Equal(image[:4], []byte("RIFF")) && bytes.Equal(image[8:12], []byte("WEBP"))
 }
 
-// decodeDrawing reads {"drawing_code", "image_webp"} and checks both,
-// answering the request itself when they do not hold.
-func decodeDrawing(w http.ResponseWriter, r *http.Request, extra map[string]*string) (string, []byte, bool) {
+// decodeDrawing reads {"format", "drawing_code", "image_webp",
+// "full_body_webp"} and checks them, answering the request itself when they
+// do not hold. A character comes with its whole body printed; a portrait
+// without. reason, when asked for, must be there too.
+func decodeDrawing(w http.ResponseWriter, r *http.Request, reason *string) (newAvatarDrawing, bool) {
 	var body struct {
+		Format      string `json:"format"`
 		DrawingCode string `json:"drawing_code"`
-		// ImageWebP is the print, base64 in JSON as encoding/json does []byte.
-		ImageWebP []byte `json:"image_webp"`
-		Reason    string `json:"reason"`
+		// The prints, base64 in JSON as encoding/json does []byte.
+		ImageWebP    []byte `json:"image_webp"`
+		FullBodyWebP []byte `json:"full_body_webp"`
+		Reason       string `json:"reason"`
 	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4*avatarImageMaximumBytes))
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8*avatarImageMaximumBytes))
 	decoder.DisallowUnknownFields()
+	refuse := func(message string) (newAvatarDrawing, bool) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": message})
+		return newAvatarDrawing{}, false
+	}
 	if err := decoder.Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "malformed body: " + err.Error()})
-		return "", nil, false
+		return refuse("malformed body: " + err.Error())
 	}
+	image := func(b []byte) bool { return isWebP(b) && len(b) <= avatarImageMaximumBytes }
 	switch {
+	case !avatarFormats[body.Format]:
+		return refuse("format must be character or portrait")
 	case strings.TrimSpace(body.DrawingCode) == "":
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "drawing_code is required"})
-		return "", nil, false
-	case !isWebP(body.ImageWebP) || len(body.ImageWebP) > avatarImageMaximumBytes:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("image_webp must be a WebP image of at most %d bytes", avatarImageMaximumBytes)})
-		return "", nil, false
+		return refuse("drawing_code is required")
+	case !image(body.ImageWebP):
+		return refuse(fmt.Sprintf("image_webp must be a WebP image of at most %d bytes", avatarImageMaximumBytes))
+	case body.Format == AvatarFormatCharacter && !image(body.FullBodyWebP):
+		return refuse(fmt.Sprintf("a character needs full_body_webp, a WebP image of at most %d bytes", avatarImageMaximumBytes))
+	case body.Format == AvatarFormatPortrait && body.FullBodyWebP != nil:
+		return refuse("a portrait has no full_body_webp")
+	case reason != nil && strings.TrimSpace(body.Reason) == "":
+		return refuse("reason is required")
+	case reason == nil && body.Reason != "":
+		return refuse("reason is not a field here")
 	}
-	if reason, wanted := extra["reason"]; wanted {
-		if strings.TrimSpace(body.Reason) == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "reason is required"})
-			return "", nil, false
-		}
+	if reason != nil {
 		*reason = body.Reason
-	} else if body.Reason != "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "reason is not a field here"})
-		return "", nil, false
 	}
-	return body.DrawingCode, body.ImageWebP, true
+	return newAvatarDrawing{Format: body.Format, Code: body.DrawingCode, ImageWebP: body.ImageWebP, FullBodyWebP: body.FullBodyWebP}, true
 }
 
 func (s *Server) handleAvatarRequestDrawing(w http.ResponseWriter, r *http.Request) {
@@ -1245,11 +1288,11 @@ func (s *Server) handleAvatarRequestDrawing(w http.ResponseWriter, r *http.Reque
 		http.NotFound(w, r)
 		return
 	}
-	code, image, ok := decodeDrawing(w, r, nil)
+	drawing, ok := decodeDrawing(w, r, nil)
 	if !ok {
 		return
 	}
-	drawingID, err := s.store.FinishAvatarRequest(requestID, code, image)
+	drawingID, err := s.store.FinishAvatarRequest(requestID, drawing)
 	if err != nil {
 		writeAvatarError(w, err)
 		return
@@ -1328,11 +1371,11 @@ func (s *Server) handleRequestAvatarByOperator(w http.ResponseWriter, r *http.Re
 // reason recorded.
 func (s *Server) handleSetAvatarByOperator(w http.ResponseWriter, r *http.Request) {
 	var reason string
-	code, image, ok := decodeDrawing(w, r, map[string]*string{"reason": &reason})
+	drawing, ok := decodeDrawing(w, r, &reason)
 	if !ok {
 		return
 	}
-	drawingID, err := s.store.SetAvatarByOperator(r.PathValue("userID"), code, image, reason)
+	drawingID, err := s.store.SetAvatarByOperator(r.PathValue("userID"), drawing, reason)
 	if err != nil {
 		writeAvatarError(w, err)
 		return

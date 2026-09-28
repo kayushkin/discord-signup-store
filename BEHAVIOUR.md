@@ -210,7 +210,7 @@ because Discord has none to give.
 | **Web — detail** | whoever may edit | One event. For an organiser its fields are the edit form, with Open/Close signups, the waitlist switch, End and Cancel beside them; then the roster, **Add people** (Send invite, or Add now to a list), the invites and how each was answered, and one log of signups, edits and invites, newest first. People are shown by their short name, with their Discord name on hover or tap. |
 | **Web — form** | organisers | Create, with the fields a Discord form has no room for, and the people to invite or put on the event as it is made. Editing is on the detail page. |
 | **Web — names** | site admins, server owners | The short name each person is shown by, everywhere. A 404 for anyone else, and not linked for them. |
-| **Web — your avatar** | just you | Upload a photo and a model draws you in the site's print style. Every drawing is kept; you choose which one shows beside your name, or none. Ask for more — from a new photo, from your photo again, or a change to one you have — each with a comment on how it should look; the page shows the drawing when it is done. Your photo is kept until you delete it. |
+| **Web — your avatar** | just you | Upload a photo and a model draws the whole of you in the site's print style, part by part so pictures can pose you; your round portrait comes from the same drawing. Every drawing is kept; you choose which one shows beside your name, or none. Ask for more — from a new photo, from your photo again, or a change to one you have — each with a comment on how it should look; the page shows the drawing when it is done. Your photo is kept until you delete it. |
 
 ## 5. Who may do what
 
