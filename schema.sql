@@ -563,14 +563,28 @@ CREATE TABLE IF NOT EXISTS event_scenes (
     updated_at               INTEGER NOT NULL
 );
 
--- event_picture_prints: every picture painted of an event's current scene,
+-- event_scene_history: every scene an event had before its current one,
+-- written when a new or updated scene replaces it. Scenes and their pictures
+-- are never deleted: an event whose pictures are switched off keeps both,
+-- inactive, and shows them again when they are switched on.
+CREATE TABLE IF NOT EXISTS event_scene_history (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id          INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    details_signature TEXT NOT NULL,
+    scene_code        TEXT NOT NULL,
+    written_at        INTEGER NOT NULL,
+    replaced_at       INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS event_scene_history_by_event ON event_scene_history (event_id, id);
+
+-- event_picture_prints: every picture painted of an event's scenes,
 -- the people going with avatars and faceless stand-ins for the rest printed
 -- into it by cmd/discord-event-picture-painter. signature names the scene,
 -- each person with an avatar and which drawing, and how many stand-ins
 -- (eventPictureSignature, eventpictures.go), so a roster that comes back to
 -- one already painted shows that print again with nothing repainted.
--- scene_version is the scene's updated_at: a print of an older scene is
--- forgotten when the first of a newer one is saved. A page shows the print of
+-- scene_version is the scene's updated_at. Nothing here is deleted: a print
+-- of an older scene, or of an event whose pictures are off, is kept, inactive. A page shows the print of
 -- who is going now, or the last one painted while that is painted, and none
 -- once nobody going has an avatar. (Until 2026-09-28 one picture per event, in
 -- a table named event_pictures; migrateSinglePicturePerEvent moves it here.)

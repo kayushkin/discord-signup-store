@@ -495,11 +495,11 @@
           <input type="hidden" name="pictures" value="on">
           <button role="radio" data-tone="ok" aria-checked="{{not $ev.PicturesDisabled}}" {{if not $ev.PicturesDisabled}}tabindex="-1"{{end}}>On</button></form>
         <form method="post" action="/events/{{$ev.ID}}" data-async
-              data-confirm="Take the picture down and stop making one? Its scene is deleted; turning it on again draws a new one.">
+              data-confirm="Take the picture down and stop painting it? It is kept, and comes back if you turn pictures on again.">
           <input type="hidden" name="pictures" value="off">
           <button role="radio" data-tone="warn" aria-checked="{{$ev.PicturesDisabled}}" {{if $ev.PicturesDisabled}}tabindex="-1"{{end}}>Off</button></form>
       </div>
-      <p class="hint">{{if $ev.PicturesDisabled}}No picture is made for this event.{{else}}A drawn scene with everyone going who has an avatar.{{end}}</p>
+      <p class="hint">{{if $ev.PicturesDisabled}}Off: the picture is kept, not shown.{{else}}A drawn scene with everyone going who has an avatar.{{end}}</p>
     </div>
     {{$watch := .RosterWatch}}
     <div class="control">

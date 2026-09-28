@@ -212,21 +212,36 @@ func TestAnOrganiserControlsTheEventsPicture(t *testing.T) {
 		t.Errorf("the request made while the first was drawn was lost: %+v", again)
 	}
 
-	// Off: the picture and scene go, and nothing is made.
+	// The scene the answered request replaced is kept in the history.
+	var kept string
+	store.db.QueryRow(`SELECT scene_code FROM event_scene_history WHERE event_id = ? ORDER BY id DESC LIMIT 1`, ev.ID).Scan(&kept)
+	if kept != "const SCENE = 1" {
+		t.Errorf("the replaced scene was not kept: history has %q", kept)
+	}
+
+	// Off: nothing is shown or painted, and nothing is deleted.
 	postForm(t, mux, token, eventPath(ev), url.Values{"pictures": {"off"}})
 	after, _ := store.GetEvent(ev.ID)
 	if !after.PicturesDisabled || len(due()) != 0 {
 		t.Fatalf("after switching off: disabled %v, due %+v", after.PicturesDisabled, due())
 	}
-	if _, err := store.EventPicture(ev.ID, ""); err == nil {
-		t.Error("the picture outlived switching pictures off")
+	if _, err := store.EventPicture(ev.ID, ""); err != nil {
+		t.Error("switching pictures off deleted the picture; it should be kept, inactive")
 	}
 	if rec := getPage(t, mux, token, fmt.Sprintf("/events/%d/picture.webp", ev.ID)); rec.Code != http.StatusNotFound {
 		t.Errorf("picture of a switched-off event = %d, want 404", rec.Code)
 	}
+	if home := getPage(t, mux, token, "/").Body.String(); strings.Contains(home, fmt.Sprintf("/events/%d/picture.webp", ev.ID)) {
+		t.Error("the home page shows a switched-off picture")
+	}
+	// On again: the same scene and picture come back, and the request made
+	// before is still waiting — no new scene is started for switching on.
 	postForm(t, mux, token, eventPath(ev), url.Values{"pictures": {"on"}})
-	if on := due(); len(on) != 1 || !on[0].NeedsScene || on[0].Request != nil {
-		t.Errorf("after switching back on, due = %+v; want a new scene", on)
+	if on := due(); len(on) != 1 || on[0].Request == nil || on[0].Request.Comment != "on the moon" || on[0].UpdateExisting {
+		t.Errorf("after switching back on, due = %+v; want only the request still waiting", on)
+	}
+	if home := getPage(t, mux, token, "/").Body.String(); !strings.Contains(home, fmt.Sprintf("/events/%d/picture.webp", ev.ID)) {
+		t.Error("switching pictures back on did not bring the kept picture back")
 	}
 }
 

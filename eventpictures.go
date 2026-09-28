@@ -303,6 +303,13 @@ func (s *Store) SaveEventScene(eventID int64, detailsSignature, sceneCode string
 		return err
 	}
 	defer tx.Rollback()
+	// The scene this one replaces goes into the history first: scenes, like
+	// their pictures, are kept.
+	if _, err := tx.Exec(`INSERT INTO event_scene_history (event_id, details_signature, scene_code, written_at, replaced_at)
+		SELECT event_id, details_signature, scene_code, updated_at, ? FROM event_scenes WHERE event_id = ? AND scene_code != ''`,
+		now(), eventID); err != nil {
+		return fmt.Errorf("keep the scene this replaces: %w", err)
+	}
 	if _, err := tx.Exec(`INSERT INTO event_scenes (event_id, details_signature, scene_code, updated_at) VALUES (?, ?, ?, ?)
 		ON CONFLICT(event_id) DO UPDATE SET details_signature = excluded.details_signature, scene_code = excluded.scene_code,
 			failure = '', failed_details_signature = '', failed_at = 0, updated_at = excluded.updated_at`, eventID, detailsSignature, sceneCode, now()); err != nil {
@@ -335,16 +342,6 @@ func (s *Store) RequestEventScene(eventID int64, kind, comment, by string) error
 		eventID, kind, comment, now(), by, now())
 	if err != nil {
 		return fmt.Errorf("store scene request: %w", err)
-	}
-	return nil
-}
-
-// DeleteEventPicture deletes an event's picture and its scene.
-func (s *Store) DeleteEventPicture(eventID int64) error {
-	for _, table := range []string{"event_picture_prints", "event_scenes"} {
-		if _, err := s.db.Exec(`DELETE FROM `+table+` WHERE event_id = ?`, eventID); err != nil {
-			return fmt.Errorf("delete from %s: %w", table, err)
-		}
 	}
 	return nil
 }
@@ -409,8 +406,9 @@ func (s *Store) EventPicturePrints(eventIDs []int64) (map[int64]*eventPrints, er
 	return out, rows.Err()
 }
 
-// SaveEventPicture keeps a painted picture beside the others of the same
-// scene, and forgets those of an older scene, which nothing will show again.
+// SaveEventPicture keeps a painted picture beside every other painted of
+// the event. Nothing is deleted: a picture of an older scene, or of an event
+// whose pictures are off, stays, inactive.
 func (s *Store) SaveEventPicture(eventID int64, signature string, sceneVersion int64, imageWebP []byte) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -421,9 +419,6 @@ func (s *Store) SaveEventPicture(eventID int64, signature string, sceneVersion i
 		ON CONFLICT(event_id, signature) DO UPDATE SET scene_version = excluded.scene_version, image_webp = excluded.image_webp,
 			painted_at = excluded.painted_at`, eventID, signature, sceneVersion, imageWebP, now()); err != nil {
 		return fmt.Errorf("store event picture: %w", err)
-	}
-	if _, err := tx.Exec(`DELETE FROM event_picture_prints WHERE event_id = ? AND scene_version != ?`, eventID, sceneVersion); err != nil {
-		return fmt.Errorf("forget an older scene's pictures: %w", err)
 	}
 	return tx.Commit()
 }

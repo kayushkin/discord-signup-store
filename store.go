@@ -108,9 +108,10 @@ type Event struct {
 	// putting them on the waitlist; anyone already waiting stays and still
 	// moves up in order. Off — the zero value — is the ordinary waitlist.
 	WaitlistDisabled bool `json:"waitlist_disabled"`
-	// PicturesDisabled stops the picture of who is going: none is made for
-	// the event, and one made before is deleted. Off — the zero value — makes
-	// one once someone going has an avatar.
+	// PicturesDisabled stops the picture of who is going: none is shown or
+	// painted. Its scene and pictures are kept, inactive, for when it is
+	// switched on again. Off — the zero value — makes one once someone going
+	// has an avatar.
 	PicturesDisabled bool  `json:"pictures_disabled"`
 	CreatedAt        int64 `json:"created_at"`
 	UpdatedAt        int64 `json:"updated_at"`
@@ -1032,7 +1033,8 @@ type EventPatch struct {
 	// on promotes nobody: the waitlist only fills from new joins.
 	WaitlistDisabled *bool `json:"waitlist_disabled"`
 	// PicturesDisabled stops or starts the picture of who is going. Stopping
-	// it deletes the picture and its scene; starting it again draws a new one.
+	// it hides the picture and pauses painting; the scene and every picture
+	// are kept, inactive, and starting it again shows them once more.
 	PicturesDisabled *bool `json:"pictures_disabled"`
 }
 
