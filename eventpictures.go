@@ -63,8 +63,8 @@ type eventScene struct {
 	FailedDetailsSignature string `json:"failed_details_signature,omitempty"`
 	FailedAt               int64  `json:"failed_at"`
 	// Request is an organiser asking for the scene again, nil when nobody is.
-	Request *eventSceneRequest `json:"request,omitempty"`
-	UpdatedAt              int64  `json:"updated_at"`
+	Request   *eventSceneRequest `json:"request,omitempty"`
+	UpdatedAt int64              `json:"updated_at"`
 }
 
 // The ways an organiser can ask for a scene again.
