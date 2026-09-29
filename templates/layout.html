@@ -356,7 +356,7 @@ label.form-check input{width:18px;height:18px;margin:0;flex:none;accent-color:va
 .picked-sub{color:var(--dim);font-size:13px}
 .avatar{flex:none;width:32px;height:32px;font-size:14px;border-radius:50%;background:var(--blue);color:var(--paper-light);display:inline-flex;
   align-items:center;justify-content:center;font-weight:700;overflow:hidden;border:2px solid var(--ink)}
-.avatar img{width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.2) sepia(.35)}
+.avatar img{width:100%;height:100%;object-fit:cover}
 /* Unavailable reads as unavailable, the same on both panels. */
 .choice > button:disabled,.seg:disabled{background:repeating-linear-gradient(135deg,transparent 0 6px,var(--rule) 6px 8px);
   color:var(--dim);border-color:var(--dim);opacity:1;cursor:not-allowed;box-shadow:none;transform:none;
@@ -395,9 +395,7 @@ label.force-tile:has(input:checked) .tile-box{background:var(--warn)}
 .location-row{display:flex;gap:8px;align-items:center}
 .location-row input{flex:1}
 .map-search{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;text-decoration:none!important;padding:8px 11px}
-/* The map, printed in one ink. */
-.map-preview{display:block;width:100%;height:220px;border:2px solid var(--ink);border-radius:2px;margin-top:8px;background:var(--paper-deep);
-  filter:grayscale(1) sepia(.45) contrast(1.1)}
+.map-preview{display:block;width:100%;height:220px;border:2px solid var(--ink);border-radius:2px;margin-top:8px;background:var(--paper-deep)}
 @media (max-width:600px){.location-row{flex-direction:column;align-items:stretch}.map-search{justify-content:center}}
 .ask-text{margin:0;font-size:15px;line-height:1.5}
 .choices{display:grid;grid-template-columns:1fr 1fr;gap:14px}
