@@ -16,10 +16,8 @@ import (
 // either a member's avatar that the member shows beside their name, or a
 // drawing made for the server — from words alone, from a photo, or as a
 // change to one made before — which cmd/discord-character-drawer draws as a
-// character, the same way it draws avatars. A character mascot also gets a
-// short animated loop for each of mascotReactions, which the pages play when
-// the viewer does something: it cheers when they join, slumps when they
-// leave.
+// character, the same way it draws avatars. The header's script moves the
+// mascot when the viewer does something (mascotReactionQuery).
 
 // The kinds of mascot drawing an owner can ask for.
 const (
@@ -39,29 +37,6 @@ var mascotRequestKinds = map[string]bool{MascotRequestDescribe: true, MascotRequ
 // a day. Each costs as much as an avatar.
 const mascotDrawingsPerDay = 6
 
-// mascotReactions are the loops printed for a character mascot, each named
-// by what the viewer did: hello when they first open the home page, joined,
-// waitlisted, left, created (an event), and poked (they clicked the mascot).
-// art/render-mascot-reactions.mjs poses the character for each and refuses a
-// name it does not know.
-var mascotReactions = []string{"hello", "joined", "waitlisted", "left", "created", "poked"}
-
-func isMascotReaction(name string) bool {
-	for _, reaction := range mascotReactions {
-		if reaction == name {
-			return true
-		}
-	}
-	return false
-}
-
-// mascotReactionRetryAfter is how long the drawer waits before printing a
-// mascot's reactions again after they failed.
-const mascotReactionRetryAfter = time.Hour
-
-// ErrMascotChanged is a print of a mascot that is no longer the server's.
-var ErrMascotChanged = errors.New("the server's mascot changed while its reactions were printed")
-
 // GuildMascot is the drawing a server shows as its mascot.
 type GuildMascot struct {
 	GuildID string `json:"guild_id"`
@@ -73,14 +48,7 @@ type GuildMascot struct {
 	Format          string `json:"format"`
 	SetBy           string `json:"set_by"`
 	SetAt           int64  `json:"set_at"`
-	// ReactionsPrinted is how many of mascotReactions are printed.
-	ReactionsPrinted int    `json:"reactions_printed"`
-	ReactionFailure  string `json:"reaction_failure,omitempty"`
-	ReactionFailedAt int64  `json:"reaction_failed_at,omitempty"`
 }
-
-// ReactionsReady is whether every reaction is printed.
-func (m *GuildMascot) ReactionsReady() bool { return m.ReactionsPrinted == len(mascotReactions) }
 
 // MascotDrawing is one drawing made for a server's mascot, without its print.
 type MascotDrawing struct {
@@ -157,8 +125,7 @@ func recordGuildMascotUpdate(tx *sql.Tx, guildID, actor, action, detail string) 
 }
 
 const guildMascotSelect = `SELECT g.guild_id, g.mascot_drawing_id, g.avatar_drawing_id, COALESCE(a.discord_user_id, ''),
-		COALESCE(m.format, a.format), g.set_by, g.set_at,
-		(SELECT COUNT(*) FROM guild_mascot_reactions r WHERE r.guild_id = g.guild_id), g.reaction_failure, g.reaction_failed_at
+		COALESCE(m.format, a.format), g.set_by, g.set_at
 	FROM guild_mascots g
 	LEFT JOIN mascot_drawings m ON g.mascot_drawing_id != 0 AND m.id = g.mascot_drawing_id
 	LEFT JOIN avatar_drawings a ON g.avatar_drawing_id != 0 AND a.id = g.avatar_drawing_id
@@ -166,8 +133,7 @@ const guildMascotSelect = `SELECT g.guild_id, g.mascot_drawing_id, g.avatar_draw
 
 func scanGuildMascot(row interface{ Scan(...any) error }) (*GuildMascot, error) {
 	var m GuildMascot
-	err := row.Scan(&m.GuildID, &m.MascotDrawingID, &m.AvatarDrawingID, &m.AvatarOwnerID, &m.Format, &m.SetBy, &m.SetAt,
-		&m.ReactionsPrinted, &m.ReactionFailure, &m.ReactionFailedAt)
+	err := row.Scan(&m.GuildID, &m.MascotDrawingID, &m.AvatarDrawingID, &m.AvatarOwnerID, &m.Format, &m.SetBy, &m.SetAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -183,27 +149,18 @@ func (s *Store) GuildMascotOf(guildID string) (*GuildMascot, error) {
 	return scanGuildMascot(s.db.QueryRow(guildMascotSelect+` AND g.guild_id = ?`, guildID))
 }
 
-// GuildMascotImage is one print of the server's mascot: "portrait", "full"
-// (the whole character, none for a portrait drawing), or a reaction's loop.
-func (s *Store) GuildMascotImage(guildID, print string) ([]byte, error) {
-	var image []byte
-	var err error
-	switch {
-	case print == "portrait" || print == "full":
-		column := "image_webp"
-		if print == "full" {
-			column = "full_body_webp"
-		}
-		err = s.db.QueryRow(`SELECT COALESCE(m.`+column+`, a.`+column+`) FROM guild_mascots g
-			LEFT JOIN mascot_drawings m ON g.mascot_drawing_id != 0 AND m.id = g.mascot_drawing_id
-			LEFT JOIN avatar_drawings a ON g.avatar_drawing_id != 0 AND a.id = g.avatar_drawing_id
-			WHERE g.guild_id = ?`, guildID).Scan(&image)
-	case isMascotReaction(print):
-		err = s.db.QueryRow(`SELECT image_webp FROM guild_mascot_reactions WHERE guild_id = ? AND reaction = ?`,
-			guildID, print).Scan(&image)
-	default:
-		return nil, fmt.Errorf("%w: no print named %q", ErrNotFound, print)
+// GuildMascotImage is one print of the server's mascot: its round portrait,
+// or the whole character when fullBody (none for a portrait drawing).
+func (s *Store) GuildMascotImage(guildID string, fullBody bool) ([]byte, error) {
+	column := "image_webp"
+	if fullBody {
+		column = "full_body_webp"
 	}
+	var image []byte
+	err := s.db.QueryRow(`SELECT COALESCE(m.`+column+`, a.`+column+`) FROM guild_mascots g
+		LEFT JOIN mascot_drawings m ON g.mascot_drawing_id != 0 AND m.id = g.mascot_drawing_id
+		LEFT JOIN avatar_drawings a ON g.avatar_drawing_id != 0 AND a.id = g.avatar_drawing_id
+		WHERE g.guild_id = ?`, guildID).Scan(&image)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && image == nil) {
 		return nil, ErrNotFound
 	}
@@ -213,16 +170,11 @@ func (s *Store) GuildMascotImage(guildID, print string) ([]byte, error) {
 	return image, nil
 }
 
-// setGuildMascot makes one drawing the server's mascot, dropping the
-// reactions printed for the one before.
+// setGuildMascot makes one drawing the server's mascot.
 func setGuildMascot(tx *sql.Tx, guildID, actor string, mascotDrawingID, avatarDrawingID int64) error {
-	if _, err := tx.Exec(`DELETE FROM guild_mascot_reactions WHERE guild_id = ?`, guildID); err != nil {
-		return fmt.Errorf("drop old mascot reactions: %w", err)
-	}
 	_, err := tx.Exec(`INSERT INTO guild_mascots (guild_id, mascot_drawing_id, avatar_drawing_id, set_by, set_at) VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(guild_id) DO UPDATE SET mascot_drawing_id = excluded.mascot_drawing_id,
-			avatar_drawing_id = excluded.avatar_drawing_id, set_by = excluded.set_by, set_at = excluded.set_at,
-			reaction_failure = '', reaction_failed_at = 0`,
+			avatar_drawing_id = excluded.avatar_drawing_id, set_by = excluded.set_by, set_at = excluded.set_at`,
 		guildID, mascotDrawingID, avatarDrawingID, actor, now())
 	if err != nil {
 		return fmt.Errorf("set guild mascot: %w", err)
@@ -637,105 +589,4 @@ func (s *Store) ForgetMascotRequestPhoto(requestID int64) error {
 		return fmt.Errorf("forget mascot photo: %w", err)
 	}
 	return nil
-}
-
-// mascotToReact is a character mascot whose reactions are still to print.
-type mascotToReact struct {
-	GuildID         string `json:"guild_id"`
-	MascotDrawingID int64  `json:"mascot_drawing_id"`
-	AvatarDrawingID int64  `json:"avatar_drawing_id"`
-	DrawingCode     string `json:"drawing_code"`
-}
-
-// MascotsToReact is every character mascot missing a reaction, except one
-// whose reactions failed within mascotReactionRetryAfter.
-func (s *Store) MascotsToReact() ([]mascotToReact, error) {
-	rows, err := s.db.Query(`SELECT g.guild_id, g.mascot_drawing_id, g.avatar_drawing_id, COALESCE(m.drawing_code, a.drawing_code)
-		FROM guild_mascots g
-		LEFT JOIN mascot_drawings m ON g.mascot_drawing_id != 0 AND m.id = g.mascot_drawing_id
-		LEFT JOIN avatar_drawings a ON g.avatar_drawing_id != 0 AND a.id = g.avatar_drawing_id
-		WHERE COALESCE(m.format, a.format) = ?
-		  AND (SELECT COUNT(*) FROM guild_mascot_reactions r WHERE r.guild_id = g.guild_id) < ?
-		  AND g.reaction_failed_at < ?
-		ORDER BY g.set_at`, AvatarFormatCharacter, len(mascotReactions), now()-int64(mascotReactionRetryAfter/time.Second))
-	if err != nil {
-		return nil, fmt.Errorf("list mascots to react: %w", err)
-	}
-	defer rows.Close()
-	out := []mascotToReact{}
-	for rows.Next() {
-		var m mascotToReact
-		if err := rows.Scan(&m.GuildID, &m.MascotDrawingID, &m.AvatarDrawingID, &m.DrawingCode); err != nil {
-			return nil, fmt.Errorf("scan mascot to react: %w", err)
-		}
-		out = append(out, m)
-	}
-	return out, rows.Err()
-}
-
-// checkMascotUnchanged refuses when the server's mascot is no longer the
-// drawing the drawer printed.
-func checkMascotUnchanged(tx *sql.Tx, guildID string, mascotDrawingID, avatarDrawingID int64) error {
-	var mascot, avatar int64
-	err := tx.QueryRow(`SELECT mascot_drawing_id, avatar_drawing_id FROM guild_mascots WHERE guild_id = ?`, guildID).Scan(&mascot, &avatar)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && (mascot != mascotDrawingID || avatar != avatarDrawingID)) {
-		return ErrMascotChanged
-	}
-	if err != nil {
-		return fmt.Errorf("read guild mascot: %w", err)
-	}
-	return nil
-}
-
-// SaveMascotReactions keeps the loops printed for the server's mascot. It
-// refuses a set missing a reaction, and prints of a mascot the server no
-// longer has.
-func (s *Store) SaveMascotReactions(guildID string, mascotDrawingID, avatarDrawingID int64, prints map[string][]byte) error {
-	for _, reaction := range mascotReactions {
-		if prints[reaction] == nil {
-			return fmt.Errorf("%w: the %s reaction is missing", ErrInvalidEvent, reaction)
-		}
-	}
-	for reaction := range prints {
-		if !isMascotReaction(reaction) {
-			return fmt.Errorf("%w: %q is not a reaction", ErrInvalidEvent, reaction)
-		}
-	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin: %w", err)
-	}
-	defer tx.Rollback()
-	if err := checkMascotUnchanged(tx, guildID, mascotDrawingID, avatarDrawingID); err != nil {
-		return err
-	}
-	for reaction, image := range prints {
-		if _, err := tx.Exec(`INSERT INTO guild_mascot_reactions (guild_id, reaction, image_webp, printed_at) VALUES (?, ?, ?, ?)
-			ON CONFLICT(guild_id, reaction) DO UPDATE SET image_webp = excluded.image_webp, printed_at = excluded.printed_at`,
-			guildID, reaction, image, now()); err != nil {
-			return fmt.Errorf("store mascot reaction: %w", err)
-		}
-	}
-	if _, err := tx.Exec(`UPDATE guild_mascots SET reaction_failure = '', reaction_failed_at = 0 WHERE guild_id = ?`, guildID); err != nil {
-		return fmt.Errorf("clear mascot reaction failure: %w", err)
-	}
-	return tx.Commit()
-}
-
-// FailMascotReactions records reactions that would not print, so the
-// drawer waits before trying again.
-func (s *Store) FailMascotReactions(guildID string, mascotDrawingID, avatarDrawingID int64, reason string) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin: %w", err)
-	}
-	defer tx.Rollback()
-	if err := checkMascotUnchanged(tx, guildID, mascotDrawingID, avatarDrawingID); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`UPDATE guild_mascots SET reaction_failure = ?, reaction_failed_at = ? WHERE guild_id = ?`,
-		reason, now(), guildID); err != nil {
-		return fmt.Errorf("record mascot reaction failure: %w", err)
-	}
-	return tx.Commit()
 }

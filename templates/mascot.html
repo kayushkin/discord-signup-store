@@ -16,7 +16,7 @@
     {{end}}
   </div>
   <p class="meta">The mascot sits in the masthead and on the home page for everyone who has this server chosen, and
-    on this server's event pages. It cheers when someone joins, sighs when they leave, and waves hello. Only the
+    on this server's event pages. It hops when someone joins, sighs when they leave, and waves hello. Only the
     server's owner can change it.</p>
 
   <div class="hero" style="margin-top:12px">
@@ -24,20 +24,14 @@
     <div>
       {{if $current}}
         <p>{{if $current.AvatarDrawingID}}A member's avatar is the mascot.{{else}}A drawing made for this server is the mascot.{{end}}</p>
-        {{if ne $current.Format "character"}}<p class="meta">It is a head-and-shoulders drawing, so it cannot be posed: it hops and
-          wobbles instead of playing its own reactions.</p>
-        {{else if $current.ReactionsReady}}<p class="meta">Its reactions are printed.</p>
-        {{else if $current.ReactionFailure}}<p class="err">Its reactions would not print: {{$current.ReactionFailure}}. They are tried again within the hour.</p>
-        {{else}}<p class="meta">Its reactions are being printed; until then it hops and wobbles.</p>{{end}}
         <form method="post" action="/mascot/choose" style="margin:0">
           <input type="hidden" name="guild_id" value="{{$guild}}"><input type="hidden" name="source" value="site">
           <button class="ghost btn-sm">Use the site's own mascot</button></form>
       {{else}}
         <p>This server shows the site's own mascot, Maleeha. Make one below, or choose a member's avatar.</p>
       {{end}}
-      <p class="row" style="gap:6px;margin-top:10px">
-        <span class="meta">Try it:</span>
-        {{range $page.Reactions}}<button type="button" class="btn-sm ghost" data-mascot-react="{{.}}">{{.}}</button>{{end}}
+      <p class="row" style="gap:6px;margin-top:10px" data-mascot-try>
+        <span class="meta">Try it on the mascot at the top left:</span>
       </p>
     </div>
   </div>

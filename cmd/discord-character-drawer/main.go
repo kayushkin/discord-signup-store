@@ -6,9 +6,8 @@
 // art/kit.js's skeleton (art/CHARACTER.md), prints its portrait, its whole
 // body and a sheet of poses, shows the prints back to Claude Code to correct,
 // and hands the character's code and prints to the store, which adds it to
-// the person's gallery or the server's mascot drawings. Then, with no model,
-// it prints the reaction loops of every character mascot still missing them
-// (art/render-mascot-reactions.mjs). The scheduler runs it.
+// the person's gallery or the server's mascot drawings. The scheduler runs
+// it.
 //
 // The photo and the comment are someone else's, so whatever is in them may
 // try to steer the model. Claude Code therefore runs --restricted with only the file tools,
@@ -28,7 +27,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -123,15 +121,6 @@ func main() {
 			log.Printf("request %d of %s: %v", next.ID, next.whose(), err)
 			failed++
 		}
-		// A new mascot's reactions are printed straight after it.
-		if err := d.printMascotReactions(); err != nil {
-			log.Printf("mascot reactions: %v", err)
-			failed++
-		}
-	}
-	if err := d.printMascotReactions(); err != nil {
-		log.Printf("mascot reactions: %v", err)
-		failed++
 	}
 	if failed > 0 {
 		os.Exit(1)
@@ -165,77 +154,6 @@ func (d *drawer) nextRequest(tried map[string]bool) (*request, error) {
 		}
 	}
 	return next, nil
-}
-
-// mascotToReact is a character mascot whose reaction loops are missing.
-type mascotToReact struct {
-	GuildID         string `json:"guild_id"`
-	MascotDrawingID int64  `json:"mascot_drawing_id"`
-	AvatarDrawingID int64  `json:"avatar_drawing_id"`
-	DrawingCode     string `json:"drawing_code"`
-}
-
-// printMascotReactions prints the loops of every character mascot missing
-// them, and hands them to the store. A mascot whose loops do not print is
-// recorded there, and waits an hour before it is tried again.
-func (d *drawer) printMascotReactions() error {
-	var due struct {
-		Mascots   []mascotToReact `json:"mascots"`
-		Reactions []string        `json:"reactions"`
-	}
-	if err := d.call(http.MethodGet, "/api/mascot-reactions/to-print", nil, &due); err != nil {
-		return fmt.Errorf("list mascots to print: %w", err)
-	}
-	var failures []string
-	for _, m := range due.Mascots {
-		base := "/api/guilds/" + url.PathEscape(m.GuildID) + "/mascot"
-		prints, err := d.printReactions(m, due.Reactions)
-		if err != nil {
-			failures = append(failures, m.GuildID+": "+err.Error())
-			reason := err.Error()
-			if len(reason) > 600 {
-				reason = reason[:600] + "…"
-			}
-			body := map[string]any{"mascot_drawing_id": m.MascotDrawingID, "avatar_drawing_id": m.AvatarDrawingID, "reason": reason}
-			if reportErr := d.call(http.MethodPost, base+"/reactions-failed", body, nil); reportErr != nil {
-				failures = append(failures, m.GuildID+": recording the failure: "+reportErr.Error())
-			}
-			continue
-		}
-		body := map[string]any{"mascot_drawing_id": m.MascotDrawingID, "avatar_drawing_id": m.AvatarDrawingID, "prints": prints}
-		if err := d.call(http.MethodPut, base+"/reactions", body, nil); err != nil {
-			failures = append(failures, m.GuildID+": save: "+err.Error())
-			continue
-		}
-		log.Printf("printed the reactions of the mascot of %s", m.GuildID)
-	}
-	if failures != nil {
-		return errors.New(strings.Join(failures, "; "))
-	}
-	return nil
-}
-
-// printReactions prints one mascot's loops in a folder of its own.
-func (d *drawer) printReactions(m mascotToReact, reactions []string) (map[string][]byte, error) {
-	folder, err := os.MkdirTemp("", "discord-mascot-reactions-")
-	if err != nil {
-		return nil, err
-	}
-	defer os.RemoveAll(folder)
-	characterFile := filepath.Join(folder, "character.js")
-	if err := os.WriteFile(characterFile, []byte(m.DrawingCode), 0o600); err != nil {
-		return nil, err
-	}
-	if err := d.node("render-mascot-reactions.mjs", characterFile, folder, strings.Join(reactions, ",")); err != nil {
-		return nil, err
-	}
-	prints := map[string][]byte{}
-	for _, reaction := range reactions {
-		if prints[reaction], err = os.ReadFile(filepath.Join(folder, reaction+".webp")); err != nil {
-			return nil, err
-		}
-	}
-	return prints, nil
 }
 
 // drawOne draws one request and reports how it went to the store. A failure

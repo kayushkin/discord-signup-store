@@ -23,20 +23,16 @@ var siteMascot = mascotView{
 	Alt:   "Maleeha in her jester hood, tongue out, waving",
 }
 
-// mascotView is the mascot a page shows. Reactions maps each of
-// mascotReactions to its loop; it is empty for a mascot that cannot be posed
-// or whose loops are not printed yet, and the page then moves the still
-// drawing instead.
+// mascotView is the mascot a page shows.
 type mascotView struct {
-	GuildID   string
-	Small     string
-	Large     string
-	Alt       string
-	Reactions map[string]string
+	GuildID string
+	Small   string
+	Large   string
+	Alt     string
 }
 
-// mascotReactionQuery is the query that has the next page's mascot play a
-// reaction.
+// mascotReactionQuery is the query that has the next page's header mascot
+// move as the reaction says (the layout's script names them).
 func mascotReactionQuery(reaction string) string {
 	return url.Values{"mascot": {reaction}}.Encode()
 }
@@ -68,26 +64,24 @@ func (s *Server) pageMascot(data pageData) (mascotView, error) {
 	}
 	base := "/mascots/" + url.PathEscape(guildID) + "/"
 	version := "?v=" + strconv.FormatInt(mascot.SetAt, 10)
-	view := mascotView{GuildID: guildID, Small: base + "portrait.webp" + version, Large: base + "portrait.webp" + version,
-		Alt: "This server's mascot", Reactions: map[string]string{}}
-	if mascot.ReactionsReady() {
-		for _, reaction := range mascotReactions {
-			view.Reactions[reaction] = base + reaction + ".webp" + version
-		}
-	}
-	return view, nil
+	return mascotView{GuildID: guildID, Small: base + "portrait.webp" + version, Large: base + "portrait.webp" + version,
+		Alt: "This server's mascot"}, nil
 }
 
 // handleMascotImage serves a server's mascot to anyone, at
-// /mascots/{guildID}/portrait.webp, full.webp or {reaction}.webp: it is on
-// every page of that server.
+// /mascots/{guildID}/portrait.webp or full.webp: it is on every page of that
+// server.
 func (s *Server) handleMascotImage(w http.ResponseWriter, r *http.Request) {
-	print, isWebP := strings.CutSuffix(r.PathValue("file"), ".webp")
-	if !isWebP {
+	var fullBody bool
+	switch r.PathValue("file") {
+	case "portrait.webp":
+	case "full.webp":
+		fullBody = true
+	default:
 		http.NotFound(w, r)
 		return
 	}
-	image, err := s.store.GuildMascotImage(r.PathValue("guildID"), print)
+	image, err := s.store.GuildMascotImage(r.PathValue("guildID"), fullBody)
 	if errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -153,7 +147,6 @@ type mascotPage struct {
 	DrawingsLeft  int
 	PerDay        int
 	CommentLimit  int
-	Reactions     []string
 }
 
 func mascotRedirect(w http.ResponseWriter, r *http.Request, guildID, notice string) {
@@ -203,7 +196,7 @@ func (s *Server) handleWebMascot(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	page := &mascotPage{Guilds: guilds, Guild: guilds[0], PerDay: mascotDrawingsPerDay,
-		CommentLimit: avatarCommentMaximumCharacters, Reactions: mascotReactions, PhotosReady: s.files != nil}
+		CommentLimit: avatarCommentMaximumCharacters, PhotosReady: s.files != nil}
 	for _, g := range guilds {
 		if g.ID == wanted {
 			page.Guild = g
@@ -644,72 +637,5 @@ func (s *Server) handleMascotRequestFailed(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	s.purgeMascotPhoto(requestID, photoFileID)
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// handleMascotsToReact lists the character mascots whose reaction loops are
-// still to print, and the reactions to print.
-func (s *Server) handleMascotsToReact(w http.ResponseWriter, r *http.Request) {
-	mascots, err := s.store.MascotsToReact()
-	if err != nil {
-		writeStoreError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"mascots": mascots, "reactions": mascotReactions})
-}
-
-// mascotReactionsBody names the drawing printed, so prints of a mascot
-// replaced meanwhile are refused.
-type mascotReactionsBody struct {
-	MascotDrawingID int64 `json:"mascot_drawing_id"`
-	AvatarDrawingID int64 `json:"avatar_drawing_id"`
-	// Prints maps each reaction to its loop, base64 in JSON.
-	Prints map[string][]byte `json:"prints"`
-	Reason string            `json:"reason"`
-}
-
-func writeMascotError(w http.ResponseWriter, err error) {
-	if errors.Is(err, ErrMascotChanged) {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
-		return
-	}
-	writeStoreError(w, err)
-}
-
-// handleSaveMascotReactions is PUT /api/guilds/{guildID}/mascot/reactions.
-func (s *Server) handleSaveMascotReactions(w http.ResponseWriter, r *http.Request) {
-	var body mascotReactionsBody
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, int64(len(mascotReactions))*4*avatarImageMaximumBytes))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&body); err != nil || body.Reason != "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "a body {\"mascot_drawing_id\", \"avatar_drawing_id\", \"prints\"} is required"})
-		return
-	}
-	for reaction, image := range body.Prints {
-		if !isWebP(image) || len(image) > 2*avatarImageMaximumBytes {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("%s must be a WebP image of at most %d bytes", reaction, 2*avatarImageMaximumBytes)})
-			return
-		}
-	}
-	if err := s.store.SaveMascotReactions(r.PathValue("guildID"), body.MascotDrawingID, body.AvatarDrawingID, body.Prints); err != nil {
-		writeMascotError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// handleMascotReactionsFailed is POST /api/guilds/{guildID}/mascot/reactions-failed.
-func (s *Server) handleMascotReactionsFailed(w http.ResponseWriter, r *http.Request) {
-	var body mascotReactionsBody
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&body); err != nil || strings.TrimSpace(body.Reason) == "" || body.Prints != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "a body {\"mascot_drawing_id\", \"avatar_drawing_id\", \"reason\"} is required"})
-		return
-	}
-	if err := s.store.FailMascotReactions(r.PathValue("guildID"), body.MascotDrawingID, body.AvatarDrawingID, body.Reason); err != nil {
-		writeMascotError(w, err)
-		return
-	}
 	w.WriteHeader(http.StatusNoContent)
 }

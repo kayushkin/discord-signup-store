@@ -60,7 +60,7 @@ func homeRedirect(w http.ResponseWriter, r *http.Request, notice string) {
 }
 
 // homeRedirectWithMascotReaction goes home with the notice, and has the
-// mascot play one of mascotReactions there.
+// mascot in the header move as the reaction says.
 func homeRedirectWithMascotReaction(w http.ResponseWriter, r *http.Request, notice, reaction string) {
 	http.Redirect(w, r, "/?"+noticeQuery(notice)+"&"+mascotReactionQuery(reaction), http.StatusSeeOther)
 }

@@ -200,9 +200,6 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/mascot-requests/{requestID}/started", s.handleMascotRequestStarted)
 	mux.HandleFunc("PUT /api/mascot-requests/{requestID}/drawing", s.handleMascotRequestDrawing)
 	mux.HandleFunc("POST /api/mascot-requests/{requestID}/failed", s.handleMascotRequestFailed)
-	mux.HandleFunc("GET /api/mascot-reactions/to-print", s.handleMascotsToReact)
-	mux.HandleFunc("PUT /api/guilds/{guildID}/mascot/reactions", s.handleSaveMascotReactions)
-	mux.HandleFunc("POST /api/guilds/{guildID}/mascot/reactions-failed", s.handleMascotReactionsFailed)
 
 	// Browser surface — session-gated.
 	mux.HandleFunc("GET /", s.handleWebIndex)

@@ -80,34 +80,21 @@ header .mascot-link,header .mascot-link:hover,header .mascot-link:active{display
   background:none;box-shadow:none;transform:none;cursor:pointer;min-height:0}
 .mascot{display:block;width:64px;height:64px;margin:-6px -4px -10px -6px;filter:drop-shadow(2px 2px 0 var(--ink));transition:transform .15s}
 .mascot-link:hover .mascot{transform:rotate(-8deg) scale(1.06)}
-/* Its reactions: the sticker jumps, and the mascot pops up in the corner,
-   playing its loop or moving its still drawing. */
-.mascot-link.react .mascot{animation:sticker-hop .5s ease-out 2}
-.mascot-link.react-left .mascot{animation:sticker-sag 1.2s ease-in-out 1 forwards}
-.mascot-pop{position:fixed;right:18px;bottom:0;z-index:50;pointer-events:none;
-  animation:pop-up .35s cubic-bezier(.2,1.4,.5,1) both}
-.mascot-pop.leaving{animation:pop-down .35s ease-in both}
-.mascot-pop img{display:block;filter:drop-shadow(3px 3px 0 var(--ink))}
-.mascot-pop.is-loop img{width:180px;height:auto;margin-bottom:-6px}
-.mascot-pop.is-still{bottom:16px}
-.mascot-pop.is-still img{width:150px;height:150px;border-radius:50%}
-.mascot-pop.is-still.react-hello img{animation:still-wave .6s ease-in-out 3;transform-origin:50% 90%}
-.mascot-pop.is-still.react-joined img{animation:still-hop .45s ease-out 4}
-.mascot-pop.is-still.react-created img{animation:still-spin 1.1s cubic-bezier(.3,1.3,.6,1) 2}
-.mascot-pop.is-still.react-waitlisted img{animation:still-shrug .8s ease-in-out 2;transform-origin:50% 100%}
-.mascot-pop.is-still.react-left img{animation:still-sigh 2.2s ease-in-out 1 forwards;transform-origin:50% 100%}
-.mascot-pop.is-still.react-poked img{animation:still-wobble .5s ease-in-out 2}
-@keyframes pop-up{from{transform:translateY(110%)}to{transform:none}}
-@keyframes pop-down{from{transform:none}to{transform:translateY(120%)}}
-@keyframes sticker-hop{0%,100%{transform:none}40%{transform:translateY(-9px) rotate(-6deg)}}
-@keyframes sticker-sag{0%{transform:none}50%,100%{transform:translateY(4px) rotate(8deg) scale(.94)}}
-@keyframes still-wave{0%,100%{transform:rotate(0)}30%{transform:rotate(-12deg)}70%{transform:rotate(10deg)}}
-@keyframes still-hop{0%,100%{transform:translateY(0) scale(1,1)}15%{transform:translateY(0) scale(1.1,.9)}50%{transform:translateY(-38px) scale(.95,1.06)}85%{transform:translateY(0) scale(1.06,.94)}}
-@keyframes still-spin{0%{transform:translateY(0) rotate(0)}50%{transform:translateY(-40px) rotate(180deg)}100%{transform:translateY(0) rotate(360deg)}}
-@keyframes still-shrug{0%,100%{transform:none}35%{transform:rotate(-7deg) translateY(-6px)}65%{transform:rotate(7deg) translateY(-6px)}}
-@keyframes still-sigh{0%{transform:none;filter:drop-shadow(3px 3px 0 var(--ink))}40%{transform:translateY(-6px) scale(1.03,.97)}100%{transform:translateY(18px) rotate(-6deg) scale(.92);filter:drop-shadow(3px 3px 0 var(--ink)) grayscale(.7)}}
-@keyframes still-wobble{0%,100%{transform:rotate(0)}20%{transform:rotate(-14deg) scale(1.05)}40%{transform:rotate(11deg)}60%{transform:rotate(-7deg)}80%{transform:rotate(4deg)}}
-@media (prefers-reduced-motion:reduce){.mascot-pop{display:none}.mascot-link.react .mascot{animation:none}}
+/* Its reactions: the sticker itself moves, as named on the #mascot element's
+   class by the script at the end of the page. */
+.mascot-link.react-hello .mascot{animation:sticker-wave .55s ease-in-out 3;transform-origin:50% 90%}
+.mascot-link.react-joined .mascot{animation:sticker-hop .45s ease-out 3}
+.mascot-link.react-created .mascot{animation:sticker-spin 1s cubic-bezier(.3,1.3,.6,1) 1}
+.mascot-link.react-waitlisted .mascot{animation:sticker-shrug .7s ease-in-out 2;transform-origin:50% 100%}
+.mascot-link.react-left .mascot{animation:sticker-sigh 1.6s ease-in-out 1;transform-origin:50% 100%}
+.mascot-link.react-poked .mascot{animation:sticker-wobble .45s ease-in-out 2}
+@keyframes sticker-wave{0%,100%{transform:rotate(0)}30%{transform:rotate(-14deg)}70%{transform:rotate(12deg)}}
+@keyframes sticker-hop{0%,100%{transform:translateY(0) scale(1,1)}15%{transform:translateY(0) scale(1.12,.88)}50%{transform:translateY(-12px) scale(.94,1.08)}85%{transform:translateY(0) scale(1.08,.92)}}
+@keyframes sticker-spin{0%{transform:translateY(0) rotate(0)}50%{transform:translateY(-12px) rotate(180deg) scale(1.1)}100%{transform:translateY(0) rotate(360deg)}}
+@keyframes sticker-shrug{0%,100%{transform:none}35%{transform:rotate(-9deg) translateY(-3px)}65%{transform:rotate(9deg) translateY(-3px)}}
+@keyframes sticker-sigh{0%,100%{transform:none;filter:drop-shadow(2px 2px 0 var(--ink))}45%,70%{transform:translateY(5px) rotate(-8deg) scale(.9);filter:drop-shadow(2px 2px 0 var(--ink)) grayscale(.7)}}
+@keyframes sticker-wobble{0%,100%{transform:rotate(0)}20%{transform:rotate(-16deg) scale(1.08)}40%{transform:rotate(12deg)}60%{transform:rotate(-8deg)}80%{transform:rotate(4deg)}}
+@media (prefers-reduced-motion:reduce){.mascot-link[class*=react-] .mascot{animation:none}}
 .hero{display:flex;align-items:center;gap:22px}
 .hero-art{flex:none;width:200px;height:200px;margin:-8px -6px -12px -10px}
 .hero-art.small{width:130px;height:130px}
@@ -621,51 +608,35 @@ header .header-me .avatar{border-color:var(--paper-light)}
 {{if .Notice}}<div class="ok">{{.Notice}}</div>{{end}}
 {{template "content" .}}
 </main>
-<div class="mascot-pop" id="mascot-pop" aria-hidden="true" hidden><img alt=""></div>
-<script type="application/json" id="mascot-reactions">{{.Mascot.Reactions}}</script>
 <script>
-// The mascot reacts to what the viewer just did. The page before names the
-// reaction in ?mascot= (joined, waitlisted, left, created); the home page
-// says hello once a browser session; a click on the masthead mascot pokes
-// it. A character mascot plays its printed loop for the reaction; any other
-// — the site's own, a portrait, one whose loops are still printing — moves
-// its still drawing instead. Nothing moves for a reader who asked for less
-// motion.
+// The header's mascot reacts to what the viewer just did. The page before
+// names the reaction in ?mascot= (joined, waitlisted, left, created); the home
+// page says hello once a browser session; a click on the mascot pokes it.
+// Each reaction is a CSS animation of the sticker, named react-<reaction>.
+// Nothing moves for a reader who asked for less motion.
 (function () {
   var sticker = document.getElementById("mascot");
-  var pop = document.getElementById("mascot-pop");
-  if (!sticker || !pop) return;
-  var loops = JSON.parse(document.getElementById("mascot-reactions").textContent || "null") || {};
-  var still = {{.Mascot.Large}};
+  if (!sticker) return;
   var names = ["hello", "joined", "waitlisted", "left", "created", "poked"];
-  var quiet = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var timer = null;
   function react(name) {
-    if (quiet || names.indexOf(name) < 0) return;
-    var img = pop.querySelector("img");
-    var loop = loops[name];
-    pop.className = "mascot-pop " + (loop ? "is-loop" : "is-still") + " react-" + name;
-    // Setting src again restarts an animated WebP from its first frame.
-    img.src = "";
-    img.src = loop || still;
-    pop.hidden = false;
-    sticker.classList.remove("react");
+    if (names.indexOf(name) < 0) return;
+    sticker.className = "mascot-link";
+    // Reading the width makes the browser start the animation again.
     void sticker.offsetWidth;
-    sticker.classList.add("react", "react-" + name);
-    clearTimeout(timer);
-    timer = setTimeout(function () {
-      pop.classList.add("leaving");
-      timer = setTimeout(function () {
-        pop.hidden = true;
-        sticker.className = "mascot-link";
-      }, 350);
-    }, name === "poked" ? 1800 : 2600);
+    sticker.classList.add("react-" + name);
   }
-  window.mascotReact = react;
+  sticker.addEventListener("animationend", function () { sticker.className = "mascot-link"; });
   sticker.addEventListener("click", function () { react("poked"); });
-  document.addEventListener("click", function (e) {
-    var button = e.target.closest("[data-mascot-react]");
-    if (button) react(button.getAttribute("data-mascot-react"));
+  // The mascot page's "Try it" buttons, one per reaction.
+  document.querySelectorAll("[data-mascot-try]").forEach(function (holder) {
+    names.forEach(function (name) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn-sm ghost";
+      button.textContent = name;
+      button.addEventListener("click", function () { react(name); });
+      holder.appendChild(button);
+    });
   });
   var params = new URLSearchParams(location.search);
   var asked = params.get("mascot");

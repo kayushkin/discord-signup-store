@@ -38,16 +38,6 @@ func characterBody(code string) string {
 	return string(body)
 }
 
-func reactionPrints(except string) map[string][]byte {
-	prints := map[string][]byte{}
-	for _, reaction := range mascotReactions {
-		if reaction != except {
-			prints[reaction] = testWebP
-		}
-	}
-	return prints
-}
-
 // TestOnlyTheOwnerSetsTheServersMascot, or a site admin; a member who owns
 // nothing is refused the page and every form.
 func TestOnlyTheOwnerSetsTheServersMascot(t *testing.T) {
@@ -80,11 +70,10 @@ func TestOnlyTheOwnerSetsTheServersMascot(t *testing.T) {
 	}
 }
 
-// TestAMascotIsDrawnFromADescriptionAndReactsOnceItsLoopsArePrinted: the
-// drawer draws it, it becomes the mascot as the server's first, the drawer
-// prints its reactions, and every page of the server then shows it and
-// names its loops.
-func TestAMascotIsDrawnFromADescriptionAndReactsOnceItsLoopsArePrinted(t *testing.T) {
+// TestAMascotIsDrawnFromADescription: the drawer draws it, it becomes the
+// mascot as the server's first, and every page of the server then shows it
+// in the header, and nowhere else new.
+func TestAMascotIsDrawnFromADescription(t *testing.T) {
 	store, _, mux := avatarTestServer(t)
 	owner, _ := store.CreateWebSession("owner", "Owner", "", map[string]uint64{"g1": 0})
 	member, _ := store.CreateWebSession("member", "Member", "", map[string]uint64{"g1": 0})
@@ -122,52 +111,26 @@ func TestAMascotIsDrawnFromADescriptionAndReactsOnceItsLoopsArePrinted(t *testin
 		t.Fatalf("the server's first drawing is not its mascot: %+v, %v", mascot, err)
 	}
 	home := getPage(t, mux, member.Token, "/").Body.String()
-	if !strings.Contains(home, "/mascots/g1/portrait.webp") || !strings.Contains(home, `<script type="application/json" id="mascot-reactions">{}</script>`) {
-		t.Error("the home page does not show the server's mascot, still without loops")
+	if !strings.Contains(home, `class="mascot" src="/mascots/g1/portrait.webp`) {
+		t.Error("the header does not show the server's mascot")
+	}
+	if strings.Contains(home, "mascot-pop") {
+		t.Error("the page still carries the corner popup")
 	}
 	if rec := getPage(t, mux, "", "/mascots/g1/portrait.webp"); rec.Code != http.StatusOK || !isWebP(rec.Body.Bytes()) {
 		t.Errorf("the mascot's portrait = %d", rec.Code)
 	}
-
-	var toPrint struct {
-		Mascots   []mascotToReact `json:"mascots"`
-		Reactions []string        `json:"reactions"`
-	}
-	json.Unmarshal(callAPI(mux, http.MethodGet, "/api/mascot-reactions/to-print", "").Body.Bytes(), &toPrint)
-	if len(toPrint.Mascots) != 1 || toPrint.Mascots[0].DrawingCode != "const CHARACTER = {}" || len(toPrint.Reactions) != len(mascotReactions) {
-		t.Fatalf("to print = %+v", toPrint)
-	}
-	body := func(prints map[string][]byte, drawingID int64) string {
-		b, _ := json.Marshal(map[string]any{"mascot_drawing_id": drawingID, "avatar_drawing_id": 0, "prints": prints})
-		return string(b)
-	}
-	if rec := callAPI(mux, http.MethodPut, "/api/guilds/g1/mascot/reactions", body(reactionPrints("joined"), mascot.MascotDrawingID)); rec.Code != http.StatusBadRequest {
-		t.Errorf("a set missing a reaction = %d, want 400", rec.Code)
-	}
-	if rec := callAPI(mux, http.MethodPut, "/api/guilds/g1/mascot/reactions", body(reactionPrints(""), mascot.MascotDrawingID+1)); rec.Code != http.StatusConflict {
-		t.Errorf("prints of another drawing = %d, want 409", rec.Code)
-	}
-	if rec := callAPI(mux, http.MethodPut, "/api/guilds/g1/mascot/reactions", body(reactionPrints(""), mascot.MascotDrawingID)); rec.Code != http.StatusNoContent {
-		t.Fatalf("reactions = %d: %s", rec.Code, rec.Body)
-	}
-	json.Unmarshal(callAPI(mux, http.MethodGet, "/api/mascot-reactions/to-print", "").Body.Bytes(), &toPrint)
-	if len(toPrint.Mascots) != 0 {
-		t.Errorf("a mascot with every loop is still to print: %+v", toPrint.Mascots)
-	}
-	if home := getPage(t, mux, member.Token, "/").Body.String(); !strings.Contains(home, `/mascots/g1/joined.webp`) {
-		t.Error("the home page does not name the mascot's loops")
-	}
-	if rec := getPage(t, mux, "", "/mascots/g1/joined.webp"); rec.Code != http.StatusOK {
-		t.Errorf("the joined loop = %d", rec.Code)
+	if rec := getPage(t, mux, "", "/mascots/g1/joined.webp"); rec.Code != http.StatusNotFound {
+		t.Errorf("a reaction loop = %d, want 404: there are none", rec.Code)
 	}
 
-	// Back to the site's own: the loops go with the choice.
+	// Back to the site's own.
 	postForm(t, mux, owner.Token, "/mascot/choose", url.Values{"guild_id": {"g1"}, "source": {"site"}})
 	if _, err := store.GuildMascotOf("g1"); err != ErrNotFound {
 		t.Errorf("after choosing the site's own, the mascot = %v", err)
 	}
-	if rec := getPage(t, mux, "", "/mascots/g1/joined.webp"); rec.Code != http.StatusNotFound {
-		t.Errorf("the loop of a mascot no longer chosen = %d, want 404", rec.Code)
+	if rec := getPage(t, mux, "", "/mascots/g1/portrait.webp"); rec.Code != http.StatusNotFound {
+		t.Errorf("the portrait of a mascot no longer chosen = %d, want 404", rec.Code)
 	}
 }
 
@@ -258,5 +221,47 @@ func TestJoiningAndLeavingAskTheMascotToReact(t *testing.T) {
 	}
 	if location := postPage(t, mux, member.Token, eventPath(ev)+"/leave").Header().Get("Location"); !strings.Contains(location, "mascot=left") {
 		t.Errorf("leave went to %s", location)
+	}
+}
+
+// TestTheMascotLoopTableAndColumnsAreDroppedFromAnOlderDatabase: the corner
+// popup's loops lived in guild_mascot_reactions, with two columns on
+// guild_mascots, for two days; opening a database that has them drops them
+// and keeps the mascot.
+func TestTheMascotLoopTableAndColumnsAreDroppedFromAnOlderDatabase(t *testing.T) {
+	dir := t.TempDir()
+	store, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`ALTER TABLE guild_mascots ADD COLUMN reaction_failure TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE guild_mascots ADD COLUMN reaction_failed_at INTEGER NOT NULL DEFAULT 0`,
+		`CREATE TABLE guild_mascot_reactions (guild_id TEXT NOT NULL REFERENCES guild_mascots(guild_id) ON DELETE CASCADE,
+			reaction TEXT NOT NULL, image_webp BLOB NOT NULL, printed_at INTEGER NOT NULL, PRIMARY KEY (guild_id, reaction))`,
+		`INSERT INTO guild_mascots (guild_id, avatar_drawing_id, set_by, set_at, reaction_failure) VALUES ('g1', 4, 'owner', 1, 'x')`,
+		`INSERT INTO guild_mascot_reactions VALUES ('g1', 'joined', x'00', 1)`,
+	} {
+		if _, err := store.db.Exec(statement); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+	store.Close()
+	store, err = Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if have, err := tableExists(store.db, "guild_mascot_reactions"); err != nil || have {
+		t.Errorf("guild_mascot_reactions still exists (%v)", err)
+	}
+	for _, column := range []string{"reaction_failure", "reaction_failed_at"} {
+		if have, err := columnExists(store.db, "guild_mascots", column); err != nil || have {
+			t.Errorf("guild_mascots.%s still exists (%v)", column, err)
+		}
+	}
+	var sets int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM guild_mascots WHERE guild_id = 'g1'`).Scan(&sets); err != nil || sets != 1 {
+		t.Errorf("the mascot row = %d (%v), want kept", sets, err)
 	}
 }

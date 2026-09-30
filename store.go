@@ -486,6 +486,10 @@ var tablesRetired = []string{
 	// the first table took the second's shape. Its one message is deleted by
 	// hand at the same deploy; nothing else ever pointed at it.
 	"roster_table_pages",
+	// guild_mascot_reactions: animated loops of a server's mascot, played in a
+	// popup in the page's corner for two days in September 2026. The popup was
+	// not wanted; the header's mascot moves on its own instead.
+	"guild_mascot_reactions",
 }
 
 // tablesRenamed are tables that kept their contents and changed their name.
@@ -555,6 +559,9 @@ var columnsRetired = []struct {
 		{"idx_signups_roster", "CREATE INDEX idx_signups_roster ON signups(event_id, state, signed_up_at, id)"},
 	}},
 	{"signup_updates", "position", nil},
+	// When the loops in guild_mascot_reactions last failed to print.
+	{"guild_mascots", "reaction_failure", nil},
+	{"guild_mascots", "reaction_failed_at", nil},
 }
 
 func dropRetiredColumns(db *sql.DB) error {

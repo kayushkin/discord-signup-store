@@ -265,9 +265,9 @@ Drawings of a person, kept in a gallery; they choose which shows beside their na
 
 Each server's own mascot; a server with no row shows the site's own, Maleeha, built into the binary. Set by the server's owner (`bot_guilds.owner_id`) or a site admin.
 
-**`guild_mascots`** — `guild_id` PK; exactly one of `mascot_drawing_id` (a drawing made for the server) and `avatar_drawing_id` (a member's shown avatar) is set, the other 0; `set_by`, `set_at` (the pages put it in the image address, so a new mascot is a new address); `reaction_failure`, `reaction_failed_at`, the last time its reaction loops would not print, so the drawer waits an hour. Deleting a member's drawing, or all of theirs, deletes the row that shows it.
+**`guild_mascots`** — `guild_id` PK; exactly one of `mascot_drawing_id` (a drawing made for the server) and `avatar_drawing_id` (a member's shown avatar) is set, the other 0; `set_by`, `set_at` (the pages put it in the image address, so a new mascot is a new address). Deleting a member's drawing, or all of theirs, deletes the row that shows it.
 
-**`guild_mascot_reactions`** — `(guild_id, reaction)` PK; `reaction` one of `mascotReactions` (`hello`, `joined`, `waitlisted`, `left`, `created`, `poked`); `image_webp`, a 2-second animated loop of the character at 270 by 360; `printed_at`. They belong to the choice in `guild_mascots` and go when it changes. A portrait mascot has none.
+`guild_mascot_reactions`, animated loops of each mascot played in a popup in the page's corner, and `guild_mascots.reaction_failure` and `reaction_failed_at` lived for two days in September 2026; the popup was not wanted, and `tablesRetired` and `columnsRetired` drop them.
 
 **`mascot_drawings`** — as `avatar_drawings`, keyed by `guild_id` instead of a person; always a `character`; `request_id` always set.
 

@@ -605,30 +605,13 @@ CREATE TABLE IF NOT EXISTS event_picture_prints (
 -- mascot_drawing_id (a drawing made for the server, mascot_drawings) and
 -- avatar_drawing_id (a member's avatar, avatar_drawings) is set; the other is
 -- 0. A member's drawing stays the mascot only while it exists: deleting it
--- deletes this row. set_by is who chose it. reaction_failure and
--- reaction_failed_at record the last time its reactions would not print, so
--- the drawer tries again an hour later rather than every minute.
+-- deletes this row. set_by is who chose it.
 CREATE TABLE IF NOT EXISTS guild_mascots (
     guild_id           TEXT PRIMARY KEY,
     mascot_drawing_id  INTEGER NOT NULL DEFAULT 0,
     avatar_drawing_id  INTEGER NOT NULL DEFAULT 0,
     set_by             TEXT NOT NULL,
-    set_at             INTEGER NOT NULL,
-    reaction_failure   TEXT NOT NULL DEFAULT '',
-    reaction_failed_at INTEGER NOT NULL DEFAULT 0
-);
-
--- guild_mascot_reactions: the mascot's short animated loops, one per
--- reaction in mascotReactions (mascots.go) — waving hello, cheering when the
--- viewer joins — printed by cmd/discord-character-drawer from the character's
--- code. They belong to the choice in guild_mascots, and are deleted when it
--- changes. Only a character can be posed, so a portrait mascot has none.
-CREATE TABLE IF NOT EXISTS guild_mascot_reactions (
-    guild_id   TEXT NOT NULL REFERENCES guild_mascots(guild_id) ON DELETE CASCADE,
-    reaction   TEXT NOT NULL,
-    image_webp BLOB NOT NULL,
-    printed_at INTEGER NOT NULL,
-    PRIMARY KEY (guild_id, reaction)
+    set_at             INTEGER NOT NULL
 );
 
 -- mascot_drawings: every drawing made for a server's mascot, until someone
