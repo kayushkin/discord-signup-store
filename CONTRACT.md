@@ -35,6 +35,12 @@ service's, and proxying any other route publishes roster editing to the world.
 | GET | `/api/site-admins` | Site admins: `{"site_admins":[{"discord_user_id","added_at"}]}`. |
 | PUT | `/api/site-admins/{userID}` | Make someone a site admin: they may see every event in every server the bot is in, member or not, and edit, end, cancel, create and name anywhere, whatever their Discord roles. Only this route grants it. |
 | DELETE | `/api/site-admins/{userID}` | Take it away. 404 if they were not one. |
+| GET | `/api/auto-reactions` | Every auto-reaction rule, on or off: `{"auto_reactions":[{"id","guild_id","guild_name","discord_user_id","member_display_name","emoji","enabled","reaction_count","last_reacted_at","last_error","last_error_at","created_at","updated_at"}]}`. The two names are for display, read from `bot_guilds` and `member_names`; `""` when unseen. |
+| POST | `/api/auto-reactions` | `{"guild_id","discord_user_id","emoji","enabled"?,"member_display_name"?}` → 201 and the rule. The bot then reacts with `emoji` (unicode, or a custom one as `name:id`) to every message that person posts in that server, in any channel or thread it can see. `enabled` is true when left out; `member_display_name` is recorded in `member_names`. 400 for a missing field, an unknown field, an emoji that cannot be one, or a rule that already exists. dash carries this and the next five routes behind its login. |
+| PATCH | `/api/auto-reactions/{id}` | `{"emoji"?,"enabled"?}`. A new emoji clears `last_error`. 404 if no such rule. |
+| DELETE | `/api/auto-reactions/{id}` | Remove a rule. 204, or 404. |
+| GET | `/api/guilds` | The servers the bot is in: `{"guilds":[{"id","name"}]}`, from `bot_guilds`. |
+| GET | `/api/guilds/{guildID}/members/search?q=` | Members whose name starts with `q` (Discord's search), plus people this service knows whose name contains it: `{"members":[{"user_id","display_name","username","avatar_url"}]}`. 502 when Discord refuses. |
 | GET | `/api/readable-names` | Every short name set: `{"readable_names":[{"discord_user_id","readable_name","updated_at"}]}`. |
 | PUT | `/api/readable-names/{userID}` | Set the short name a person is shown by on Discord (`{"readable_name":"Matt"}`). Every surface that lists names uses it — the tables, Details, the forum post, the Discord event description, and the web pages, which show the Discord name behind it. |
 | DELETE | `/api/readable-names/{userID}` | Remove it, so their display name shows again. 404 if none was set. |

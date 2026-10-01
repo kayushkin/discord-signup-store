@@ -665,3 +665,24 @@ CREATE TABLE IF NOT EXISTS guild_mascot_updates (
     at              INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS guild_mascot_updates_by_guild ON guild_mascot_updates (guild_id, at);
+
+-- auto_reactions: the bot reacts with emoji to every message one person posts
+-- in one server, in every channel and thread it can see. Keyed on Discord ids;
+-- the person's name is read from member_names for display. The counters and
+-- the last error say whether a rule is working, since a reaction Discord
+-- refuses has nobody else to tell.
+CREATE TABLE IF NOT EXISTS auto_reactions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id        TEXT NOT NULL,
+    discord_user_id TEXT NOT NULL,
+    emoji           TEXT NOT NULL,
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    reaction_count  INTEGER NOT NULL DEFAULT 0,
+    last_reacted_at INTEGER NOT NULL DEFAULT 0,
+    last_error      TEXT NOT NULL DEFAULT '',
+    last_error_at   INTEGER NOT NULL DEFAULT 0,
+    created_at      INTEGER NOT NULL,
+    updated_at      INTEGER NOT NULL,
+    UNIQUE (guild_id, discord_user_id, emoji)
+);
+CREATE INDEX IF NOT EXISTS auto_reactions_by_author ON auto_reactions (guild_id, discord_user_id) WHERE enabled = 1;

@@ -431,6 +431,18 @@ the answer. It used to ask about every person on every load, one call after
 another. The ten-minute sync looks everyone in it up again, so a new nickname,
 a departure or a return shows within ten minutes.
 
+## `auto_reactions` — the bot reacts to everything one person posts, new 2026-10-01
+
+`id`, `guild_id`, `discord_user_id`, `emoji` (unicode, or `name:id` for a
+custom emoji), `enabled`, `reaction_count`, `last_reacted_at`, `last_error`,
+`last_error_at`, `created_at`, `updated_at`; unique on `(guild_id,
+discord_user_id, emoji)`. Each message the gateway delivers from a server
+(GUILD_MESSAGES) is looked up here by server and author, and the bot adds each
+enabled rule's emoji. The outcome goes on the row: a reaction made counts up, a
+refusal from Discord (most likely a missing Add Reactions permission in that
+channel) is kept in `last_error`, because nobody else would see it. The rules
+are set on dash's Messages pages.
+
 ## `event_table_rows` — **dropped 2026-09-02**
 
 A one-message-per-event table from before the consolidated table was paged,

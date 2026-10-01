@@ -44,10 +44,10 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver, notifyDiscon
 	if err != nil {
 		return nil, fmt.Errorf("build gateway session: %w", err)
 	}
-	// GUILD_SCHEDULED_EVENTS (1<<16) and nothing else. Not privileged, so no
-	// approval and no verification. Deliberately narrow: this connection has no
-	// business seeing messages, members or presences, and asking for intents it
-	// does not need would be asking for data it should not hold.
+	// Only standard intents, so no approval and no verification. Deliberately
+	// narrow: this connection has no business reading what people write in a
+	// server, or seeing members or presences, and asking for intents it does
+	// not need would be asking for data it should not hold.
 	// Scheduled events for the Interested bridge, reactions for the ✅ join on
 	// forum posts. Both standard intents — nothing privileged.
 	// GUILDS is what delivers GUILD_CREATE, which is how the bot notices it
@@ -55,9 +55,13 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver, notifyDiscon
 	// DIRECT_MESSAGES delivers what people write back to the bot's DMs about
 	// an event; see dmreplies.go. Standard, and a DM's text comes with it
 	// without the privileged Message Content intent.
+	// GUILD_MESSAGES delivers each message posted in a server, for the
+	// auto-reactions (autoreactions.go). Standard too: without Message
+	// Content a server message arrives with no text, and only its author is
+	// read.
 	session.Identify.Intents = discordgo.IntentGuildScheduledEvents |
 		discordgo.IntentGuildMessageReactions | discordgo.IntentGuilds |
-		discordgo.IntentDirectMessages
+		discordgo.IntentDirectMessages | discordgo.IntentGuildMessages
 
 	// discordgo's own reconnect is off. It ran once on this host and ended with
 	// no socket and no log line for five days; see gateway_supervisor.go.
@@ -75,6 +79,7 @@ func NewGatewayListener(server *Server, resolveToken TokenResolver, notifyDiscon
 	session.AddHandler(listener.onGuildUpdate)
 	session.AddHandler(listener.onGuildDelete)
 	session.AddHandler(listener.onDirectMessage)
+	session.AddHandler(listener.onGuildMessage)
 	session.AddHandler(listener.onReady)
 	session.AddHandler(func(_ *discordgo.Session, _ *discordgo.Resumed) {
 		log.Print("[discord-signup] gateway resumed; events from the gap were replayed")
@@ -97,6 +102,15 @@ func (g *GatewayListener) onDirectMessage(_ *discordgo.Session, m *discordgo.Mes
 		repliedTo = m.MessageReference.MessageID
 	}
 	g.server.receiveDMReply(m.ChannelID, m.ID, m.Author.ID, m.Content, repliedTo, len(m.Attachments))
+}
+
+// onGuildMessage reacts to a message posted in a server by anyone with an
+// auto-reaction rule there. Never the bot's own messages.
+func (g *GatewayListener) onGuildMessage(_ *discordgo.Session, m *discordgo.MessageCreate) {
+	if m.GuildID == "" || m.Author == nil || m.Author.ID == g.server.applicationUserID() {
+		return
+	}
+	g.server.addAutoReactions(m.GuildID, m.ChannelID, m.ID, m.Author.ID)
 }
 
 // onUserAdd handles someone pressing Interested.
