@@ -263,6 +263,8 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 		if channelID == "" {
 			channelID = r.ChannelID
 		}
+		// The rule's days are read in the zone the event is stored with.
+		importedStartInZone := startInZone(&Event{StartsAt: startsAt, Timezone: s.DefaultTimezone()}, s.DefaultTimezone())
 		created, err := s.store.CreateEvent(Event{
 			GuildID:                 r.GuildID,
 			ChannelID:               channelID,
@@ -278,7 +280,7 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 			EndsAt:         endsAt,
 			Location:       stripLocationPlaceholder(r.EntityMetadata.Location),
 			EntityType:     discordEntityTypeNames[r.EntityType],
-			RecurrenceRule: recurrenceRuleText(r.RecurrenceRule),
+			RecurrenceRule: rruleInZoneFromDiscord(r.RecurrenceRule, importedStartInZone),
 			// Discord sends no zone: the start is an absolute instant and its
 			// recurrence_rule has no tzid. The server's default is the zone a
 			// person made the event in, and every title and table row prints
@@ -485,11 +487,13 @@ func parseDiscordTime(s string) int64 {
 	return t.Unix()
 }
 
-// recurrenceRuleText renders Discord's structured recurrence_rule object back
-// into an RRULE string, which is what this store keeps and what the web page
-// edits. Discord accepts a subset of RFC 5545 but expresses it as JSON rather
-// than as the rule text.
-func recurrenceRuleText(raw json.RawMessage) string {
+// rruleInZoneFromDiscord renders Discord's structured recurrence_rule object
+// back into an RRULE string, which is what this store keeps and what the web
+// page edits, with its days moved from UTC, where Discord reads them, to the
+// zone of `start` — the event's start in the zone it is stored with (see
+// moveRuleDays). Discord accepts a subset of RFC 5545 but expresses it as JSON
+// rather than as the rule text.
+func rruleInZoneFromDiscord(raw json.RawMessage, start time.Time) string {
 	if len(raw) == 0 || string(raw) == "null" {
 		return ""
 	}
@@ -520,24 +524,33 @@ func recurrenceRuleText(raw json.RawMessage) string {
 	// Discord numbers weekdays from Monday=0; RFC 5545 names them.
 	dayNames := []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"}
 	if len(rr.ByWeekday) > 0 {
-		days := make([]string, 0, len(rr.ByWeekday))
+		ruleDays := parsedRuleDays{}
 		for _, d := range rr.ByWeekday {
 			if d >= 0 && d < len(dayNames) {
-				days = append(days, dayNames[d])
+				ruleDays.weekdays = append(ruleDays.weekdays, d)
 			}
 		}
-		if len(days) > 0 {
+		if len(ruleDays.weekdays) > 0 {
+			moveRuleDays(&ruleDays, start.UTC(), start)
+			days := make([]string, 0, len(ruleDays.weekdays))
+			for _, d := range ruleDays.weekdays {
+				days = append(days, dayNames[d])
+			}
 			parts = append(parts, "BYDAY="+strings.Join(days, ","))
 		}
 	}
 	// A monthly rule is "the nth weekday": BYDAY=2TU, which is how the form's
 	// "monthly" is stored and how it comes back.
 	if len(rr.ByNWeekday) == 1 && rr.ByNWeekday[0].Day >= 0 && rr.ByNWeekday[0].Day < len(dayNames) {
-		parts = append(parts, fmt.Sprintf("BYDAY=%d%s", rr.ByNWeekday[0].N, dayNames[rr.ByNWeekday[0].Day]))
+		ruleDays := parsedRuleDays{weekdays: []int{rr.ByNWeekday[0].Day}, nth: rr.ByNWeekday[0].N}
+		moveRuleDays(&ruleDays, start.UTC(), start)
+		parts = append(parts, fmt.Sprintf("BYDAY=%d%s", ruleDays.nth, dayNames[ruleDays.weekdays[0]]))
 	}
 	// A yearly rule is one date.
 	if len(rr.ByMonth) == 1 && len(rr.ByMonthDay) == 1 {
-		parts = append(parts, fmt.Sprintf("BYMONTH=%d;BYMONTHDAY=%d", rr.ByMonth[0], rr.ByMonthDay[0]))
+		ruleDays := parsedRuleDays{month: rr.ByMonth[0], monthDay: rr.ByMonthDay[0]}
+		moveRuleDays(&ruleDays, start.UTC(), start)
+		parts = append(parts, fmt.Sprintf("BYMONTH=%d;BYMONTHDAY=%d", ruleDays.month, ruleDays.monthDay))
 	}
 	return strings.Join(parts, ";")
 }

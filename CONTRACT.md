@@ -472,6 +472,14 @@ send or roll is never stored, and no surface ever shows an RRULE. Until
 "weekly". An imported rule takes the server's default zone, not UTC: a
 Friday-evening Los Angeles event worked out in UTC is a Saturday.
 
+Discord reads a rule's weekday, week of the month and date **in UTC** —
+measured 2026-10-20: Discord's own form made a Wednesday 11:45pm Los Angeles
+event `by_weekday: [3]`, Thursday. The store keeps the rule in the event's
+zone, so the days move between the two at the edge: the import shifts them
+into the zone, and every publish shifts them back to UTC
+(`moveRuleDays`). Until then they crossed unchanged, and an evening event
+west of Greenwich rolled onto the next day.
+
 A recurring event is **one row**, the way Discord holds it as one scheduled
 event, and it is never completed by the sweep. When an occurrence ends — its
 end time passes, or start + 6 h with no end — the row **rolls forward**

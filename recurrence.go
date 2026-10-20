@@ -243,7 +243,67 @@ func nthWeekday(byDay string) (n, day int, ok bool) {
 	return n, day, true
 }
 
-// discordRecurrenceRule is the object to send Discord for an event's rule.
+// Discord reads a rule's weekdays and dates in UTC, not in the event's zone:
+// the start it carries is a UTC instant and nothing in the rule names a zone.
+// Measured 2026-10-20: "Late Night Homebody Hangout", made in Discord's own
+// form for Wednesdays at 11:45pm in Los Angeles, came with by_weekday [3],
+// Thursday, the UTC day of that start; and Board Game Night, Tuesdays at 5pm
+// Los Angeles with by_weekday [2], was moved on by Discord to the next
+// Tuesday. This store keeps the rule in the event's own zone, which is what
+// the forms, the descriptions and nextOccurrence mean by a day, so the rule
+// is moved between the two at the edge, in both directions. Before
+// 2026-10-20 it was copied across unchanged, and an evening event west of
+// Greenwich rolled onto the next day.
+
+// zoneDaysAheadOfUTC is how many days the start's date in its own zone is
+// ahead of its date in UTC: -1, 0 or 1.
+func zoneDaysAheadOfUTC(start time.Time) int {
+	localYear, localMonth, localDay := start.Date()
+	utcYear, utcMonth, utcDay := start.UTC().Date()
+	local := time.Date(localYear, localMonth, localDay, 0, 0, 0, 0, time.UTC)
+	utc := time.Date(utcYear, utcMonth, utcDay, 0, 0, 0, 0, time.UTC)
+	return int(local.Sub(utc).Hours() / 24)
+}
+
+func shiftWeekday(day, days int) int { return ((day+days)%7 + 7) % 7 }
+
+// nthOfMonth is which week of its month a date falls in, 1 to 5.
+func nthOfMonth(t time.Time) int { return (t.Day()-1)/7 + 1 }
+
+// moveRuleDays moves a rule's days from the zone of `from` to the zone of
+// `to`, the same instant read in two zones. Weekdays shift by the difference
+// in date. A monthly or yearly rule that names the start's own week or date —
+// as every rule the forms make does — takes the other zone's week or date
+// whole, since "the 5th Wednesday" can be "the 1st Thursday" across a month
+// end; one that names another is only shifted by weekday.
+func moveRuleDays(rule *parsedRuleDays, from, to time.Time) {
+	days := zoneDaysAheadOfUTC(to) - zoneDaysAheadOfUTC(from)
+	if days == 0 {
+		return
+	}
+	if rule.nth != 0 && rule.nth == nthOfMonth(from) && rule.weekdays[0] == discordWeekday(from) {
+		rule.nth = nthOfMonth(to)
+	}
+	for i := range rule.weekdays {
+		rule.weekdays[i] = shiftWeekday(rule.weekdays[i], days)
+	}
+	if rule.month != 0 && rule.month == int(from.Month()) && rule.monthDay == from.Day() {
+		rule.month, rule.monthDay = int(to.Month()), to.Day()
+	}
+}
+
+// parsedRuleDays is the part of a rule that names days, in Discord's
+// numbering: weekdays Monday = 0, nth for a monthly rule, month and monthDay
+// for a yearly one.
+type parsedRuleDays struct {
+	weekdays []int
+	nth      int
+	month    int
+	monthDay int
+}
+
+// discordRecurrenceRule is the object to send Discord for an event's rule,
+// with its days moved from the event's zone to UTC.
 //
 // ok is false when the rule cannot be expressed within Discord's constraints,
 // in which case the caller leaves recurrence_rule out of the request rather
@@ -259,19 +319,20 @@ func discordRecurrenceRule(ev *Event, fallbackZone string) (rule map[string]any,
 	}
 	start := startInZone(ev, fallbackZone)
 	base := map[string]any{
-		"start":    time.Unix(ev.StartsAt, 0).UTC().Format(time.RFC3339),
+		"start":    start.UTC().Format(time.RFC3339),
 		"interval": parsed.interval,
 	}
 	switch parsed.freq {
 	case "DAILY":
 		base["frequency"] = discordFrequencyDaily
 		if parsed.byDay != "" {
-			days := []int{}
+			ruleDays := parsedRuleDays{}
 			for _, name := range strings.Split(parsed.byDay, ",") {
 				d, _ := dayIndex(name)
-				days = append(days, d)
+				ruleDays.weekdays = append(ruleDays.weekdays, d)
 			}
-			base["by_weekday"] = days
+			moveRuleDays(&ruleDays, start, start.UTC())
+			base["by_weekday"] = ruleDays.weekdays
 		}
 		return base, true
 	case "WEEKLY":
@@ -279,11 +340,13 @@ func discordRecurrenceRule(ev *Event, fallbackZone string) (rule map[string]any,
 		if parsed.byDay != "" {
 			day, _ = dayIndex(parsed.byDay)
 		}
+		ruleDays := parsedRuleDays{weekdays: []int{day}}
+		moveRuleDays(&ruleDays, start, start.UTC())
 		base["frequency"] = discordFrequencyWeekly
-		base["by_weekday"] = []int{day}
+		base["by_weekday"] = ruleDays.weekdays
 		return base, true
 	case "MONTHLY":
-		n, day := (start.Day()-1)/7+1, discordWeekday(start)
+		n, day := nthOfMonth(start), discordWeekday(start)
 		if parsed.byDay != "" {
 			pn, pd, _ := nthWeekday(parsed.byDay)
 			if pn != 0 {
@@ -291,17 +354,21 @@ func discordRecurrenceRule(ev *Event, fallbackZone string) (rule map[string]any,
 			}
 			day = pd
 		}
+		ruleDays := parsedRuleDays{weekdays: []int{day}, nth: n}
+		moveRuleDays(&ruleDays, start, start.UTC())
 		base["frequency"] = discordFrequencyMonthly
-		base["by_n_weekday"] = []map[string]any{{"n": n, "day": day}}
+		base["by_n_weekday"] = []map[string]any{{"n": ruleDays.nth, "day": ruleDays.weekdays[0]}}
 		return base, true
 	case "YEARLY":
 		month, day := int(start.Month()), start.Day()
 		if parsed.byMonth != 0 {
 			month, day = parsed.byMonth, parsed.monthDay
 		}
+		ruleDays := parsedRuleDays{month: month, monthDay: day}
+		moveRuleDays(&ruleDays, start, start.UTC())
 		base["frequency"] = discordFrequencyYearly
-		base["by_month"] = []int{month}
-		base["by_month_day"] = []int{day}
+		base["by_month"] = []int{ruleDays.month}
+		base["by_month_day"] = []int{ruleDays.monthDay}
 		return base, true
 	}
 	return nil, false

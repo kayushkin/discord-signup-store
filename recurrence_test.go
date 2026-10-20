@@ -54,30 +54,31 @@ func TestTheRulesBecomeDiscordsObject(t *testing.T) {
 	}
 	rule, ok := discordRecurrenceRule(mk("FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"), "UTC")
 	if !ok || rule["frequency"] != discordFrequencyWeekly || rule["interval"] != 2 ||
-		fmt.Sprint(rule["by_weekday"]) != "[1]" {
-		t.Errorf("every 2 weeks -> %v ok=%v", rule, ok)
+		fmt.Sprint(rule["by_weekday"]) != "[2]" {
+		t.Errorf("every 2 weeks -> %v ok=%v, want Wednesday (2), the UTC day of a Tuesday-evening LA start", rule, ok)
 	}
 	rule, ok = discordRecurrenceRule(mk("FREQ=MONTHLY;BYDAY=2TU"), "UTC")
-	if !ok || rule["frequency"] != discordFrequencyMonthly || fmt.Sprint(rule["by_n_weekday"]) != "[map[day:1 n:2]]" {
+	if !ok || rule["frequency"] != discordFrequencyMonthly || fmt.Sprint(rule["by_n_weekday"]) != "[map[day:2 n:2]]" {
 		t.Errorf("monthly -> %v ok=%v", rule, ok)
 	}
-	// A rule with no BYDAY takes the day from the START in its own zone —
-	// Tuesday in Los Angeles, not the Wednesday it already is in UTC.
+	// A rule with no BYDAY takes the day from the start in its own zone —
+	// Tuesday in Los Angeles — and Discord is sent that day in UTC, where it
+	// reads its rules: Wednesday.
 	rule, ok = discordRecurrenceRule(mk("FREQ=WEEKLY"), "UTC")
-	if !ok || fmt.Sprint(rule["by_weekday"]) != "[1]" {
-		t.Errorf("weekly with no day -> %v, want Tuesday (1) from the LA start", rule)
+	if !ok || fmt.Sprint(rule["by_weekday"]) != "[2]" {
+		t.Errorf("weekly with no day -> %v, want Wednesday (2), the UTC day of the LA Tuesday", rule)
 	}
 	rule, ok = discordRecurrenceRule(mk("FREQ=DAILY"), "UTC")
 	if !ok || rule["frequency"] != discordFrequencyDaily || rule["by_weekday"] != nil {
 		t.Errorf("daily -> %v ok=%v, want frequency 3 and no weekday set", rule, ok)
 	}
 	rule, ok = discordRecurrenceRule(mk("FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"), "UTC")
-	if !ok || fmt.Sprint(rule["by_weekday"]) != "[0 1 2 3 4]" {
-		t.Errorf("weekdays -> %v ok=%v, want Discord's every-weekday example", rule, ok)
+	if !ok || fmt.Sprint(rule["by_weekday"]) != "[1 2 3 4 5]" {
+		t.Errorf("weekdays -> %v ok=%v, want Tuesday to Saturday, LA's weekday evenings in UTC", rule, ok)
 	}
 	rule, ok = discordRecurrenceRule(mk("FREQ=YEARLY"), "UTC")
-	if !ok || rule["frequency"] != discordFrequencyYearly || fmt.Sprint(rule["by_month"]) != "[9]" || fmt.Sprint(rule["by_month_day"]) != "[8]" {
-		t.Errorf("yearly -> %v ok=%v, want September 8 from the LA start", rule, ok)
+	if !ok || rule["frequency"] != discordFrequencyYearly || fmt.Sprint(rule["by_month"]) != "[9]" || fmt.Sprint(rule["by_month_day"]) != "[9]" {
+		t.Errorf("yearly -> %v ok=%v, want September 9, the UTC date of the LA September 8 start", rule, ok)
 	}
 	// Outside Discord's business rules: refused, and validateRecurrence
 	// refuses the same set so none of them is ever stored.
@@ -93,9 +94,52 @@ func TestTheRulesBecomeDiscordsObject(t *testing.T) {
 	}
 }
 
+// TestAnEveningRuleKeepsItsLocalDay is "Late Night Homebody Hangout": made in
+// Discord's form for Wednesdays at 11:45pm in Los Angeles, which is Thursday
+// in UTC, so Discord sent by_weekday [3]. Stored as Thursday, it rolled on
+// 2026-10-15 to the very next evening, a Thursday.
+func TestAnEveningRuleKeepsItsLocalDay(t *testing.T) {
+	loc, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Date(2026, time.October, 14, 23, 45, 0, 0, loc) // Wed 11:45pm PDT = Thu 06:45 UTC
+	raw := json.RawMessage(`{"start":"2026-10-15T06:45:00+00:00","frequency":2,"interval":1,"by_weekday":[3]}`)
+	rule := rruleInZoneFromDiscord(raw, start)
+	if rule != "FREQ=WEEKLY;BYDAY=WE" {
+		t.Fatalf("imported %q, want Wednesday in Los Angeles", rule)
+	}
+	next, ok := nextOccurrence(rule, start, start.Add(6*time.Hour))
+	if want := time.Date(2026, time.October, 21, 23, 45, 0, 0, loc); !ok || !next.Equal(want) {
+		t.Errorf("rolled to %v, want %v", next, want)
+	}
+	// And back to Discord as it came: Thursday, the UTC day.
+	sent, ok := discordRecurrenceRule(&Event{StartsAt: next.Unix(), Timezone: "America/Los_Angeles", RecurrenceRule: rule}, "UTC")
+	if !ok || fmt.Sprint(sent["by_weekday"]) != "[3]" {
+		t.Errorf("sent %v, want by_weekday [3]", sent)
+	}
+
+	// A monthly rule across a month end: Saturday 31 October at 8pm in Los
+	// Angeles is the 1st Sunday of November in UTC.
+	halloween := time.Date(2026, time.October, 31, 20, 0, 0, 0, loc)
+	monthly := rruleInZoneFromDiscord(json.RawMessage(`{"frequency":1,"interval":1,"by_n_weekday":[{"n":1,"day":6}]}`), halloween)
+	if monthly != "FREQ=MONTHLY;BYDAY=5SA" {
+		t.Errorf("imported monthly %q, want the 5th Saturday", monthly)
+	}
+	sent, _ = discordRecurrenceRule(&Event{StartsAt: halloween.Unix(), Timezone: "America/Los_Angeles", RecurrenceRule: monthly}, "UTC")
+	if fmt.Sprint(sent["by_n_weekday"]) != "[map[day:6 n:1]]" {
+		t.Errorf("sent monthly %v, want the 1st Sunday", sent)
+	}
+	// Yearly across the same date line.
+	yearly := rruleInZoneFromDiscord(json.RawMessage(`{"frequency":0,"interval":1,"by_month":[11],"by_month_day":[1]}`), halloween)
+	if yearly != "FREQ=YEARLY;BYMONTH=10;BYMONTHDAY=31" {
+		t.Errorf("imported yearly %q, want 31 October", yearly)
+	}
+}
+
 func TestAMonthlyRuleRoundTripsThroughTheImport(t *testing.T) {
 	raw := json.RawMessage(`{"frequency":1,"interval":1,"by_n_weekday":[{"n":2,"day":1}]}`)
-	if got := recurrenceRuleText(raw); got != "FREQ=MONTHLY;BYDAY=2TU" {
+	if got := rruleInZoneFromDiscord(raw, time.Unix(0, 0).UTC()); got != "FREQ=MONTHLY;BYDAY=2TU" {
 		t.Errorf("imported monthly rule = %q", got)
 	}
 	if got := describeRepeat("FREQ=MONTHLY;BYDAY=2TU"); got != "monthly" {
@@ -258,10 +302,10 @@ func TestEveryRuleIsDescribedInWords(t *testing.T) {
 		}
 	}
 	// What Discord's own "every day" form sends, through the import.
-	if got := recurrenceRuleText(json.RawMessage(`{"frequency":3,"interval":1,"by_weekday":null}`)); got != "FREQ=DAILY" {
+	if got := rruleInZoneFromDiscord(json.RawMessage(`{"frequency":3,"interval":1,"by_weekday":null}`), time.Unix(0, 0).UTC()); got != "FREQ=DAILY" {
 		t.Errorf("Discord's daily came in as %q", got)
 	}
-	if got := recurrenceRuleText(json.RawMessage(`{"frequency":0,"interval":1,"by_month":[7],"by_month_day":[24]}`)); got != "FREQ=YEARLY;BYMONTH=7;BYMONTHDAY=24" {
+	if got := rruleInZoneFromDiscord(json.RawMessage(`{"frequency":0,"interval":1,"by_month":[7],"by_month_day":[24]}`), time.Unix(0, 0).UTC()); got != "FREQ=YEARLY;BYMONTH=7;BYMONTHDAY=24" {
 		t.Errorf("Discord's yearly came in as %q", got)
 	}
 }
