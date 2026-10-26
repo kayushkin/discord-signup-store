@@ -266,14 +266,16 @@ func TestLeavingAnEventOverItsLimitPromotesNobody(t *testing.T) {
 	}
 }
 
-// TestEveryoneSeesEveryEventButOpensOnlyThoseTheyMayEdit: a member sees
-// every event in their server on the home page, with Join on each, but only
-// the one they created links to its page, and someone else's page is a 404.
-func TestEveryoneSeesEveryEventButOpensOnlyThoseTheyMayEdit(t *testing.T) {
+// TestEveryoneOpensEveryEventButOnlyOrganisersGetTheEditPage: a member
+// opens someone else's event and gets the members' page, with none of what
+// only organisers see, and the organisers' routes stay a 404 to them.
+func TestEveryoneOpensEveryEventButOnlyOrganisersGetTheEditPage(t *testing.T) {
 	_, store, _, mux, _ := webTestServer(t)
 	mine, _ := store.CreateEvent(Event{GuildID: "g1", ChannelID: "c", Name: "My picnic", Status: StatusOpen,
 		StartsAt: 4102444800, CreatedBy: "member"})
 	theirs, _ := store.CreateEvent(Event{GuildID: "g1", ChannelID: "c", Name: "Someone else's quiz", Status: StatusOpen,
+		StartsAt: 4102444800, CreatedBy: "other"})
+	elsewhere, _ := store.CreateEvent(Event{GuildID: "g2", ChannelID: "c", Name: "Another server's party", Status: StatusOpen,
 		StartsAt: 4102444800, CreatedBy: "other"})
 	member, _ := store.CreateWebSession("member", "Member", "", map[string]uint64{"g1": 0})
 
@@ -281,17 +283,34 @@ func TestEveryoneSeesEveryEventButOpensOnlyThoseTheyMayEdit(t *testing.T) {
 	if !strings.Contains(home, "My picnic") || !strings.Contains(home, "Someone else&#39;s quiz") {
 		t.Errorf("the home page does not list every event in the member's server")
 	}
-	if !strings.Contains(home, `href="`+eventPath(mine)+`"`) || strings.Contains(home, `href="`+eventPath(theirs)+`"`) {
-		t.Errorf("the home page links an event the member may not open, or not the one they may")
+	if !strings.Contains(home, `href="`+eventPath(mine)+`"`) || !strings.Contains(home, `href="`+eventPath(theirs)+`"`) {
+		t.Errorf("the home page does not link every event")
 	}
 	if !strings.Contains(home, `action="`+eventPath(theirs)+`/join"`) {
 		t.Errorf("the home page offers no Join on someone else's event")
 	}
-	if rec := getPage(t, mux, member.Token, eventPath(mine)); rec.Code != http.StatusOK {
-		t.Errorf("their own event = %d, want 200", rec.Code)
+	if page := getPage(t, mux, member.Token, eventPath(mine)).Body.String(); !strings.Contains(page, `name="name" required`) {
+		t.Errorf("their own event is not the edit page")
 	}
-	if rec := getPage(t, mux, member.Token, eventPath(theirs)); rec.Code != http.StatusNotFound {
-		t.Errorf("someone else's event = %d, want 404", rec.Code)
+	rec := getPage(t, mux, member.Token, eventPath(theirs))
+	page := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(page, "Someone else&#39;s quiz") || !strings.Contains(page, `name="back" value="event"`) {
+		t.Errorf("someone else's event = %d, want the members' page with Join", rec.Code)
+	}
+	for _, organisersOnly := range []string{`name="name" required`, "Cancel event", `id="message"`, "Log", "/roster/remove"} {
+		if strings.Contains(page, organisersOnly) {
+			t.Errorf("the members' page shows %q", organisersOnly)
+		}
+	}
+	nudge := httptest.NewRequest(http.MethodPost, eventPath(theirs)+"/potluck/nudge", nil)
+	nudge.AddCookie(&http.Cookie{Name: sessionCookieName, Value: member.Token})
+	nudged := httptest.NewRecorder()
+	mux.ServeHTTP(nudged, nudge)
+	if nudged.Code != http.StatusNotFound {
+		t.Errorf("a member nudging = %d, want 404", nudged.Code)
+	}
+	if rec := getPage(t, mux, member.Token, eventPath(elsewhere)); rec.Code != http.StatusForbidden {
+		t.Errorf("an event in a server they are not in = %d, want 403", rec.Code)
 	}
 }
 

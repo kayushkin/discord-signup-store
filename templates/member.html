@@ -1,0 +1,126 @@
+{{define "content"}}
+{{$ev := .Event}}
+{{/* The members' page: what anyone in the server sees of an event they may
+     not edit. Nothing here is organiser-only — no log, replies, invites or
+     list of who has not answered the potluck sheet. */}}
+<div class="member-event">
+
+  <section class="card event-head">
+    <h2>{{$ev.Name}}</h2>
+    <div class="pills">
+      {{if eq .MyState "attending"}}<span class="pill open">you're going</span>
+      {{else if eq .MyState "waitlisted"}}<span class="pill held">you're waiting</span>
+      {{else if eq .MyState "maybe"}}<span class="pill">you're a maybe</span>{{end}}
+      {{if ne $ev.Status "open"}}<span class="pill {{$ev.Status}}">{{if eq $ev.Status "closed"}}signups closed{{else}}{{$ev.Status}}{{end}}</span>{{end}}
+      {{if .EventFull}}<span class="pill closed">full</span>{{end}}
+      {{if $ev.RecurrenceRule}}<span class="pill">🔁 {{repeats $ev.RecurrenceRule}}</span>{{end}}
+    </div>
+    <dl class="facts">
+      <div class="field"><dt>When</dt>
+        <dd class="field-view"><span>{{if $ev.StartsAt}}{{localTime $ev.StartsAt}}{{if $ev.EndsAt}} <span class="muted">until</span> {{localTime $ev.EndsAt}}{{end}}{{else}}<span class="muted">no date set</span>{{end}}</span></dd></div>
+      {{if $ev.Location}}<div class="field"><dt>Where</dt>
+        <dd class="field-view"><span>{{$ev.Location}}
+          <a class="map-link" href="{{mapsURL $ev.Location}}" target="_blank" rel="noopener">{{template "pin"}} Map</a></span></dd></div>{{end}}
+      {{if $ev.Description}}<div class="field"><dt>About</dt>
+        <dd class="field-view"><span class="prose">{{$ev.Description}}</span></dd></div>{{end}}
+    </dl>
+    {{if eq $ev.Status "open"}}
+    <form method="post" class="member-join" action="/events/{{$ev.ID}}/{{if .MyState}}leave{{else}}join{{end}}">
+      <input type="hidden" name="back" value="event">
+      {{if .MyState}}<button class="ghost">Leave</button>
+      {{else if and .EventFull $ev.WaitlistDisabled}}<button disabled>Full</button>
+      {{else if .EventFull}}<button>Join waitlist</button>
+      {{else}}<button>Join</button>{{end}}
+      <span class="muted">{{$ev.AttendingCount}}{{if $ev.Capacity}} of {{$ev.Capacity}}{{end}} going{{if .FreePlaces}} · {{.FreePlaces}} free{{end}}{{if $ev.WaitlistCount}} · {{$ev.WaitlistCount}} waiting{{end}}</span>
+    </form>
+    {{end}}
+  </section>
+
+  {{with .EventPicture}}{{if .Signature}}
+  <section class="card event-picture">
+    <img class="event-picture-img" src="/events/{{$ev.ID}}/picture.webp?v={{.Signature}}"
+         alt="A drawing of the people going to {{$ev.Name}}" width="1200" height="400">
+  </section>
+  {{end}}{{end}}
+
+  {{with .Potluck}}
+  <section class="card" id="potluck">
+    <div class="card-head"><h3>🍲 Potluck</h3></div>
+    <p class="potluck-summary">{{.Summary}}</p>
+    {{if .StillNeeded}}<p class="potluck-needed">{{.StillNeeded}}</p>{{end}}
+
+    {{if eq $.MyState "attending"}}
+    <div class="potluck-mine">
+      <h4>What you're bringing</h4>
+      {{if $.MyPotluck}}
+      <ul class="potluck-items">
+        {{range $.MyPotluck}}
+        <li class="potluck-item">
+          <span class="what">{{.Item}}</span>
+          {{if $.Potluck.TakesAnswers}}
+          <form method="post" action="/events/{{$ev.ID}}/potluck/mine/remove">
+            <input type="hidden" name="item_id" value="{{.ID}}">
+            <button class="btn-sm danger" aria-label="Remove {{.Item}}" title="Remove">{{template "cross"}}</button></form>
+          {{end}}
+        </li>
+        {{end}}
+      </ul>
+      {{else if $.MySaidNothing}}<p class="muted">You said you're not bringing anything. Add something below to change that.</p>
+      {{else}}<p class="muted">You haven't said yet.</p>{{end}}
+      {{if .TakesAnswers}}
+      <form method="post" action="/events/{{$ev.ID}}/potluck/mine" class="potluck-add">
+        <select name="category" aria-label="Category">
+          {{range $.PotluckCategories}}<option value="{{.Key}}">{{.Emoji}} {{.Label}}</option>{{end}}
+        </select>
+        <input name="item" required maxlength="100" placeholder="What you're bringing" aria-label="What you're bringing">
+        <button>Add</button>
+      </form>
+      {{if not (or $.MyPotluck $.MySaidNothing)}}
+      <form method="post" action="/events/{{$ev.ID}}/potluck/mine/nothing">
+        <button class="ghost btn-sm">I'm not bringing anything</button></form>
+      {{end}}
+      {{end}}
+    </div>
+    {{else if .TakesAnswers}}
+    <p class="hint">Join to say what you're bringing.</p>
+    {{end}}
+
+    {{range .Categories}}{{if or .Items .Wanted}}
+    <div class="potluck-cat">
+      <h4>{{.Emoji}} {{.Label}} <span class="badge">{{.Have}}{{if .Wanted}} / {{.Wanted}}{{end}}</span></h4>
+      {{if not .Items}}<p class="empty">Nobody yet.</p>{{end}}
+      <ul class="potluck-items">
+        {{range .Items}}
+        <li class="potluck-item">
+          <span class="what">{{.Item}}<span class="who">{{avatar $.AvatarUserIDs .Person.DiscordUserID}}{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}</span></span>
+        </li>
+        {{end}}
+      </ul>
+    </div>
+    {{end}}{{end}}
+  </section>
+  {{end}}
+
+  <section class="card">
+    <div class="card-head"><h3>Going</h3><span class="badge">{{$ev.AttendingCount}}{{if $ev.Capacity}} / {{$ev.Capacity}}{{end}}</span></div>
+    {{if not .Going}}<p class="empty">Nobody yet.</p>{{end}}
+    <ul class="name-cloud">
+      {{range .Going}}<li>{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}{{if eq .DiscordUserID $ev.CreatedBy}} <span class="pill">host</span>{{end}}</li>{{end}}
+    </ul>
+    {{if .Waiting}}
+    <div class="card-head sub-head"><h3>Waitlist</h3><span class="badge">{{len .Waiting}}</span></div>
+    <ol class="name-cloud numbered">
+      {{range .Waiting}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}</li>{{end}}
+    </ol>
+    {{end}}
+    {{if .Maybes}}
+    <div class="card-head sub-head"><h3>Maybe</h3><span class="badge">{{len .Maybes}}</span></div>
+    <ul class="name-cloud">
+      {{range .Maybes}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}</li>{{end}}
+    </ul>
+    {{end}}
+  </section>
+
+  <p><a href="/">← All events</a></p>
+</div>
+{{end}}

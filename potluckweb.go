@@ -45,8 +45,9 @@ type potluckPageUnanswered struct {
 }
 
 // potluckPageOf builds the event page's sheet from the event and its people
-// going. Nil when the event has no sheet.
-func (s *Server) potluckPageOf(ev *Event, going []Signup) (*potluckPage, error) {
+// going. Nil when the event has no sheet. Who has not answered, and who is
+// bringing nothing, are read only forOrganisers.
+func (s *Server) potluckPageOf(ev *Event, going []Signup, forOrganisers bool) (*potluckPage, error) {
 	if ev.Potluck == nil {
 		return nil, nil
 	}
@@ -64,6 +65,9 @@ func (s *Server) potluckPageOf(ev *Event, going []Signup) (*potluckPage, error) 
 		}
 		pc.Have = len(pc.Items)
 		page.Categories = append(page.Categories, pc)
+	}
+	if !forOrganisers {
+		return page, nil
 	}
 	for _, id := range sheet.BringingNothing {
 		page.Nothing = append(page.Nothing, people[id])

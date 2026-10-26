@@ -480,3 +480,21 @@ func potluckButton(eventID int64) map[string]any {
 		"custom_id": PotluckCustomID(eventID),
 	}
 }
+
+// RemoveOwnPotluckItem takes one of a person's own rows off an event's
+// sheet; a row that is not theirs is ErrNotFound.
+func (s *Store) RemoveOwnPotluckItem(eventID, itemID int64, userID string) error {
+	res, err := s.db.Exec(`UPDATE potluck_items SET removed_at = ?, removed_by = ?
+		WHERE id = ? AND event_id = ? AND discord_user_id = ? AND removed_at = 0`, now(), ActorUser, itemID, eventID, userID)
+	if err != nil {
+		return fmt.Errorf("remove potluck item: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("count removed: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

@@ -414,3 +414,59 @@ func TestABigRosterKeepsThePotluckSummaryWhole(t *testing.T) {
 		}
 	}
 }
+
+// TestAMemberFillsInThePotluckFromTheEventPage: someone going adds, says
+// nothing and removes their own; they cannot remove anyone else's, and the
+// page never names who has not answered.
+func TestAMemberFillsInThePotluckFromTheEventPage(t *testing.T) {
+	_, store, _, mux, _ := webTestServer(t)
+	ev, _ := store.CreateEvent(Event{GuildID: "g1", ChannelID: "c", Name: "Party", Status: StatusOpen,
+		StartsAt: 4102444800, CreatedBy: "host"})
+	on := true
+	store.UpdateEvent(ev.ID, EventPatch{PotluckEnabled: &on})
+	for _, who := range []string{"kat", "bo", "quiet"} {
+		if _, err := store.Join(ev.ID, who, who, JoinedViaButton); err != nil {
+			t.Fatal(err)
+		}
+	}
+	kat, _ := store.CreateWebSession("kat", "Kat", "", map[string]uint64{"g1": 0})
+	bo, _ := store.CreateWebSession("bo", "Bo", "", map[string]uint64{"g1": 0})
+	stranger, _ := store.CreateWebSession("zed", "Zed", "", map[string]uint64{"g1": 0})
+
+	postForm(t, mux, kat.Token, eventPath(ev)+"/potluck/mine", url.Values{"category": {PotluckFood}, "item": {"Pumpkin pie"}})
+	postForm(t, mux, bo.Token, eventPath(ev)+"/potluck/mine", url.Values{"category": {PotluckDrinks}, "item": {"Cider"}})
+	rec := postForm(t, mux, stranger.Token, eventPath(ev)+"/potluck/mine", url.Values{"category": {PotluckFood}, "item": {"Chips"}})
+	if notice, _ := url.QueryUnescape(rec.Header().Get("Location")); !strings.Contains(notice, "Join first") {
+		t.Errorf("someone not going adding: %q", notice)
+	}
+	sheet := mustSheet(t, store, ev.ID)
+	if len(sheet.Items) != 2 {
+		t.Fatalf("sheet = %+v, want the pie and the cider", sheet.Items)
+	}
+
+	page := getPage(t, mux, kat.Token, eventPath(ev)).Body.String()
+	for _, want := range []string{"Pumpkin pie", "Cider", "What you", `/potluck/mine/remove`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("Kat's page lacks %q", want)
+		}
+	}
+	if strings.Contains(page, "answered</h3>") || strings.Contains(page, "only organisers see") {
+		t.Error("the members' page says who has not answered")
+	}
+
+	cider := sheet.ItemsOf("bo")[0]
+	postForm(t, mux, kat.Token, eventPath(ev)+"/potluck/mine/remove", url.Values{"item_id": {fmt.Sprint(cider.ID)}})
+	if len(mustSheet(t, store, ev.ID).ItemsOf("bo")) != 1 {
+		t.Fatal("Kat removed Bo's cider")
+	}
+	postForm(t, mux, kat.Token, eventPath(ev)+"/potluck/mine/nothing", url.Values{})
+	if got := mustSheet(t, store, ev.ID); !got.SaidNothing("kat") || len(got.ItemsOf("kat")) != 0 {
+		t.Fatalf("after nothing: %+v", got)
+	}
+
+	// Leave from the event page comes back to it.
+	rec = postForm(t, mux, kat.Token, eventPath(ev)+"/leave", url.Values{"back": {"event"}})
+	if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, eventPath(ev)+"?") {
+		t.Errorf("leave from the event page went to %q", loc)
+	}
+}

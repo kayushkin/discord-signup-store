@@ -1,6 +1,5 @@
 {{define "pencil"}}<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M13.9 2.9a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L7.3 16H4v-3.3z"/></svg>{{end}}
 
-{{define "pin"}}<svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true"><path d="M10 18s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="10" cy="8" r="2.2" fill="currentColor"/></svg>{{end}}
 
 {{define "regular"}}<svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true"><path d="M15.5 8A6 6 0 0 0 4.6 6.2M4.5 12a6 6 0 0 0 10.9 1.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 2.8v3.6h3.6M16 17.2v-3.6h-3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 
@@ -285,43 +284,41 @@
   {{if $canManage}}
   {{with .Potluck}}
   <section class="card" id="potluck">
-    <div class="card-head"><h3>🍲 Potluck</h3><span class="muted small">everyone sees this on the event's card</span></div>
+    <div class="card-head"><h3>🍲 Potluck</h3></div>
+    <p class="hint">Everyone in the server sees this on the event's card and its page.</p>
     <p>{{.Summary}}</p>
     {{if .StillNeeded}}<p><strong>{{.StillNeeded}}</strong></p>{{end}}
     {{range .Categories}}
-    <div class="card-head sub-head"><h3>{{.Emoji}} {{.Label}}</h3><span class="badge">{{.Have}}{{if .Wanted}} / {{.Wanted}}{{end}}</span></div>
+    <div class="potluck-cat">
+    <h4>{{.Emoji}} {{.Label}} <span class="badge">{{.Have}}{{if .Wanted}} / {{.Wanted}}{{end}}</span></h4>
     {{if not .Items}}<p class="empty">Nothing yet.</p>{{end}}
-    <ol class="people">
+    <ul class="potluck-items">
       {{range .Items}}
-      <li class="person">
-        <span class="who">{{avatar $.AvatarUserIDs .Person.DiscordUserID}}{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}</span>
-        <span>{{.Item}}</span>
-        <span class="row-actions">
-          <form method="post" action="/events/{{$ev.ID}}/potluck/remove" data-async data-confirm="Take “{{.Item}}” off the sheet?">
-            <input type="hidden" name="item_id" value="{{.ID}}">
-            <button class="btn-sm danger" aria-label="Remove" title="Remove"><span class="btn-text">Remove</span></button></form>
-        </span>
+      <li class="potluck-item">
+        <span class="what">{{.Item}}<span class="who">{{avatar $.AvatarUserIDs .Person.DiscordUserID}}{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}</span></span>
+        <form method="post" action="/events/{{$ev.ID}}/potluck/remove" data-async data-confirm="Take “{{.Item}}” off the sheet?">
+          <input type="hidden" name="item_id" value="{{.ID}}">
+          <button class="btn-sm danger" aria-label="Remove {{.Item}}" title="Remove">{{template "cross"}}</button></form>
       </li>
       {{end}}
-    </ol>
+    </ul>
+    </div>
     {{end}}
     {{if .Nothing}}
     <p class="muted">Not bringing anything:
       {{range $i, $p := .Nothing}}{{if $i}}, {{end}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}</p>
     {{end}}
 
-    <div class="card-head sub-head"><h3>Haven't answered</h3><span class="badge">{{len .Unanswered}}</span><span class="muted small">only organisers see this</span></div>
+    <div class="card-head sub-head"><h3>Haven't answered</h3><span class="badge">{{len .Unanswered}}</span></div>
+    <p class="hint">Only organisers see this list.</p>
     {{if not .Unanswered}}<p class="empty">Everyone going has answered.</p>{{end}}
-    <ol class="people">
+    <ul class="name-cloud">
       {{range .Unanswered}}
-      <li class="person">
-        <span class="who">{{avatar $.AvatarUserIDs .Person.DiscordUserID}}{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}</span>
-        <span class="when">{{if .LastFailed}}{{.LastFailed}}{{else if .LastAsked}}asked {{shortTime .LastAsked}}{{else}}not asked yet{{end}}</span>
-      </li>
+      <li title="{{if .LastFailed}}{{.LastFailed}}{{else if .LastAsked}}Asked {{shortTime .LastAsked}}{{else}}Not asked yet{{end}}">{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}{{if .LastFailed}} <span class="muted small">· {{.LastFailed}}</span>{{else if .LastAsked}} <span class="muted small">· asked</span>{{end}}</li>
       {{end}}
-    </ol>
+    </ul>
     {{if and .Unanswered .TakesAnswers}}
-    <form method="post" action="/events/{{$ev.ID}}/potluck/nudge" data-async
+    <form method="post" action="/events/{{$ev.ID}}/potluck/nudge" class="potluck-nudge" data-async
           data-confirm="DM the {{len .Unanswered}} going who haven't said what they're bringing? It counts as one of the event's {{$.MessageLimit}} DMs per {{$.MessageWindowMinutes}} minutes.">
       <button {{if not $.MessagesLeft}}disabled{{end}}>Nudge them by DM</button>
       {{if not $.MessagesLeft}}<span class="hint">DMs again at {{shortTime $.MessagesNextAt}}</span>{{end}}
@@ -332,7 +329,7 @@
     <div class="card-head sub-head"><h3>What it needs</h3></div>
     <form method="post" action="/events/{{$ev.ID}}/potluck/needs" data-async class="potluck-needs">
       {{range .Categories}}
-      <label>{{.Emoji}} {{.Label}} <input type="number" name="wanted_{{.Key}}" min="0" max="99" value="{{if .Wanted}}{{.Wanted}}{{end}}" placeholder="any" style="width:5em"></label>
+      <label>{{.Emoji}} {{.Label}} <input type="number" name="wanted_{{.Key}}" min="0" max="99" value="{{if .Wanted}}{{.Wanted}}{{end}}" placeholder="any"></label>
       {{end}}
       <button>Save</button>
     </form>

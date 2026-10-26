@@ -11,9 +11,24 @@ import (
 	"time"
 )
 
-// webEvent loads an event and the caller's standing on it, or writes the
-// response and returns nil.
+// webEvent loads an event for whoever may edit it, or writes the response
+// and returns nil: anyone else gets a 404, so the organisers' routes do not
+// say which ids are in use.
 func (s *Server) webEvent(w http.ResponseWriter, r *http.Request, session *WebSession) (*Event, bool) {
+	ev, canManage := s.webEventForMember(w, r, session)
+	if ev == nil {
+		return nil, false
+	}
+	if !canManage {
+		http.NotFound(w, r)
+		return nil, false
+	}
+	return ev, canManage
+}
+
+// webEventForMember loads an event for anyone in its server, and whether
+// they may edit it, or writes the response and returns nil.
+func (s *Server) webEventForMember(w http.ResponseWriter, r *http.Request, session *WebSession) (*Event, bool) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.Error(w, "id must be an integer", http.StatusBadRequest)
@@ -41,25 +56,23 @@ func (s *Server) webEvent(w http.ResponseWriter, r *http.Request, session *WebSe
 		http.Error(w, "could not check whether you may edit this event: "+err.Error(), http.StatusBadGateway)
 		return nil, false
 	}
-	// The web pages are for whoever may edit an event. Anyone else — a
-	// member who only signs up — gets the same answer as for an event that
-	// does not exist, so the page does not say which ids are in use.
-	if !canManage {
-		http.NotFound(w, r)
-		return nil, false
-	}
 	return ev, canManage
 }
 
-// handleWebEventDetail shows one event: its fields — editable, for whoever
-// may edit it — its roster, the tools for adding people, and its log.
+// handleWebEventDetail shows one event: to whoever may edit it, its fields
+// as the edit form, its roster, the tools for adding people, and its log;
+// to anyone else in its server, the members' page.
 func (s *Server) handleWebEventDetail(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {
 		return
 	}
-	ev, canManage := s.webEvent(w, r, session)
+	ev, canManage := s.webEventForMember(w, r, session)
 	if ev == nil {
+		return
+	}
+	if !canManage {
+		s.renderMemberEventPage(w, session, ev, r.URL.Query().Get("notice"))
 		return
 	}
 	s.renderEventPage(w, session, ev, canManage, nil, r.URL.Query().Get("notice"), "")
@@ -254,7 +267,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 			data.Maybes = append(data.Maybes, sg)
 		}
 	}
-	if data.Potluck, err = s.potluckPageOf(ev, data.Going); err != nil {
+	if data.Potluck, err = s.potluckPageOf(ev, data.Going, true); err != nil {
 		log.Printf("[discord-signup] potluck page %d: %v", ev.ID, err)
 		data.Error = strings.TrimSpace(data.Error + " Could not read the potluck sheet: " + err.Error())
 	}

@@ -1,16 +1,16 @@
 {{define "eventcard"}}
   {{/* A banner card: the picture of who is going heads it, with the date
        stamp overlapping its lower edge; with no picture, a thin strip of a
-       spot ink tops a slimmer card. Everyone in the server sees the card; only whoever may edit the
-       event can open it, and then the whole card is the link. */}}
-  <article class="event-card{{if .PictureSignature}} has-picture{{end}}{{if isArchived .Status}} faded{{end}}{{if .MayOpen}} opens{{end}}">
+       spot ink tops a slimmer card. Everyone in the server sees the card, and the whole card is the
+       link: an organiser opens the edit page, anyone else the members' page. */}}
+  <article class="event-card{{if .PictureSignature}} has-picture{{end}}{{if isArchived .Status}} faded{{end}} opens">
     {{if .PictureSignature}}<img class="ec-banner" src="/events/{{.ID}}/picture.webp?v={{.PictureSignature}}"
       alt="A drawing of the people going" width="1200" height="400" loading="lazy">
     {{else}}<div class="ec-strip ink-{{inkOf .ID}}" aria-hidden="true"></div>{{end}}
     <div class="ec-main">
       {{if .StartsAt}}{{dateBox .StartsAt}}{{else}}<span class="datebox none">no date</span>{{end}}
       <div class="ec-body">
-        <span class="ec-title">{{if .MayOpen}}<a class="ec-link" href="/events/{{.ID}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</span>
+        <span class="ec-title"><a class="ec-link" href="/events/{{.ID}}">{{.Name}}</a></span>
         <span class="ec-meta">{{if .StartsAt}}{{clockTime .StartsAt}}{{end}}{{if .Location}}<span class="dot">·</span>{{.Location}}{{end}}</span>
         <span class="ec-tags">
           {{if eq .MyState "attending"}}<span class="pill open">you're going</span>

@@ -104,6 +104,14 @@ type pageData struct {
 	EventPicture *eventPicturePanel
 	// Potluck is the event page's potluck sheet; nil when it has none.
 	Potluck *potluckPage
+	// MyState is the viewer's place on the event, "" when not on it, and
+	// MyPotluck what they said they will bring, for the members' page.
+	MyState   string
+	MyPotluck []PotluckItem
+	// MySaidNothing is whether they said they are bringing nothing.
+	MySaidNothing bool
+	// PotluckCategories are the sheet's categories, for the members' form.
+	PotluckCategories []potluckCategory
 	// ViewerHasAvatar is whether the signed-in viewer has an approved avatar,
 	// for the header.
 	ViewerHasAvatar bool
@@ -334,26 +342,17 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 	} else {
 		data.MascotGuilds = guilds
 	}
-	// Every event in the viewer's servers, so anyone can see what is on and
-	// join from here. Only the events they may edit open; whether they may
-	// edit every event in a server is asked once per server, since with an
-	// editor role it costs a Discord call.
+	// Every event in the viewer's servers, so anyone can see what is on,
+	// join from here, and open it: an organiser gets the event's edit page
+	// and everyone else the members' page.
 	var visible []Event
-	mayOpen := map[int64]bool{}
 	for guildID := range guildIDs {
 		events, err := s.store.ListEvents(guildID, "", 200)
 		if err != nil {
 			data.Error = err.Error()
 			break
 		}
-		editsAll, err := s.mayEditAllEventsIn(session.editActor(guildID))
-		if err != nil {
-			data.Error = "Could not check which events you may edit: " + err.Error()
-		}
-		for _, ev := range events {
-			visible = append(visible, ev)
-			mayOpen[ev.ID] = editsAll || (ev.CreatedBy != "" && ev.CreatedBy == session.DiscordUserID)
-		}
+		visible = append(visible, events...)
 	}
 	myStates, err := s.store.SignupStatesOf(session.DiscordUserID)
 	if err != nil {
@@ -372,7 +371,7 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 		data.Error = strings.TrimSpace(data.Error + " Could not read who is going with an avatar: " + err.Error())
 	}
 	card := func(ev Event) eventCard {
-		c := eventCard{Event: ev, MayOpen: mayOpen[ev.ID], MyState: myStates[ev.ID],
+		c := eventCard{Event: ev, MyState: myStates[ev.ID],
 			MayJoin: ev.Status == StatusOpen && session.IsMemberOf(ev.GuildID), Full: eventIsFull(&ev),
 			PictureSignature: pictures[ev.ID]}
 		for _, subject := range subjects[ev.ID] {

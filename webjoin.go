@@ -15,9 +15,6 @@ import (
 // eventCard is one event on the home page, as this viewer sees it.
 type eventCard struct {
 	Event
-	// MayOpen is whether the viewer may open the event's page: whoever may
-	// edit it. Everyone else sees the card and cannot open it.
-	MayOpen bool
 	// MyState is the viewer's place on the roster: attending, waitlisted,
 	// maybe, or "" when they are not on it.
 	MyState string
@@ -55,14 +52,26 @@ func (s *Store) SignupStatesOf(discordUserID string) (map[int64]string, error) {
 	return out, rows.Err()
 }
 
-func homeRedirect(w http.ResponseWriter, r *http.Request, notice string) {
-	http.Redirect(w, r, "/?"+noticeQuery(notice), http.StatusSeeOther)
+// signupPageRedirect goes back with the notice to the page the Join or Leave
+// was pressed on: the event's own page when the form says back=event, the
+// home page otherwise.
+func signupPageRedirect(w http.ResponseWriter, r *http.Request, notice string) {
+	http.Redirect(w, r, signupPagePath(r)+"?"+noticeQuery(notice), http.StatusSeeOther)
 }
 
-// homeRedirectWithMascotReaction goes home with the notice, and has the
-// mascot in the header move as the reaction says.
-func homeRedirectWithMascotReaction(w http.ResponseWriter, r *http.Request, notice, reaction string) {
-	http.Redirect(w, r, "/?"+noticeQuery(notice)+"&"+mascotReactionQuery(reaction), http.StatusSeeOther)
+// signupPageRedirectWithMascotReaction goes back as signupPageRedirect does,
+// and has the mascot in the header move as the reaction says.
+func signupPageRedirectWithMascotReaction(w http.ResponseWriter, r *http.Request, notice, reaction string) {
+	http.Redirect(w, r, signupPagePath(r)+"?"+noticeQuery(notice)+"&"+mascotReactionQuery(reaction), http.StatusSeeOther)
+}
+
+func signupPagePath(r *http.Request) string {
+	if r.FormValue("back") == "event" {
+		if id, err := pathID(r, "id"); err == nil {
+			return fmt.Sprintf("/events/%d", id)
+		}
+	}
+	return "/"
 }
 
 // eventForSelfSignup reads the event a Join or Leave names and checks the
@@ -75,7 +84,7 @@ func (s *Server) eventForSelfSignup(w http.ResponseWriter, r *http.Request, sess
 	}
 	ev, err := s.store.GetEvent(eventID)
 	if errors.Is(err, ErrNotFound) {
-		homeRedirect(w, r, "That event no longer exists.")
+		signupPageRedirect(w, r, "That event no longer exists.")
 		return nil
 	}
 	if err != nil {
@@ -104,36 +113,36 @@ func (s *Server) handleWebJoin(w http.ResponseWriter, r *http.Request) {
 	}
 	member, err := s.discord.GuildMember(ev.GuildID, session.DiscordUserID)
 	if errors.Is(err, ErrUnknownMember) {
-		homeRedirect(w, r, "Discord says you are no longer in this event's server.")
+		signupPageRedirect(w, r, "Discord says you are no longer in this event's server.")
 		return
 	}
 	if err != nil {
 		log.Printf("[discord-signup] web join event=%d: read member %s: %v", ev.ID, session.DiscordUserID, err)
-		homeRedirect(w, r, "Could not read your name in the server from Discord, so nothing was changed. Try again.")
+		signupPageRedirect(w, r, "Could not read your name in the server from Discord, so nothing was changed. Try again.")
 		return
 	}
 	result, err := s.joinAsThemselves(ev.ID, session.DiscordUserID, member.DisplayName, JoinedViaWebPage)
 	switch {
 	case errors.Is(err, ErrEventNotOpen):
-		homeRedirect(w, r, fmt.Sprintf("Signups for %s are closed.", ev.Name))
+		signupPageRedirect(w, r, fmt.Sprintf("Signups for %s are closed.", ev.Name))
 		return
 	case errors.Is(err, ErrEventFull):
-		homeRedirect(w, r, fmt.Sprintf("%s is full, and its organiser turned the waitlist off.", ev.Name))
+		signupPageRedirect(w, r, fmt.Sprintf("%s is full, and its organiser turned the waitlist off.", ev.Name))
 		return
 	case err != nil:
 		log.Printf("[discord-signup] web join event=%d user=%s: %v", ev.ID, session.DiscordUserID, err)
-		homeRedirect(w, r, "Something went wrong signing you up. Nothing was changed. Try again.")
+		signupPageRedirect(w, r, "Something went wrong signing you up. Nothing was changed. Try again.")
 		return
 	}
 	switch {
 	case result.AlreadySignedUp && result.Signup.State == StateWaitlisted:
-		homeRedirect(w, r, fmt.Sprintf("You are already on the waitlist for %s, at number %d.", ev.Name, result.Signup.WaitlistPlace))
+		signupPageRedirect(w, r, fmt.Sprintf("You are already on the waitlist for %s, at number %d.", ev.Name, result.Signup.WaitlistPlace))
 	case result.AlreadySignedUp:
-		homeRedirect(w, r, fmt.Sprintf("You are already going to %s.", ev.Name))
+		signupPageRedirect(w, r, fmt.Sprintf("You are already going to %s.", ev.Name))
 	case result.Signup.State == StateWaitlisted:
-		homeRedirectWithMascotReaction(w, r, fmt.Sprintf("%s is full, so you are on the waitlist at number %d. If someone drops out you move up and get a message on Discord.", ev.Name, result.Signup.WaitlistPlace), "waitlisted")
+		signupPageRedirectWithMascotReaction(w, r, fmt.Sprintf("%s is full, so you are on the waitlist at number %d. If someone drops out you move up and get a message on Discord.", ev.Name, result.Signup.WaitlistPlace), "waitlisted")
 	default:
-		homeRedirectWithMascotReaction(w, r, fmt.Sprintf("You're going to %s.", ev.Name), "joined")
+		signupPageRedirectWithMascotReaction(w, r, fmt.Sprintf("You're going to %s.", ev.Name), "joined")
 	}
 }
 
@@ -148,13 +157,13 @@ func (s *Server) handleWebLeave(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := s.leaveAsThemselves(ev.ID, session.DiscordUserID)
 	if errors.Is(err, ErrNotFound) {
-		homeRedirect(w, r, fmt.Sprintf("You were not on the list for %s.", ev.Name))
+		signupPageRedirect(w, r, fmt.Sprintf("You were not on the list for %s.", ev.Name))
 		return
 	}
 	if err != nil {
 		log.Printf("[discord-signup] web leave event=%d user=%s: %v", ev.ID, session.DiscordUserID, err)
-		homeRedirect(w, r, "Something went wrong. Nothing was changed. Try again.")
+		signupPageRedirect(w, r, "Something went wrong. Nothing was changed. Try again.")
 		return
 	}
-	homeRedirectWithMascotReaction(w, r, ev.Name+": "+describeLeave(result), "left")
+	signupPageRedirectWithMascotReaction(w, r, ev.Name+": "+describeLeave(result), "left")
 }
