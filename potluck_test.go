@@ -518,10 +518,13 @@ func TestTheForumNudgeShowsTheSheetAndPingsOnlyTheSilent(t *testing.T) {
 		t.Fatalf("posted %d messages in the thread, want 1", len(posted))
 	}
 	content := fmt.Sprint(posted[0].Body["content"])
-	for _, want := range []string{"Who's bringing what", "**🍲 Food**\n- <@alice> Tamales\n", "Haven't said yet (2):", "<@bob>", "<@cy>"} {
+	for _, want := range []string{"Who's bringing what", "**🍲 Food**\n- **alice** Tamales\n", "Haven't said yet (2):", "<@bob>", "<@cy>"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("post lacks %q:\n%s", want, content)
 		}
+	}
+	if strings.Contains(content, "<@alice>") {
+		t.Error("the post mentions alice, who has already said what she is bringing")
 	}
 	if pinged := fmt.Sprint(posted[0].Body["allowed_mentions"]); strings.Contains(pinged, "alice") || !strings.Contains(pinged, "bob") {
 		t.Errorf("allowed mentions = %s, want bob and cy only", pinged)

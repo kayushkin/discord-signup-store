@@ -235,7 +235,7 @@ func (s *Server) handleWebPotluckNudge(w http.ResponseWriter, r *http.Request) {
 	switch r.FormValue("via") {
 	case MessageViaDM:
 	case MessageViaForum:
-		s.redirectWithNotice(w, r, ev.ID, s.nudgeInForum(ev, session, people))
+		s.redirectWithNotice(w, r, ev.ID, s.nudgeInForum(ev, session, roster, people))
 		return
 	default:
 		http.Error(w, "via must be dm or forum", http.StatusBadRequest)
@@ -281,15 +281,22 @@ func (s *Server) handleWebPotluckNudge(w http.ResponseWriter, r *http.Request) {
 
 // potluckForumNudge is the post asking in the forum thread: the sheet as it
 // stands, who is bringing what, and a ping for each person who has not said.
+// The people bringing something are written by name, never as a mention:
+// they have answered, and a mention reads as a ping even where Discord is
+// told not to send one.
 // Over Discord's limit it is two posts — the sheet, then the pings — and the
 // buttons go under the last.
-func potluckForumNudge(ev *Event, organiser string, unanswered []Signup) []string {
+func potluckForumNudge(ev *Event, organiser string, roster, unanswered []Signup) []string {
 	sheet := ev.Potluck
 	var head strings.Builder
 	fmt.Fprintf(&head, "🍲 **Potluck check-in from %s** — <t:%d:R>\n", organiser, ev.StartsAt)
 	head.WriteString(sheet.SummaryLine() + "\n")
 	if line := sheet.StillNeededLine(); line != "" {
 		head.WriteString("**" + line + "**\n")
+	}
+	names := map[string]string{}
+	for _, sg := range roster {
+		names[sg.DiscordUserID] = sg.NameOnDiscord()
 	}
 	// One line per thing brought, under its category, so a long list reads
 	// down the screen rather than across it.
@@ -301,7 +308,7 @@ func potluckForumNudge(ev *Event, organiser string, unanswered []Signup) []strin
 			}
 			fmt.Fprintf(&b, "\n**%s %s**\n", c.Category.Emoji, c.Category.Label)
 			for _, it := range c.Items {
-				fmt.Fprintf(&b, "- <@%s> %s\n", it.DiscordUserID, truncate(it.Item, itemLimit))
+				fmt.Fprintf(&b, "- **%s** %s\n", names[it.DiscordUserID], truncate(it.Item, itemLimit))
 			}
 		}
 		if b.Len() == 0 {
@@ -329,7 +336,7 @@ func potluckForumNudge(ev *Event, organiser string, unanswered []Signup) []strin
 // nudgeInForum posts the check-in in the event's forum thread and says what
 // happened. A forum post is not limited, as an organiser's other forum
 // messages are not; it is recorded with them.
-func (s *Server) nudgeInForum(ev *Event, session *WebSession, people []Signup) string {
+func (s *Server) nudgeInForum(ev *Event, session *WebSession, roster, people []Signup) string {
 	if ev.ForumPostID == "" {
 		return "Nothing was posted: this event has no forum post. Nudge them by DM instead."
 	}
@@ -337,7 +344,7 @@ func (s *Server) nudgeInForum(ev *Event, session *WebSession, people []Signup) s
 		return fmt.Sprintf("Nothing was posted: %d people have not answered, and Discord pings at most %d in a post. Nudge them by DM instead.",
 			len(people), mentionsPerMessage)
 	}
-	posts := potluckForumNudge(ev, session.DisplayName, people)
+	posts := potluckForumNudge(ev, session.DisplayName, roster, people)
 	ids := make([]string, len(people))
 	for i, sg := range people {
 		ids[i] = sg.DiscordUserID
@@ -359,8 +366,8 @@ func (s *Server) nudgeInForum(ev *Event, session *WebSession, people []Signup) s
 			"label": "Event page", "url": fmt.Sprintf("%s/events/%d", origin, ev.ID)})
 	}
 	for i, content := range posts {
-		// Only the people being asked are pinged; everyone named in the
-		// sheet shows as a name.
+		// Only the people being asked are mentioned, and only they are
+		// allowed to be pinged.
 		payload := map[string]any{"content": content, "allowed_mentions": map[string]any{"users": ids}}
 		if i < len(posts)-1 {
 			payload["allowed_mentions"] = map[string]any{"parse": []string{}}
