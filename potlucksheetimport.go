@@ -153,11 +153,26 @@ type sheetRow struct {
 	Drinks  bool
 	Food    bool
 	Explain string
+	// Columns is every other column's TRUE or FALSE, by roleNameKey of its
+	// header, for the roles the sheet has.
+	Columns map[string]bool
 }
 
-// signature is what decides whether the row changed since it was copied.
+// signature is what decides whether the row's item changed since it was
+// copied, and roleSignature whether its role columns did. Kept apart, so a
+// role ticked or a role added does not copy the item again.
 func (r sheetRow) signature() string {
 	return fmt.Sprintf("%t|%t|%s", r.Drinks, r.Food, strings.Join(strings.Fields(r.Explain), " "))
+}
+
+func (r sheetRow) roleSignature(roles []SheetRole) string {
+	var parts []string
+	for _, role := range roles {
+		if ticked, ok := r.Columns[roleNameKey(role.Name)]; ok {
+			parts = append(parts, fmt.Sprintf("%d=%t", role.ID, ticked))
+		}
+	}
+	return strings.Join(parts, "|")
 }
 
 // item is the one thing the row brings, or ok false when it ticks neither.
@@ -221,10 +236,20 @@ func parsePotluckSheet(body io.Reader) ([]sheetRow, error) {
 		if name == "" {
 			continue
 		}
-		out = append(out, sheetRow{Name: name,
+		row := sheetRow{Name: name,
 			Drinks:  strings.EqualFold(cell(record, "DRINKS"), "TRUE"),
 			Food:    strings.EqualFold(cell(record, "FOOD"), "TRUE"),
-			Explain: cell(record, "EXPLAIN")})
+			Explain: cell(record, "EXPLAIN"), Columns: map[string]bool{}}
+		for j, heading := range records[header] {
+			value := ""
+			if j < len(record) {
+				value = strings.TrimSpace(record[j])
+			}
+			if strings.EqualFold(value, "TRUE") || strings.EqualFold(value, "FALSE") {
+				row.Columns[roleNameKey(heading)] = strings.EqualFold(value, "TRUE")
+			}
+		}
+		out = append(out, row)
 	}
 	return out, nil
 }
@@ -248,43 +273,77 @@ func matchGoing(name string, going []Signup) (string, bool) {
 // copySheetRow brings one person's copied item in line with their row, in
 // one transaction: the items this copy made before come off, the new one
 // goes on, and the row's signature is kept. Returns whether anything changed.
-func (s *Store) copySheetRow(eventID int64, userID string, row sheetRow) (bool, error) {
+func (s *Store) copySheetRow(eventID int64, userID string, row sheetRow, roles []SheetRole) (bool, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return false, fmt.Errorf("begin: %w", err)
 	}
 	defer tx.Rollback()
-	var last string
-	err = tx.QueryRow(`SELECT row_signature FROM potluck_sheet_rows WHERE event_id = ? AND discord_user_id = ?`,
-		eventID, userID).Scan(&last)
+	var lastItem, lastRoles string
+	err = tx.QueryRow(`SELECT row_signature, role_signature FROM potluck_sheet_rows WHERE event_id = ? AND discord_user_id = ?`,
+		eventID, userID).Scan(&lastItem, &lastRoles)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return false, fmt.Errorf("read copied row: %w", err)
 	}
-	if last == row.signature() {
+	itemChanged, rolesChanged := lastItem != row.signature(), lastRoles != row.roleSignature(roles)
+	if !itemChanged && !rolesChanged {
 		return false, nil
 	}
 	ts := now()
-	if _, err := tx.Exec(`UPDATE potluck_items SET removed_at = ?, removed_by = ?
-		WHERE event_id = ? AND discord_user_id = ? AND source = ? AND removed_at = 0`,
-		ts, actorSheetImport, eventID, userID, potluckSourceSheet); err != nil {
-		return false, fmt.Errorf("take off copied items: %w", err)
-	}
-	if category, text, ok := row.item(); ok {
-		// Saying what they bring ends "bringing nothing", as it does when
-		// they say it themselves.
+	if itemChanged {
 		if _, err := tx.Exec(`UPDATE potluck_items SET removed_at = ?, removed_by = ?
-			WHERE event_id = ? AND discord_user_id = ? AND category = ? AND removed_at = 0`,
-			ts, actorSheetImport, eventID, userID, potluckNothing); err != nil {
-			return false, fmt.Errorf("clear bringing nothing: %w", err)
+			WHERE event_id = ? AND discord_user_id = ? AND source = ? AND removed_at = 0`,
+			ts, actorSheetImport, eventID, userID, potluckSourceSheet); err != nil {
+			return false, fmt.Errorf("take off copied items: %w", err)
 		}
-		if _, err := tx.Exec(`INSERT INTO potluck_items (event_id, discord_user_id, category, item, added_at, source)
-			VALUES (?,?,?,?,?,?)`, eventID, userID, category, text, ts, potluckSourceSheet); err != nil {
-			return false, fmt.Errorf("copy item: %w", err)
+		if category, text, ok := row.item(); ok {
+			// Saying what they bring ends "bringing nothing", as it does when
+			// they say it themselves.
+			if _, err := tx.Exec(`UPDATE potluck_items SET removed_at = ?, removed_by = ?
+				WHERE event_id = ? AND discord_user_id = ? AND category = ? AND removed_at = 0`,
+				ts, actorSheetImport, eventID, userID, potluckNothing); err != nil {
+				return false, fmt.Errorf("clear bringing nothing: %w", err)
+			}
+			if _, err := tx.Exec(`INSERT INTO potluck_items (event_id, discord_user_id, category, item, added_at, source)
+				VALUES (?,?,?,?,?,?)`, eventID, userID, category, text, ts, potluckSourceSheet); err != nil {
+				return false, fmt.Errorf("copy item: %w", err)
+			}
 		}
 	}
-	if _, err := tx.Exec(`INSERT INTO potluck_sheet_rows (event_id, discord_user_id, row_signature, copied_at) VALUES (?,?,?,?)
-		ON CONFLICT(event_id, discord_user_id) DO UPDATE SET row_signature = excluded.row_signature, copied_at = excluded.copied_at`,
-		eventID, userID, row.signature(), ts); err != nil {
+	// Each role with a column: ticked puts them in it, unticked takes them
+	// out of it if this copy put them there. A full role is left as it is.
+	for _, role := range roles {
+		ticked, ok := row.Columns[roleNameKey(role.Name)]
+		if !ok || !rolesChanged {
+			continue
+		}
+		var copied, own int
+		if err := tx.QueryRow(`SELECT COUNT(*) FILTER (WHERE source = ?), COUNT(*) FILTER (WHERE source != ?)
+			FROM sheet_role_signups WHERE role_id = ? AND discord_user_id = ? AND left_at = 0`,
+			potluckSourceSheet, potluckSourceSheet, role.ID, userID).Scan(&copied, &own); err != nil {
+			return false, fmt.Errorf("read role of copied row: %w", err)
+		}
+		switch {
+		case ticked && copied+own == 0:
+			err := joinSheetRoleTx(tx, eventID, role.ID, role.Capacity, userID, potluckSourceSheet, ts)
+			if errors.Is(err, ErrSheetRoleFull) {
+				log.Printf("[discord-signup] sheet copy of %s for event %d: %s is full", userID, eventID, role.Name)
+			} else if err != nil {
+				return false, err
+			}
+		case !ticked && copied > 0:
+			if _, err := tx.Exec(`UPDATE sheet_role_signups SET left_at = ?, left_by = ?
+				WHERE role_id = ? AND discord_user_id = ? AND source = ? AND left_at = 0`,
+				ts, actorSheetImport, role.ID, userID, potluckSourceSheet); err != nil {
+				return false, fmt.Errorf("leave copied role: %w", err)
+			}
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO potluck_sheet_rows (event_id, discord_user_id, row_signature, role_signature, copied_at)
+		VALUES (?,?,?,?,?)
+		ON CONFLICT(event_id, discord_user_id) DO UPDATE SET row_signature = excluded.row_signature,
+			role_signature = excluded.role_signature, copied_at = excluded.copied_at`,
+		eventID, userID, row.signature(), row.roleSignature(roles), ts); err != nil {
 		return false, fmt.Errorf("keep copied row: %w", err)
 	}
 	return true, tx.Commit()
@@ -338,7 +397,7 @@ func (s *Server) pollPotluckSheet(imp PotluckSheetImport) (int, error) {
 			unmatched = append(unmatched, row.Name)
 			continue
 		}
-		did, err := s.store.copySheetRow(ev.ID, userID, row)
+		did, err := s.store.copySheetRow(ev.ID, userID, row, ev.Potluck.Roles)
 		if err != nil {
 			return changed, errors.Join(err, s.store.recordSheetPoll(ev.ID, err, unmatched))
 		}

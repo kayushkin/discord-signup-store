@@ -481,9 +481,13 @@ See `potluck.go`. Only rows of people going are shown or counted, so someone who
 | `sent_at` | INTEGER | When. |
 | `cleared_at` | INTEGER | Set when the date rolls over; 0 is the current date. |
 
+### `sheet_roles` and `sheet_role_signups` — roles on the potluck sheet, new 2026-10-26
+
+Roles people going take themselves — setup, teardown, coming for part of the event — not Discord roles (`sheetroles.go`). `sheet_roles`: `id`, `event_id`, `name`, `capacity` (0 for no cap), `created_at`/`created_by`, `removed_at`/`removed_by` (0 while on the sheet). At most 5 live per event. `sheet_role_signups`: `role_id`, `event_id`, `discord_user_id`, `source` (`''` or `sheet`), `joined_at`, `left_at`/`left_by` (`user`, `web:<id>`, `sheet-import`, `recurrence`). Neither is ever deleted; only rows of people going count, and a new date of a repeating event clears the signups and keeps the roles.
+
 ### `potluck_sheet_imports` and `potluck_sheet_rows` — a sheet copied from a spreadsheet, new 2026-10-26
 
-A one-off, set through the loopback API only (`potlucksheetimport.go`). `potluck_sheet_imports` holds, per event, the sheet's CSV export address, when it last polled, its last error and the names it could not match (JSON). `potluck_sheet_rows` holds, per event and person, what their row said when last copied, so an unchanged row is not copied again. `potluck_items.source` is `sheet` on an item the copy made, `''` on one a person said themselves; the copy only ever replaces its own.
+A one-off, set through the loopback API only (`potlucksheetimport.go`). `potluck_sheet_imports` holds, per event, the sheet's CSV export address, when it last polled, its last error and the names it could not match (JSON). `potluck_sheet_rows` holds, per event and person, what their row's item columns (`row_signature`) and role columns (`role_signature`) said when last copied, so an unchanged row is not copied again and a change to one does not copy the other. A column whose heading matches a role's name, before any bracket and ignoring case, fills that role. `potluck_items.source` is `sheet` on an item the copy made, `''` on one a person said themselves; the copy only ever replaces its own.
 
 ## `event_table_rows` — **dropped 2026-09-02**
 

@@ -103,6 +103,8 @@ type PotluckSheet struct {
 	// BringingNothing are the Discord user ids of people going who said they
 	// are bringing nothing.
 	BringingNothing []string `json:"bringing_nothing"`
+	// Roles are the sheet's roles, with who is in each. See sheetroles.go.
+	Roles []SheetRole `json:"roles"`
 }
 
 // Answered says whether this person has said anything: an item, or nothing.
@@ -240,7 +242,13 @@ func (s *Store) PotluckSheetOf(eventID int64) (*PotluckSheet, error) {
 		}
 		sheet.Items = append(sheet.Items, it)
 	}
-	return sheet, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if sheet.Roles, err = s.readSheetRoles(eventID); err != nil {
+		return nil, err
+	}
+	return sheet, nil
 }
 
 // beginPotluckChange opens a transaction for a change to one person's
@@ -444,6 +452,10 @@ func clearPotluckForNextDateTx(tx *sql.Tx, eventID, ts int64) error {
 		WHERE event_id = ? AND cleared_at = 0`, ts, eventID); err != nil {
 		return fmt.Errorf("clear potluck reminders: %w", err)
 	}
+	if _, err := tx.Exec(`UPDATE sheet_role_signups SET left_at = ?, left_by = ?
+		WHERE event_id = ? AND left_at = 0`, ts, ActorRecurrence, eventID); err != nil {
+		return fmt.Errorf("clear sheet roles: %w", err)
+	}
 	return nil
 }
 
@@ -462,6 +474,9 @@ func writePotluckSection(b *strings.Builder, sheet *PotluckSheet, open, withItem
 	if line := sheet.StillNeededLine(); line != "" {
 		b.WriteString(line + "\n")
 	}
+	if line := sheet.RolesLine(); line != "" {
+		b.WriteString(line + "\n")
+	}
 	if !withItems {
 		if len(sheet.Items) > 0 {
 			b.WriteString("Press **What I'm bringing**, or open the event page, to see who is bringing what.\n")
@@ -477,6 +492,16 @@ func writePotluckSection(b *strings.Builder, sheet *PotluckSheet, open, withItem
 			parts[i] = fmt.Sprintf("<@%s> %s", it.DiscordUserID, it.Item)
 		}
 		fmt.Fprintf(b, "%s %s\n", c.Category.Emoji, strings.Join(parts, " · "))
+	}
+	for _, r := range sheet.Roles {
+		if len(r.Members) == 0 {
+			continue
+		}
+		mentions := make([]string, len(r.Members))
+		for i, id := range r.Members {
+			mentions[i] = "<@" + id + ">"
+		}
+		fmt.Fprintf(b, "%s %s: %s\n", sheetRoleEmoji, r.Name, strings.Join(mentions, ", "))
 	}
 }
 
@@ -528,6 +553,9 @@ func potluckDescriptionSection(sheet *PotluckSheet, roster []Signup, budget int)
 	}
 	head := "\nPotluck: " + sheet.SummaryLine()
 	if line := sheet.StillNeededLine(); line != "" {
+		head += "\n" + line
+	}
+	if line := sheet.RolesLine(); line != "" {
 		head += "\n" + line
 	}
 	if len([]rune(head)) > budget {

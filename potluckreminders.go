@@ -320,6 +320,20 @@ func potluckForumNudge(ev *Event, organiser string, roster, unanswered []Signup)
 	for i, sg := range unanswered {
 		mentions[i] = "<@" + sg.DiscordUserID + ">"
 	}
+	roles := ""
+	for _, r := range sheet.Roles {
+		people := make([]string, len(r.Members))
+		for i, id := range r.Members {
+			people[i] = names[id]
+		}
+		roles += fmt.Sprintf("\n**%s %s** %s", sheetRoleEmoji, r.Name, r.Count())
+		if len(people) > 0 {
+			roles += ": " + strings.Join(people, ", ")
+		}
+	}
+	if roles != "" {
+		head.WriteString(roles[1:] + "\n")
+	}
 	pings := fmt.Sprintf("\n**Haven't said yet (%d):** %s\nPress **What I'm bringing** below to add yours, or to say you're not bringing anything.",
 		len(unanswered), strings.Join(mentions, " "))
 

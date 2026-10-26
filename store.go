@@ -472,6 +472,9 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// 'sheet' for a row copied from a shared spreadsheet. See
 	// potlucksheetimport.go.
 	{"potluck_items", "source", "TEXT NOT NULL DEFAULT ''"},
+	// What a copied row's role columns said, apart from its item, so a
+	// change to one is not taken for a change to the other.
+	{"potluck_sheet_rows", "role_signature", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // ensureColumns applies every ALTER that a pre-existing database is missing.

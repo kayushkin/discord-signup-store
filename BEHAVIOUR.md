@@ -155,8 +155,14 @@ the other posts once in the event's forum thread with who is bringing what,
 pinging only those who have not said. Discord's own event carries the sheet
 in its description too — the counts, what is still needed, and who is
 bringing what by name — as much as fits after the organiser's words.
-A repeating event's next date starts with an empty sheet; what it needs
-carries over. The organiser's log has every change to the sheet: each thing
+**Roles on the sheet.** An organiser can add up to five roles to it —
+setup, teardown, coming for part of it — each with an optional cap. Anyone
+going takes one, or leaves it, with its own button on the card, in the What
+I'm bringing view or on the event page; a full role refuses. They are not
+Discord roles: nothing is granted on Discord.
+
+A repeating event's next date starts with an empty sheet and empty roles;
+what it needs, and the roles, carry over. The organiser's log has every change to the sheet: each thing
 someone said they would bring or took off, and who took it off — them, an
 organiser, the spreadsheet copy, or the date moving on — what the event
 wants, and each round of reminder DMs.

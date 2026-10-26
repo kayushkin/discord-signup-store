@@ -22,6 +22,11 @@ type potluckPage struct {
 	Nothing      []Signup
 	Unanswered   []potluckPageUnanswered
 	TakesAnswers bool
+	// Roles are the sheet's roles with who is in each, and whether the
+	// viewer is.
+	Roles []sheetRolePage
+	// ViewerGoing is whether the viewer may take a role.
+	ViewerGoing bool
 }
 
 type potluckPageCategory struct {
@@ -47,7 +52,7 @@ type potluckPageUnanswered struct {
 // potluckPageOf builds the event page's sheet from the event and its people
 // going. Nil when the event has no sheet. Who has not answered, and who is
 // bringing nothing, are read only forOrganisers.
-func (s *Server) potluckPageOf(ev *Event, going []Signup, forOrganisers bool) (*potluckPage, error) {
+func (s *Server) potluckPageOf(ev *Event, going []Signup, viewerID string, forOrganisers bool) (*potluckPage, error) {
 	if ev.Potluck == nil {
 		return nil, nil
 	}
@@ -57,7 +62,12 @@ func (s *Server) potluckPageOf(ev *Event, going []Signup, forOrganisers bool) (*
 		people[sg.DiscordUserID] = sg
 	}
 	page := &potluckPage{Summary: sheet.SummaryLine(), StillNeeded: sheet.StillNeededLine(),
-		TakesAnswers: potluckTakesAnswers(ev)}
+		TakesAnswers: potluckTakesAnswers(ev), Roles: sheetRolePages(sheet, going, viewerID)}
+	for _, sg := range going {
+		if sg.DiscordUserID == viewerID {
+			page.ViewerGoing = true
+		}
+	}
 	for _, c := range potluckCategories {
 		pc := potluckPageCategory{Key: c.Key, Label: c.Label, Emoji: c.Emoji, Wanted: sheet.Needs[c.Key]}
 		for _, it := range sheet.ItemsIn(c.Key) {

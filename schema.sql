@@ -754,3 +754,34 @@ CREATE TABLE IF NOT EXISTS potluck_sheet_rows (
     copied_at       INTEGER NOT NULL,
     PRIMARY KEY (event_id, discord_user_id)
 );
+
+-- sheet_roles: roles on an event's potluck sheet that people going can take
+-- themselves — a job such as setup or teardown, or coming for part of the
+-- event — with an optional cap. Not Discord roles: nothing is granted on
+-- Discord. A removed role is stamped, never deleted. See sheetroles.go.
+CREATE TABLE IF NOT EXISTS sheet_roles (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id    INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    capacity    INTEGER NOT NULL DEFAULT 0,      -- 0 = no cap
+    created_at  INTEGER NOT NULL,
+    created_by  TEXT NOT NULL DEFAULT '',
+    removed_at  INTEGER NOT NULL DEFAULT 0,      -- 0 = on the sheet
+    removed_by  TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_sheet_roles_event ON sheet_roles(event_id, removed_at);
+
+-- sheet_role_signups: who took a role, and when they left it. Only rows of
+-- people going are shown or counted, as on the potluck sheet. Never deleted.
+CREATE TABLE IF NOT EXISTS sheet_role_signups (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    role_id         INTEGER NOT NULL REFERENCES sheet_roles(id) ON DELETE CASCADE,
+    event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    source          TEXT NOT NULL DEFAULT '',    -- '' they took it; 'sheet' copied from a spreadsheet
+    joined_at       INTEGER NOT NULL,
+    left_at         INTEGER NOT NULL DEFAULT 0,  -- 0 = in the role
+    left_by         TEXT NOT NULL DEFAULT ''     -- 'user', 'web:<id>', 'sheet-import' or 'recurrence'
+);
+CREATE INDEX IF NOT EXISTS idx_sheet_role_signups_role ON sheet_role_signups(role_id, left_at);
+CREATE INDEX IF NOT EXISTS idx_sheet_role_signups_event ON sheet_role_signups(event_id, left_at);

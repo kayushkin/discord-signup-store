@@ -67,7 +67,7 @@ func TestCopyingASheetLeavesPeoplesOwnItemsAlone(t *testing.T) {
 				unmatched = append(unmatched, row.Name)
 				continue
 			}
-			did, err := store.copySheetRow(ev.ID, userID, row)
+			did, err := store.copySheetRow(ev.ID, userID, row, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -23,6 +23,7 @@ const (
 
 	buttonStylePrimary   = 1
 	buttonStyleSecondary = 2
+	buttonStyleSuccess   = 3
 	// buttonStyleLink opens a URL instead of sending an interaction.
 	buttonStyleLink = 5
 )
@@ -124,12 +125,12 @@ func renderSignupMessage(ev *Event, roster []Signup) map[string]any {
 		"allowed_mentions": map[string]any{"parse": []string{}},
 	}
 	if ev.Status == StatusOpen {
-		payload["components"] = signupComponents(ev)
+		payload["components"] = append(signupComponents(ev), sheetRoleRow(ev)...)
 	} else if potluckTakesAnswers(ev) {
 		// Signups closed, but the people going can still say what they
-		// will bring.
-		payload["components"] = []any{map[string]any{"type": componentTypeActionRow,
-			"components": []any{potluckButton(ev.ID)}}}
+		// will bring and take roles.
+		payload["components"] = append([]any{map[string]any{"type": componentTypeActionRow,
+			"components": []any{potluckButton(ev.ID)}}}, sheetRoleRow(ev)...)
 	} else {
 		// An empty array, not a missing key. Omitting components on an edit
 		// leaves the old buttons in place, so a closed event would keep a live

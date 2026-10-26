@@ -71,6 +71,8 @@ func (s *Server) handlePotluckComponent(w http.ResponseWriter, in *Interaction, 
 			s.inBackground(func() { s.syncAfterChange(eventID, nil) })
 		}
 		s.replyPotluckPanel(w, callbackTypeUpdateMessage, eventID, userID, note)
+	case strings.HasPrefix(action, sheetRoleCardPrefix), strings.HasPrefix(action, sheetRolePanelPrefix):
+		s.handleSheetRoleButton(w, action, eventID, userID)
 	case action == potluckClearAction:
 		note := "Cleared: you're off the sheet until you add something."
 		if _, err := s.store.ClearPotluckAnswer(eventID, userID); err != nil {
@@ -177,6 +179,17 @@ func potluckPanel(ev *Event, userID string, going bool, note string) map[string]
 		}
 		fmt.Fprintf(&b, "%s %s\n", c.Category.Emoji, strings.Join(parts, " · "))
 	}
+	for _, r := range sheet.Roles {
+		mentions := make([]string, len(r.Members))
+		for i, id := range r.Members {
+			mentions[i] = "<@" + id + ">"
+		}
+		fmt.Fprintf(&b, "%s **%s** %s", sheetRoleEmoji, r.Name, r.Count())
+		if len(mentions) > 0 {
+			b.WriteString(": " + strings.Join(mentions, ", "))
+		}
+		b.WriteString("\n")
+	}
 
 	mine := sheet.ItemsOf(userID)
 	switch {
@@ -229,6 +242,10 @@ func potluckPanel(ev *Event, userID string, going bool, note string) map[string]
 	data["components"] = []any{
 		map[string]any{"type": componentTypeActionRow, "components": categoryButtons},
 		map[string]any{"type": componentTypeActionRow, "components": answerButtons},
+	}
+	if len(sheet.Roles) > 0 {
+		data["components"] = append(data["components"].([]any), map[string]any{"type": componentTypeActionRow,
+			"components": sheetRoleButtons(ev, sheetRolePanelPrefix, userID)})
 	}
 	return data
 }

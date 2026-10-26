@@ -242,11 +242,13 @@ func holdOutcomeText(inv EventInvite) string {
 type potluckLog struct {
 	rows      []PotluckHistoryRow
 	reminders []PotluckReminder
+	roles     []SheetRoleHistoryRow
 }
 
 func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventInvite, regulars []EventRegular, messages []EventMessage, potluck potluckLog, names eventLogNames) []eventLogEntry {
 	out := make([]eventLogEntry, 0, len(signups)+len(edits)+len(invites)+len(regulars)+len(messages)+len(potluck.rows))
 	out = append(out, potluckLogEntries(potluck, names)...)
+	out = append(out, sheetRoleLogEntries(potluck.roles, names)...)
 	for i, m := range messages {
 		how := "in the forum thread"
 		if m.Via == MessageViaDM {

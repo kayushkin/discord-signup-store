@@ -158,6 +158,11 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		log.Printf("[discord-signup] potluck reminder history %d: %v", ev.ID, err)
 		problems = append(problems, "Could not read the potluck reminders: "+err.Error())
 	}
+	roleHistory, err := s.store.SheetRoleHistory(ev.ID)
+	if err != nil {
+		log.Printf("[discord-signup] sheet role history %d: %v", ev.ID, err)
+		problems = append(problems, "Could not read the potluck roles: "+err.Error())
+	}
 	invites, err := s.store.Invites(ev.ID)
 	if err != nil {
 		log.Printf("[discord-signup] invites %d: %v", ev.ID, err)
@@ -191,6 +196,9 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	for _, h := range potluckRows {
 		actors = append(actors, h.RemovedBy)
 	}
+	for _, h := range roleHistory {
+		actors = append(actors, h.By, h.RemovedBy)
+	}
 	avatars, avatarsErr := s.store.ChosenAvatarUserIDs()
 	if avatarsErr != nil {
 		log.Printf("[discord-signup] chosen avatars: %v", avatarsErr)
@@ -217,7 +225,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	data := pageData{
 		Title: ev.Name, Session: session, Event: ev, Roster: roster, Invites: invites,
 		EventLog: buildEventLog(signupUpdates, edits, invites, regulars, messages,
-			potluckLog{rows: potluckRows, reminders: potluckReminders}, names),
+			potluckLog{rows: potluckRows, reminders: potluckReminders, roles: roleHistory}, names),
 		CanManage:         canManage,
 		EventUnderway:     eventIsUnderway(ev),
 		EventFull:         eventIsFull(ev),
@@ -281,7 +289,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 			data.Maybes = append(data.Maybes, sg)
 		}
 	}
-	if data.Potluck, err = s.potluckPageOf(ev, data.Going, true); err != nil {
+	if data.Potluck, err = s.potluckPageOf(ev, data.Going, session.DiscordUserID, true); err != nil {
 		log.Printf("[discord-signup] potluck page %d: %v", ev.ID, err)
 		data.Error = strings.TrimSpace(data.Error + " Could not read the potluck sheet: " + err.Error())
 	}

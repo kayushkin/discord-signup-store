@@ -51,7 +51,7 @@ func (s *Server) renderMemberEventPage(w http.ResponseWriter, session *WebSessio
 		log.Printf("[discord-signup] event picture %d: %v", ev.ID, err)
 		problems = append(problems, "Could not read the picture of who is going: "+err.Error())
 	}
-	if data.Potluck, err = s.potluckPageOf(ev, data.Going, false); err != nil {
+	if data.Potluck, err = s.potluckPageOf(ev, data.Going, session.DiscordUserID, false); err != nil {
 		log.Printf("[discord-signup] potluck page %d: %v", ev.ID, err)
 		problems = append(problems, "Could not read the potluck sheet: "+err.Error())
 	}

@@ -96,6 +96,26 @@
     <p class="hint">Join to say what you're bringing.</p>
     {{end}}
 
+    {{if .Roles}}
+    <div class="potluck-cat">
+      <h4>🙋 Roles</h4>
+      {{range .Roles}}
+      <div class="sheet-role">
+        <div class="sheet-role-head">
+          <strong>{{.Name}}</strong> <span class="badge">{{.Count}}</span>
+          {{if and $.Potluck.TakesAnswers $.Potluck.ViewerGoing}}
+          <form method="post" action="/events/{{$ev.ID}}/potluck/roles/toggle">
+            <input type="hidden" name="role_id" value="{{.ID}}">
+            {{if .Mine}}<button class="btn-sm ghost">Leave</button>{{else if .Full}}<button class="btn-sm" disabled>Full</button>{{else}}<button class="btn-sm">Count me in</button>{{end}}
+          </form>
+          {{end}}
+        </div>
+        {{if .People}}<ul class="name-cloud">{{range .People}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}</li>{{end}}</ul>
+        {{else}}<p class="empty">Nobody yet.</p>{{end}}
+      </div>
+      {{end}}
+    </div>
+    {{end}}
     {{range .Categories}}{{if or .Items .Wanted}}
     <div class="potluck-cat">
       <h4>{{.Emoji}} {{.Label}} <span class="badge">{{.Have}}{{if .Wanted}} / {{.Wanted}}{{end}}</span></h4>
