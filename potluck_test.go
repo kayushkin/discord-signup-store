@@ -518,7 +518,7 @@ func TestTheForumNudgeShowsTheSheetAndPingsOnlyTheSilent(t *testing.T) {
 		t.Fatalf("posted %d messages in the thread, want 1", len(posted))
 	}
 	content := fmt.Sprint(posted[0].Body["content"])
-	for _, want := range []string{"Who's bringing what", "<@alice> Tamales", "Haven't said yet (2):", "<@bob>", "<@cy>"} {
+	for _, want := range []string{"Who's bringing what", "**🍲 Food**\n- <@alice> Tamales\n", "Haven't said yet (2):", "<@bob>", "<@cy>"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("post lacks %q:\n%s", want, content)
 		}

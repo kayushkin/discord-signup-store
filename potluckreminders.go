@@ -242,7 +242,7 @@ func (s *Server) handleWebPotluckNudge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := "Asked what they are bringing to the potluck."
-	messageID, err := s.store.ClaimMessage(EventMessage{EventID: ev.ID, SentBy: session.DiscordUserID,
+	messageID, err := s.store.ClaimMessage(EventMessage{EventID: ev.ID, SentBy: "web:" + session.DiscordUserID,
 		Via: MessageViaDM, Audience: []string{StateAttending}, Body: body, Recipients: len(people)})
 	if errors.Is(err, ErrMessageLimit) {
 		s.redirectWithNotice(w, r, ev.ID, "Nobody was nudged: "+strings.TrimPrefix(err.Error(), ErrMessageLimit.Error()+": ")+
@@ -291,22 +291,23 @@ func potluckForumNudge(ev *Event, organiser string, unanswered []Signup) []strin
 	if line := sheet.StillNeededLine(); line != "" {
 		head.WriteString("**" + line + "**\n")
 	}
+	// One line per thing brought, under its category, so a long list reads
+	// down the screen rather than across it.
 	bringing := func(itemLimit int) string {
 		var b strings.Builder
 		for _, c := range sheet.Counts() {
 			if len(c.Items) == 0 {
 				continue
 			}
-			parts := make([]string, len(c.Items))
-			for i, it := range c.Items {
-				parts[i] = fmt.Sprintf("<@%s> %s", it.DiscordUserID, truncate(it.Item, itemLimit))
+			fmt.Fprintf(&b, "\n**%s %s**\n", c.Category.Emoji, c.Category.Label)
+			for _, it := range c.Items {
+				fmt.Fprintf(&b, "- <@%s> %s\n", it.DiscordUserID, truncate(it.Item, itemLimit))
 			}
-			fmt.Fprintf(&b, "%s %s\n", c.Category.Emoji, strings.Join(parts, " · "))
 		}
 		if b.Len() == 0 {
 			return ""
 		}
-		return "\n**Who's bringing what**\n" + b.String()
+		return "\n**Who's bringing what**" + b.String()
 	}
 	mentions := make([]string, len(unanswered))
 	for i, sg := range unanswered {
@@ -341,7 +342,7 @@ func (s *Server) nudgeInForum(ev *Event, session *WebSession, people []Signup) s
 	for i, sg := range people {
 		ids[i] = sg.DiscordUserID
 	}
-	messageID, err := s.store.ClaimMessage(EventMessage{EventID: ev.ID, SentBy: session.DiscordUserID,
+	messageID, err := s.store.ClaimMessage(EventMessage{EventID: ev.ID, SentBy: "web:" + session.DiscordUserID,
 		Via: MessageViaForum, Audience: []string{StateAttending}, Body: "Potluck check-in, pinging everyone going who has not said what they are bringing.",
 		Recipients: len(people)})
 	if err != nil {
