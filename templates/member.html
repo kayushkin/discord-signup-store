@@ -6,7 +6,7 @@
 <div class="member-event">
 
   <section class="card event-head">
-    <h2>{{$ev.Name}}</h2>
+    <div class="title-row"><h2>{{$ev.Name}}</h2></div>
     <div class="pills">
       {{if eq .MyState "attending"}}<span class="pill open">you're going</span>
       {{else if eq .MyState "waitlisted"}}<span class="pill held">you're waiting</span>
@@ -37,10 +37,21 @@
   </section>
 
   {{with .EventPicture}}{{if .Signature}}
+  <div class="picture-stack">
   <section class="card event-picture">
     <img class="event-picture-img" src="/events/{{$ev.ID}}/picture.webp?v={{.Signature}}"
          alt="A drawing of the people going to {{$ev.Name}}" width="1200" height="400">
   </section>
+  {{/* Someone with no avatar is one of the blank faces in the picture, or
+       not in it at all: a tab tucked under the picture's edge asks them to
+       make one. */}}
+  {{if not $.ViewerHasAvatar}}
+  <a class="avatar-peek" href="/avatar">
+    <svg class="peek-face" viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="var(--paper-deep)" stroke="currentColor" stroke-width="2.5"/><path d="M11 14h.01M21 14h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><path d="M11.5 20.5q4.5 3 9 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+    <span>{{if eq $.MyState "attending"}}One of those blank faces is you. <strong>Make your avatar →</strong>{{else}}Show up in the picture: <strong>make your avatar →</strong>{{end}}</span>
+  </a>
+  {{end}}
+  </div>
   {{end}}{{end}}
 
   {{with .Potluck}}

@@ -243,6 +243,7 @@ func (s *Server) refreshForumPost(ev *Event, rename bool) error {
 		return err
 	}
 	card := RenderForumCard(ev, roster)
+	s.addEventPageButton(card, ev)
 	title := forumPostTitle(ev)
 	tag := forumTagFor(ev, forum)
 

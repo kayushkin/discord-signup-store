@@ -323,10 +323,11 @@ func eventPublishSignature(ev *Event, roster []Signup) string {
 	if ev.HeldCount > 0 {
 		fmt.Fprintf(&b, "\x00held=%d", ev.HeldCount)
 	}
-	// The potluck sheet is on the card. Written only when the event has one,
-	// so every signature from before the sheet stayed as it was.
+	// The potluck sheet is on the card, with a link to the event page.
+	// Written only when the event has one, so every signature from before the
+	// sheet stayed as it was; "2" since the link, so the cards redraw.
 	if ev.PotluckEnabled {
-		b.WriteString("\x00potluck")
+		b.WriteString("\x00potluck2")
 	}
 	if p := ev.Potluck; p != nil {
 		for _, c := range potluckCategories {

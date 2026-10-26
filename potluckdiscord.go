@@ -232,3 +232,29 @@ func potluckPanel(ev *Event, userID string, going bool, note string) map[string]
 	}
 	return data
 }
+
+// addEventPageButton puts a link to the event's page on the web beside a
+// potluck event's buttons, where everyone going can read the whole sheet: a
+// card for a full event has room only for the counts. A link button rather
+// than a link in the text, so Discord shows no preview. Nothing when the
+// web pages are off or the event has no sheet.
+func (s *Server) addEventPageButton(card map[string]any, ev *Event) {
+	origin := s.webOrigin()
+	if origin == "" || !ev.PotluckEnabled {
+		return
+	}
+	link := map[string]any{
+		"type": componentTypeButton, "style": buttonStyleLink,
+		"label": "Event page", "url": fmt.Sprintf("%s/events/%d", origin, ev.ID),
+	}
+	rows, _ := card["components"].([]any)
+	if len(rows) > 0 {
+		row := rows[0].(map[string]any)
+		buttons := row["components"].([]any)
+		if len(buttons) < 5 {
+			row["components"] = append(buttons, link)
+			return
+		}
+	}
+	card["components"] = append(rows, map[string]any{"type": componentTypeActionRow, "components": []any{link}})
+}

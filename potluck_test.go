@@ -470,3 +470,27 @@ func TestAMemberFillsInThePotluckFromTheEventPage(t *testing.T) {
 		t.Errorf("leave from the event page went to %q", loc)
 	}
 }
+
+// TestAPotluckCardLinksTheEventPage: the forum card of an event with a
+// sheet carries a link button to its page, beside the other buttons; one
+// without a sheet does not.
+func TestAPotluckCardLinksTheEventPage(t *testing.T) {
+	store := testStore(t)
+	srv := NewServer(store, nil, nil)
+	srv.EnableWeb(&OAuthConfig{RedirectURL: "https://events.example/auth/callback"})
+	ev := potluckEvent(t, store, "ann")
+	card := RenderForumCard(ev, nil)
+	srv.addEventPageButton(card, ev)
+	if !strings.Contains(fmt.Sprint(card["components"]), fmt.Sprintf("url:https://events.example/events/%d", ev.ID)) {
+		t.Fatalf("potluck card has no link to its page: %v", card["components"])
+	}
+	if rows := card["components"].([]any); len(rows) != 1 {
+		t.Fatalf("the link went on a row of its own: %d rows", len(rows))
+	}
+	plain := testEvent(t, store, 0)
+	card = RenderForumCard(plain, nil)
+	srv.addEventPageButton(card, plain)
+	if strings.Contains(fmt.Sprint(card["components"]), "url:") {
+		t.Fatal("a card without a sheet got the link")
+	}
+}

@@ -168,7 +168,7 @@ Closed sets, defined in `vocabulary.go` and validated on write.
 | Leave | `signup:leave:{id}` | anyone |
 | Edit | `signup:edit:{id}` | `MANAGE_EVENTS`, `ADMINISTRATOR`, or the event's creator — or the server's own rule, see **Authorization** |
 | Create an event | `signup:create:0` | `CREATE_EVENTS`, `MANAGE_EVENTS` or `ADMINISTRATOR` — or anyone, where the server allows it |
-| What I'm bringing | `signup:potluck:{id}` | anyone; only on an event with the potluck sheet on, and kept when signups close. Opens a private view of the sheet. Its buttons — `signup:potluck-add-{food,drinks,supplies,other}:{id}` (each opens a one-line form, `signup:potluck-modal-{category}:{id}`), `signup:potluck-nothing:{id}` and `signup:potluck-clear:{id}` — work only for people going, and edit the view in place. The reminder DMs carry the same button. |
+| What I'm bringing | `signup:potluck:{id}` | anyone; only on an event with the potluck sheet on, and kept when signups close. Beside it on the forum card, a link button, **Event page**, to the members' page, where the whole sheet is. Opens a private view of the sheet. Its buttons — `signup:potluck-add-{food,drinks,supplies,other}:{id}` (each opens a one-line form, `signup:potluck-modal-{category}:{id}`), `signup:potluck-nothing:{id}` and `signup:potluck-clear:{id}` — work only for people going, and edit the view in place. The reminder DMs carry the same button. |
 
 **Edit** and **Create an event** open the same five-field modal — Name, Starts,
 Max attendees, Location, Description — prefilled when editing and empty when

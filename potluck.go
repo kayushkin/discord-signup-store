@@ -447,7 +447,7 @@ func writePotluckSection(b *strings.Builder, sheet *PotluckSheet, open, withItem
 	}
 	if !withItems {
 		if len(sheet.Items) > 0 {
-			b.WriteString("Press **What I'm bringing** to see who is bringing what.\n")
+			b.WriteString("Press **What I'm bringing**, or open the event page, to see who is bringing what.\n")
 		}
 		return
 	}

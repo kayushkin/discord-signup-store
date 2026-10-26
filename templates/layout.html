@@ -629,6 +629,42 @@ ol.name-cloud li::before{counter-increment:place;content:counter(place) ".";font
    page keeps the order it is written in. */
 .member-event>*{order:0!important}
 .member-join{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:14px}
+
+/* The tab that peeks out from under the members' page picture, asking
+   someone with no avatar to make one. It sits behind the picture's card and
+   slides out once. */
+.picture-stack{position:relative;display:flex;flex-direction:column;align-items:center}
+.picture-stack .event-picture{position:relative;z-index:2;margin:0;width:100%;box-sizing:border-box}
+.avatar-peek{position:relative;z-index:1;display:flex;align-items:center;gap:10px;margin-top:-12px;
+  padding:20px 16px 10px;background:var(--warn);color:var(--ink);border:2.5px solid var(--ink);border-top:0;
+  border-radius:0 0 14px 14px;box-shadow:3px 3px 0 var(--ink);text-decoration:none;font-size:14px;line-height:1.3;
+  max-width:92%;animation:peek-out .7s cubic-bezier(.3,1.6,.5,1) .4s both}
+.avatar-peek:hover{text-decoration:none;transform:translateY(2px)}
+.avatar-peek .peek-face{flex:none}
+@keyframes peek-out{from{transform:translateY(-70%)}to{transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){.avatar-peek{animation:none}}
+/* The members' page on a phone: tighter, so the sheet starts sooner. */
+@media (max-width:600px){
+  .member-event{gap:12px}
+  .member-event .card{padding:12px}
+  .member-event .title-row h2{font-size:20px}
+  .member-event .facts{margin-top:8px}
+  .member-event .facts .field{padding:6px 0}
+  .member-event .pills{margin:4px 0 0}
+  .member-join{margin-top:10px;gap:8px}
+  .member-join button{padding:8px 16px}
+  .potluck-cat{margin-top:12px}
+  .potluck-item{padding:6px 0;gap:8px}
+  .potluck-item .who{font-size:12px}
+  .potluck-item .who .avatar{width:22px;height:22px;margin-right:5px}
+  .potluck-mine{margin:10px 0;padding:10px}
+  .potluck-add{gap:6px;margin:8px 0 6px}
+  .potluck-add select,.potluck-add input,.potluck-add button{min-height:40px;padding-top:6px;padding-bottom:6px}
+  .potluck-add select{flex:1 1 100%}
+  .name-cloud li{font-size:13px;padding:2px 8px}
+  .name-cloud .avatar{width:20px;height:20px;margin-right:4px}
+  .avatar-peek{font-size:13px;padding:18px 12px 8px}
+}
 </style></head><body>
 <header>
   <button type="button" class="mascot-link" id="mascot" data-guild="{{.Mascot.GuildID}}" aria-hidden="true" tabindex="-1" title="Poke"><img class="mascot" src="{{.Mascot.Small}}" alt="" width="64" height="64"></button>
