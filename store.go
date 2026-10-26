@@ -467,6 +467,11 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// everyone who has one — they all arrived earlier, since a move ranks
 	// the whole line. See waitlistOrder.
 	{"signups", "waitlist_rank", "INTEGER NOT NULL DEFAULT 0"},
+
+	// Where a potluck item came from: '' for a person saying it themselves,
+	// 'sheet' for a row copied from a shared spreadsheet. See
+	// potlucksheetimport.go.
+	{"potluck_items", "source", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // ensureColumns applies every ALTER that a pre-existing database is missing.

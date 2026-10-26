@@ -731,3 +731,26 @@ CREATE TABLE IF NOT EXISTS potluck_reminders (
     cleared_at      INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_potluck_reminders_event ON potluck_reminders(event_id, cleared_at);
+
+-- potluck_sheet_imports: an event whose potluck sheet is copied from a shared
+-- spreadsheet until it starts. Set only through the loopback API, for a one-off;
+-- no web page offers it. See potlucksheetimport.go.
+CREATE TABLE IF NOT EXISTS potluck_sheet_imports (
+    event_id       INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+    csv_url        TEXT NOT NULL,               -- the sheet's CSV export address
+    last_polled_at INTEGER NOT NULL DEFAULT 0,
+    last_error     TEXT NOT NULL DEFAULT '',    -- '' when the last poll worked
+    unmatched      TEXT NOT NULL DEFAULT '[]',  -- JSON: names on the sheet that fit nobody going, or several
+    created_at     INTEGER NOT NULL
+);
+
+-- potluck_sheet_rows: what a person's row said when it was last copied, so a
+-- row that has not changed is not copied again — and an item they removed
+-- themselves stays removed until their row changes.
+CREATE TABLE IF NOT EXISTS potluck_sheet_rows (
+    event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    row_signature   TEXT NOT NULL,
+    copied_at       INTEGER NOT NULL,
+    PRIMARY KEY (event_id, discord_user_id)
+);

@@ -481,6 +481,10 @@ See `potluck.go`. Only rows of people going are shown or counted, so someone who
 | `sent_at` | INTEGER | When. |
 | `cleared_at` | INTEGER | Set when the date rolls over; 0 is the current date. |
 
+### `potluck_sheet_imports` and `potluck_sheet_rows` — a sheet copied from a spreadsheet, new 2026-10-26
+
+A one-off, set through the loopback API only (`potlucksheetimport.go`). `potluck_sheet_imports` holds, per event, the sheet's CSV export address, when it last polled, its last error and the names it could not match (JSON). `potluck_sheet_rows` holds, per event and person, what their row said when last copied, so an unchanged row is not copied again. `potluck_items.source` is `sheet` on an item the copy made, `''` on one a person said themselves; the copy only ever replaces its own.
+
 ## `event_table_rows` — **dropped 2026-09-02**
 
 A one-message-per-event table from before the consolidated table was paged,
