@@ -125,7 +125,7 @@ func (s *Server) handleWebPotluckNeeds(w http.ResponseWriter, r *http.Request) {
 		}
 		needs[c.Key] = n
 	}
-	if err := s.store.SetPotluckNeeds(ev.ID, needs); err != nil {
+	if err := s.store.SetPotluckNeeds(ev.ID, needs, "web:"+session.DiscordUserID); err != nil {
 		if errors.Is(err, ErrInvalidPotluck) {
 			s.redirectWithNotice(w, r, ev.ID, "Not saved: "+strings.TrimPrefix(err.Error(), ErrInvalidPotluck.Error()+": ")+".")
 			return

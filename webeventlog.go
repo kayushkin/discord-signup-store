@@ -166,6 +166,12 @@ var eventUpdateFieldWords = map[string]string{
 // this is where a time becomes a time and a role id becomes a role.
 func (n eventLogNames) eventUpdateValue(field, value string) template.HTML {
 	none := template.HTML(`<span class="muted">none</span>`)
+	if strings.HasPrefix(field, potluckWantedField) {
+		if value == "0" {
+			return template.HTML(`<span class="muted">no number</span>`)
+		}
+		return template.HTML(template.HTMLEscapeString(value))
+	}
 	switch field {
 	case "starts_at", "ends_at":
 		unix, err := strconv.ParseInt(value, 10, 64)
@@ -231,8 +237,16 @@ func holdOutcomeText(inv EventInvite) string {
 }
 
 // buildEventLog merges an event's three histories, newest first.
-func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventInvite, regulars []EventRegular, messages []EventMessage, names eventLogNames) []eventLogEntry {
-	out := make([]eventLogEntry, 0, len(signups)+len(edits)+len(invites)+len(regulars)+len(messages))
+// potluckLog is the potluck sheet's part of the event's log: every row the
+// sheet has had, and every reminder it sent.
+type potluckLog struct {
+	rows      []PotluckHistoryRow
+	reminders []PotluckReminder
+}
+
+func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventInvite, regulars []EventRegular, messages []EventMessage, potluck potluckLog, names eventLogNames) []eventLogEntry {
+	out := make([]eventLogEntry, 0, len(signups)+len(edits)+len(invites)+len(regulars)+len(messages)+len(potluck.rows))
+	out = append(out, potluckLogEntries(potluck, names)...)
 	for i, m := range messages {
 		how := "in the forum thread"
 		if m.Via == MessageViaDM {
@@ -273,6 +287,9 @@ func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventI
 	}
 	for i, u := range edits {
 		label := eventUpdateFieldWords[u.Field]
+		if c, ok := potluckCategoryOf(strings.TrimPrefix(u.Field, potluckWantedField)); ok && strings.HasPrefix(u.Field, potluckWantedField) {
+			label = "potluck's " + strings.ToLower(c.Label) + " wanted"
+		}
 		if label == "" {
 			label = u.Field
 		}
@@ -322,5 +339,90 @@ func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventI
 		}
 		return out[i].order > out[j].order
 	})
+	return out
+}
+
+// potluckLogEntries are the potluck sheet's lines in the event's log: each
+// thing someone said they would bring, each taken off and by whom, and each
+// round of reminder DMs a day before. A "not bringing anything" ended by the
+// same person adding something in the same moment is not a line of its own:
+// the add says it.
+func potluckLogEntries(potluck potluckLog, names eventLogNames) []eventLogEntry {
+	addedAt := map[string]map[int64]bool{}
+	for _, h := range potluck.rows {
+		if addedAt[h.DiscordUserID] == nil {
+			addedAt[h.DiscordUserID] = map[int64]bool{}
+		}
+		addedAt[h.DiscordUserID][h.AddedAt] = true
+	}
+	thing := func(h PotluckHistoryRow) template.HTML {
+		if h.Category == potluckNothing {
+			return "not bringing anything"
+		}
+		c, _ := potluckCategoryOf(h.Category)
+		return template.HTML(template.HTMLEscapeString(c.Emoji + " " + h.Item))
+	}
+	muted := func(text string) template.HTML {
+		return template.HTML(`<span class="muted">` + template.HTMLEscapeString(text) + `</span>`)
+	}
+	var out []eventLogEntry
+	for i, h := range potluck.rows {
+		subject := names.person(h.ReadableName, h.DisplayName, h.DiscordUserID)
+		by := subject
+		if h.Source == potluckSourceSheet {
+			by = muted("copied from the spreadsheet")
+		}
+		what := "potluck: bringing " + thing(h)
+		if h.Category == potluckNothing {
+			what = "potluck: " + thing(h)
+		}
+		out = append(out, eventLogEntry{At: h.AddedAt, order: 2_000_000 + i, Subject: subject, What: what, By: by})
+		if h.RemovedAt == 0 {
+			continue
+		}
+		if h.Category == potluckNothing && (h.RemovedBy == ActorUser || h.RemovedBy == actorSheetImport) &&
+			addedAt[h.DiscordUserID][h.RemovedAt] {
+			continue
+		}
+		switch h.RemovedBy {
+		case ActorUser:
+			by = subject
+		case actorSheetImport:
+			by = muted("their row in the spreadsheet changed")
+		case ActorRecurrence:
+			by = muted("the next date")
+		default:
+			by = names.actor(h.RemovedBy)
+		}
+		what = "potluck: took off " + thing(h)
+		if h.Category == potluckNothing {
+			what = "potluck: no longer “not bringing anything”"
+		}
+		out = append(out, eventLogEntry{At: h.RemovedAt, order: 3_000_000 + i, Subject: subject, What: what, By: by})
+	}
+	// The reminder a day before goes to everyone due in one run; the run is
+	// one line. Nudges are an organiser's messages and are logged as those.
+	for i := 0; i < len(potluck.reminders); {
+		r := potluck.reminders[i]
+		if r.Kind != PotluckReminderAutomatic {
+			i++
+			continue
+		}
+		sent, total := 0, 0
+		j := i
+		for ; j < len(potluck.reminders) && potluck.reminders[j].Kind == PotluckReminderAutomatic &&
+			potluck.reminders[j].SentAt-r.SentAt < 60; j++ {
+			total++
+			if potluck.reminders[j].Outcome == potluckReminderSent {
+				sent++
+			}
+		}
+		out = append(out, eventLogEntry{At: r.SentAt, order: 4_000_000 + i,
+			Subject: muted(strconv.Itoa(total) + " " + plural(total, "person", "people")),
+			What: template.HTML(template.HTMLEscapeString(fmt.Sprintf(
+				"potluck: reminded by DM a day before, reaching %d of %d", sent, total))),
+			By: muted("automatic")})
+		i = j
+	}
 	return out
 }

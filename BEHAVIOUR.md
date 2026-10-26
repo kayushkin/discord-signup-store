@@ -156,7 +156,10 @@ pinging only those who have not said. Discord's own event carries the sheet
 in its description too — the counts, what is still needed, and who is
 bringing what by name — as much as fits after the organiser's words.
 A repeating event's next date starts with an empty sheet; what it needs
-carries over.
+carries over. The organiser's log has every change to the sheet: each thing
+someone said they would bring or took off, and who took it off — them, an
+organiser, the spreadsheet copy, or the date moving on — what the event
+wants, and each round of reminder DMs.
 
 ## 3. What updates, when
 

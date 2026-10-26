@@ -126,10 +126,10 @@ func TestPotluckNothingAndItemsReplaceEachOther(t *testing.T) {
 func TestPotluckSaysWhatIsStillNeeded(t *testing.T) {
 	store := testStore(t)
 	ev := potluckEvent(t, store, "ann", "bo")
-	if err := store.SetPotluckNeeds(ev.ID, map[string]int{PotluckFood: 3, PotluckDrinks: 2, PotluckSupplies: 0}); err != nil {
+	if err := store.SetPotluckNeeds(ev.ID, map[string]int{PotluckFood: 3, PotluckDrinks: 2, PotluckSupplies: 0}, "test"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetPotluckNeeds(ev.ID, map[string]int{"dessert": 1}); !errors.Is(err, ErrInvalidPotluck) {
+	if err := store.SetPotluckNeeds(ev.ID, map[string]int{"dessert": 1}, "test"); !errors.Is(err, ErrInvalidPotluck) {
 		t.Fatalf("unknown category need: err = %v", err)
 	}
 	for _, add := range []struct{ who, category, item string }{
@@ -215,7 +215,7 @@ func TestPotluckSheetStaysOpenWhenSignupsClose(t *testing.T) {
 func TestPotluckClearsWhenTheDateRollsOver(t *testing.T) {
 	store := testStore(t)
 	ev := potluckEvent(t, store, "ann")
-	if err := store.SetPotluckNeeds(ev.ID, map[string]int{PotluckFood: 4}); err != nil {
+	if err := store.SetPotluckNeeds(ev.ID, map[string]int{PotluckFood: 4}, "test"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.AddPotluckItem(ev.ID, "ann", PotluckFood, "Chips"); err != nil {
@@ -553,7 +553,7 @@ func TestDiscordsOwnEventDescriptionCarriesTheSheet(t *testing.T) {
 	store := testStore(t)
 	ev := potluckEvent(t, store, "ann", "bo")
 	store.db.Exec(`UPDATE signups SET display_name = 'Ann' WHERE discord_user_id = 'ann'`)
-	store.SetPotluckNeeds(ev.ID, map[string]int{PotluckDrinks: 2})
+	store.SetPotluckNeeds(ev.ID, map[string]int{PotluckDrinks: 2}, "test")
 	if _, err := store.AddPotluckItem(ev.ID, "ann", PotluckFood, "Pumpkin pie"); err != nil {
 		t.Fatal(err)
 	}
@@ -583,5 +583,42 @@ func TestDiscordsOwnEventDescriptionCarriesTheSheet(t *testing.T) {
 	description = nativeEventDescription(ev, roster, "board")
 	if n := len([]rune(description)); n > nativeDescriptionLimit || !strings.HasPrefix(description, long) {
 		t.Fatalf("description is %d runes, or lost the organiser's words", n)
+	}
+}
+
+// TestThePotluckIsInTheEventLog: each thing brought, each taken off and by
+// whom, what the event wants, and the reminder a day before, on the
+// organiser's log.
+func TestThePotluckIsInTheEventLog(t *testing.T) {
+	_, store, _, mux, token := webTestServer(t)
+	ev := publishedEvent(t, store, 0, "alice", "bob")
+	on := true
+	store.UpdateEvent(ev.ID, EventPatch{PotluckEnabled: &on})
+	postForm(t, mux, token, eventPath(ev)+"/potluck/needs", url.Values{"wanted_food": {"4"}})
+	if err := store.SayBringingNothing(ev.ID, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	item, err := store.AddPotluckItem(ev.ID, "alice", PotluckFood, "Tamales")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pie, _ := store.AddPotluckItem(ev.ID, "bob", PotluckFood, "Pie")
+	postForm(t, mux, token, eventPath(ev)+"/potluck/remove", url.Values{"item_id": {fmt.Sprint(pie.ID)}})
+	store.RecordPotluckReminder(ev.ID, "bob", PotluckReminderAutomatic, potluckReminderSent)
+	_ = item
+
+	page := getPage(t, mux, token, eventPath(ev)).Body.String()
+	for _, want := range []string{
+		"changed the potluck&#39;s food wanted:", "potluck: not bringing anything", "potluck: bringing 🍲 Tamales",
+		"potluck: bringing 🍲 Pie", "potluck: took off 🍲 Pie", "potluck: reminded by DM a day before, reaching 1 of 1",
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the log lacks %q", want)
+		}
+	}
+	// Alice's "nothing" ended when she added the tamales; that is one line,
+	// not a second "no longer" line.
+	if strings.Contains(page, "no longer “not bringing anything”") {
+		t.Error("the log has a line for a “nothing” the add itself replaced")
 	}
 }

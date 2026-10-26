@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -386,8 +387,9 @@ func (s *Store) RemovePotluckItem(eventID, itemID int64, actor string) error {
 }
 
 // SetPotluckNeeds replaces how many of each category an event wants. A
-// category at 0 has no number.
-func (s *Store) SetPotluckNeeds(eventID int64, needs map[string]int) error {
+// category at 0 has no number. Each category that changes is logged in
+// event_updates as potluck_wanted_<category>, under actor.
+func (s *Store) SetPotluckNeeds(eventID int64, needs map[string]int, actor string) error {
 	for category, wanted := range needs {
 		if _, ok := potluckCategoryOf(category); !ok {
 			return fmt.Errorf("%w: category %q is not one of food, drinks, supplies, other", ErrInvalidPotluck, category)
@@ -395,6 +397,10 @@ func (s *Store) SetPotluckNeeds(eventID int64, needs map[string]int) error {
 		if wanted < 0 || wanted > potluckWantedLimit {
 			return fmt.Errorf("%w: %s wanted must be 0 to %d", ErrInvalidPotluck, category, potluckWantedLimit)
 		}
+	}
+	before, err := s.PotluckSheetOf(eventID)
+	if err != nil {
+		return err
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -404,17 +410,28 @@ func (s *Store) SetPotluckNeeds(eventID int64, needs map[string]int) error {
 	if _, err := tx.Exec(`DELETE FROM potluck_needs WHERE event_id = ?`, eventID); err != nil {
 		return fmt.Errorf("clear potluck needs: %w", err)
 	}
-	for category, wanted := range needs {
-		if wanted == 0 {
-			continue
+	ts := now()
+	for _, c := range potluckCategories {
+		wanted := needs[c.Key]
+		if wanted != 0 {
+			if _, err := tx.Exec(`INSERT INTO potluck_needs (event_id, category, wanted) VALUES (?,?,?)`,
+				eventID, c.Key, wanted); err != nil {
+				return fmt.Errorf("save potluck need: %w", err)
+			}
 		}
-		if _, err := tx.Exec(`INSERT INTO potluck_needs (event_id, category, wanted) VALUES (?,?,?)`,
-			eventID, category, wanted); err != nil {
-			return fmt.Errorf("save potluck need: %w", err)
+		if was := before.Needs[c.Key]; was != wanted {
+			if _, err := tx.Exec(`INSERT INTO event_updates (event_id, field, from_value, to_value, actor, at)
+				VALUES (?,?,?,?,?,?)`, eventID, potluckWantedField+c.Key, strconv.Itoa(was), strconv.Itoa(wanted), actor, ts); err != nil {
+				return fmt.Errorf("log potluck need: %w", err)
+			}
 		}
 	}
 	return tx.Commit()
 }
+
+// potluckWantedField prefixes the event_updates field for a change to how
+// many of a category an event wants.
+const potluckWantedField = "potluck_wanted_"
 
 // clearPotluckForNextDateTx starts a repeating event's next date with an
 // empty sheet and nobody reminded. The needs stay.
@@ -540,4 +557,42 @@ func potluckDescriptionSection(sheet *PotluckSheet, roster []Signup, budget int)
 		}
 	}
 	return head
+}
+
+// PotluckHistoryRow is one row of an event's sheet as it was ever written:
+// on it now or taken off, for anyone, going or not. For the event's log.
+type PotluckHistoryRow struct {
+	PotluckItem
+	Source    string
+	RemovedAt int64
+	RemovedBy string
+	// DisplayName and ReadableName are display only, from the roster and
+	// readable_names, joined on the Discord user id.
+	DisplayName  string
+	ReadableName string
+}
+
+// PotluckHistory is every row an event's sheet has had, oldest first.
+func (s *Store) PotluckHistory(eventID int64) ([]PotluckHistoryRow, error) {
+	rows, err := s.db.Query(`
+		SELECT p.id, p.event_id, p.discord_user_id, p.category, p.item, p.added_at, p.source, p.removed_at, p.removed_by,
+		       COALESCE(s.display_name, ''), COALESCE(r.readable_name, '')
+		FROM potluck_items p
+		LEFT JOIN signups s ON s.event_id = p.event_id AND s.discord_user_id = p.discord_user_id
+		LEFT JOIN readable_names r ON r.discord_user_id = p.discord_user_id
+		WHERE p.event_id = ? ORDER BY p.added_at, p.id`, eventID)
+	if err != nil {
+		return nil, fmt.Errorf("read potluck history: %w", err)
+	}
+	defer rows.Close()
+	var out []PotluckHistoryRow
+	for rows.Next() {
+		var h PotluckHistoryRow
+		if err := rows.Scan(&h.ID, &h.EventID, &h.DiscordUserID, &h.Category, &h.Item, &h.AddedAt, &h.Source,
+			&h.RemovedAt, &h.RemovedBy, &h.DisplayName, &h.ReadableName); err != nil {
+			return nil, fmt.Errorf("scan potluck history: %w", err)
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
 }

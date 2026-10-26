@@ -455,7 +455,7 @@ See `potluck.go`. Only rows of people going are shown or counted, so someone who
 |---|---|---|
 | `event_id` | INTEGER | → `events(id)` ON DELETE CASCADE. |
 | `category` | TEXT | `food`, `drinks`, `supplies` or `other`. |
-| `wanted` | INTEGER | 1–99. A category with no row has no number. Kept when a repeating event moves to its next date. |
+| `wanted` | INTEGER | 1–99. A category with no row has no number. Kept when a repeating event moves to its next date. Each change is logged in `event_updates` as `potluck_wanted_<category>`, 0 meaning no number. |
 
 ### `potluck_items` — what people going said they will bring
 

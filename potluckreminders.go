@@ -392,3 +392,23 @@ func (s *Server) nudgeInForum(ev *Event, session *WebSession, roster, people []S
 	}
 	return fmt.Sprintf("Posted in the forum thread, with who is bringing what, pinging the %d who have not said.", len(people))
 }
+
+// PotluckReminderHistory is every reminder an event's sheet has sent, every
+// date included, oldest first. For the event's log.
+func (s *Store) PotluckReminderHistory(eventID int64) ([]PotluckReminder, error) {
+	rows, err := s.db.Query(`SELECT discord_user_id, kind, outcome, sent_at FROM potluck_reminders
+		WHERE event_id = ? ORDER BY sent_at, id`, eventID)
+	if err != nil {
+		return nil, fmt.Errorf("read potluck reminder history: %w", err)
+	}
+	defer rows.Close()
+	var out []PotluckReminder
+	for rows.Next() {
+		var r PotluckReminder
+		if err := rows.Scan(&r.DiscordUserID, &r.Kind, &r.Outcome, &r.SentAt); err != nil {
+			return nil, fmt.Errorf("scan potluck reminder: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
