@@ -99,6 +99,9 @@ func renderSignupMessage(ev *Event, roster []Signup) map[string]any {
 		b.WriteString("\n**Waitlist**\n")
 		writeMentions(&b, waiting)
 	}
+	if ev.Potluck != nil {
+		writePotluckSection(&b, ev.Potluck, potluckTakesAnswers(ev))
+	}
 
 	content := b.String()
 	if len(content) > discordMessageContentLimit {
@@ -113,7 +116,12 @@ func renderSignupMessage(ev *Event, roster []Signup) map[string]any {
 		"allowed_mentions": map[string]any{"parse": []string{}},
 	}
 	if ev.Status == StatusOpen {
-		payload["components"] = signupComponents(ev.ID)
+		payload["components"] = signupComponents(ev)
+	} else if potluckTakesAnswers(ev) {
+		// Signups closed, but the people going can still say what they
+		// will bring.
+		payload["components"] = []any{map[string]any{"type": componentTypeActionRow,
+			"components": []any{potluckButton(ev.ID)}}}
 	} else {
 		// An empty array, not a missing key. Omitting components on an edit
 		// leaves the old buttons in place, so a closed event would keep a live
@@ -123,35 +131,35 @@ func renderSignupMessage(ev *Event, roster []Signup) map[string]any {
 	return payload
 }
 
-func signupComponents(eventID int64) []any {
-	return []any{
+func signupComponents(ev *Event) []any {
+	eventID := ev.ID
+	buttons := []any{
 		map[string]any{
-			"type": componentTypeActionRow,
-			"components": []any{
-				map[string]any{
-					"type":      componentTypeButton,
-					"style":     buttonStylePrimary,
-					"label":     "Join",
-					"custom_id": JoinCustomID(eventID),
-				},
-				map[string]any{
-					"type":      componentTypeButton,
-					"style":     buttonStyleSecondary,
-					"label":     "Leave",
-					"custom_id": LeaveCustomID(eventID),
-				},
-				// Shown to everyone, because Discord cannot hide a component
-				// from some readers. The click checks Manage Events and answers
-				// privately, so an unauthorised press costs one ephemeral no.
-				map[string]any{
-					"type":      componentTypeButton,
-					"style":     buttonStyleSecondary,
-					"label":     "Edit",
-					"custom_id": EditCustomID(eventID),
-				},
-			},
+			"type":      componentTypeButton,
+			"style":     buttonStylePrimary,
+			"label":     "Join",
+			"custom_id": JoinCustomID(eventID),
+		},
+		map[string]any{
+			"type":      componentTypeButton,
+			"style":     buttonStyleSecondary,
+			"label":     "Leave",
+			"custom_id": LeaveCustomID(eventID),
+		},
+		// Shown to everyone, because Discord cannot hide a component
+		// from some readers. The click checks Manage Events and answers
+		// privately, so an unauthorised press costs one ephemeral no.
+		map[string]any{
+			"type":      componentTypeButton,
+			"style":     buttonStyleSecondary,
+			"label":     "Edit",
+			"custom_id": EditCustomID(eventID),
 		},
 	}
+	if ev.PotluckEnabled {
+		buttons = append(buttons, potluckButton(eventID))
+	}
+	return []any{map[string]any{"type": componentTypeActionRow, "components": buttons}}
 }
 
 func splitRoster(roster []Signup) (attending, waiting []Signup) {

@@ -102,6 +102,8 @@ type pageData struct {
 	EventFull bool
 	// EventPicture is the event page's picture of who is going.
 	EventPicture *eventPicturePanel
+	// Potluck is the event page's potluck sheet; nil when it has none.
+	Potluck *potluckPage
 	// ViewerHasAvatar is whether the signed-in viewer has an approved avatar,
 	// for the header.
 	ViewerHasAvatar bool

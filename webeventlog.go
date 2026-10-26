@@ -158,6 +158,7 @@ var eventUpdateFieldWords = map[string]string{
 	"waitlist_role_id":  "waitlist role",
 	"waitlist_disabled": "waitlist",
 	"pictures_disabled": "picture",
+	"potluck_enabled":   "potluck sheet",
 	"created_by":        "host",
 }
 
@@ -181,6 +182,11 @@ func (n eventLogNames) eventUpdateValue(field, value string) template.HTML {
 			return "off"
 		}
 		return "on"
+	case "potluck_enabled":
+		if value == "true" {
+			return "on"
+		}
+		return "off"
 	case "recurrence_rule":
 		return template.HTML(template.HTMLEscapeString(describeRepeat(value)))
 	case "attending_role_id", "waitlist_role_id":

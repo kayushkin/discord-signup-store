@@ -41,6 +41,7 @@ var loggedEventFields = []struct {
 	{"waitlist_role_id", func(e *Event) string { return e.WaitlistRoleID }},
 	{"waitlist_disabled", func(e *Event) string { return strconv.FormatBool(e.WaitlistDisabled) }},
 	{"pictures_disabled", func(e *Event) string { return strconv.FormatBool(e.PicturesDisabled) }},
+	{"potluck_enabled", func(e *Event) string { return strconv.FormatBool(e.PotluckEnabled) }},
 	// Who counts as the creator decides who may edit, so handing it over is
 	// worth a line.
 	{"created_by", func(e *Event) string { return e.CreatedBy }},

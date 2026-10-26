@@ -283,6 +283,63 @@
   </section>
 
   {{if $canManage}}
+  {{with .Potluck}}
+  <section class="card" id="potluck">
+    <div class="card-head"><h3>🍲 Potluck</h3><span class="muted small">everyone sees this on the event's card</span></div>
+    <p>{{.Summary}}</p>
+    {{if .StillNeeded}}<p><strong>{{.StillNeeded}}</strong></p>{{end}}
+    {{range .Categories}}
+    <div class="card-head sub-head"><h3>{{.Emoji}} {{.Label}}</h3><span class="badge">{{.Have}}{{if .Wanted}} / {{.Wanted}}{{end}}</span></div>
+    {{if not .Items}}<p class="empty">Nothing yet.</p>{{end}}
+    <ol class="people">
+      {{range .Items}}
+      <li class="person">
+        <span class="who">{{avatar $.AvatarUserIDs .Person.DiscordUserID}}{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}</span>
+        <span>{{.Item}}</span>
+        <span class="row-actions">
+          <form method="post" action="/events/{{$ev.ID}}/potluck/remove" data-async data-confirm="Take “{{.Item}}” off the sheet?">
+            <input type="hidden" name="item_id" value="{{.ID}}">
+            <button class="btn-sm danger" aria-label="Remove" title="Remove"><span class="btn-text">Remove</span></button></form>
+        </span>
+      </li>
+      {{end}}
+    </ol>
+    {{end}}
+    {{if .Nothing}}
+    <p class="muted">Not bringing anything:
+      {{range $i, $p := .Nothing}}{{if $i}}, {{end}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}</p>
+    {{end}}
+
+    <div class="card-head sub-head"><h3>Haven't answered</h3><span class="badge">{{len .Unanswered}}</span><span class="muted small">only organisers see this</span></div>
+    {{if not .Unanswered}}<p class="empty">Everyone going has answered.</p>{{end}}
+    <ol class="people">
+      {{range .Unanswered}}
+      <li class="person">
+        <span class="who">{{avatar $.AvatarUserIDs .Person.DiscordUserID}}{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}</span>
+        <span class="when">{{if .LastFailed}}{{.LastFailed}}{{else if .LastAsked}}asked {{shortTime .LastAsked}}{{else}}not asked yet{{end}}</span>
+      </li>
+      {{end}}
+    </ol>
+    {{if and .Unanswered .TakesAnswers}}
+    <form method="post" action="/events/{{$ev.ID}}/potluck/nudge" data-async
+          data-confirm="DM the {{len .Unanswered}} going who haven't said what they're bringing? It counts as one of the event's {{$.MessageLimit}} DMs per {{$.MessageWindowMinutes}} minutes.">
+      <button {{if not $.MessagesLeft}}disabled{{end}}>Nudge them by DM</button>
+      {{if not $.MessagesLeft}}<span class="hint">DMs again at {{shortTime $.MessagesNextAt}}</span>{{end}}
+    </form>
+    {{end}}
+    <p class="hint">Anyone going who hasn't answered gets a DM by itself a day before.</p>
+
+    <div class="card-head sub-head"><h3>What it needs</h3></div>
+    <form method="post" action="/events/{{$ev.ID}}/potluck/needs" data-async class="potluck-needs">
+      {{range .Categories}}
+      <label>{{.Emoji}} {{.Label}} <input type="number" name="wanted_{{.Key}}" min="0" max="99" value="{{if .Wanted}}{{.Wanted}}{{end}}" placeholder="any" style="width:5em"></label>
+      {{end}}
+      <button>Save</button>
+    </form>
+    <p class="hint">How many of each you want. Leave one empty to ask for no number; the card then lists what people bring without saying what is missing.</p>
+  </section>
+  {{end}}
+
   <section class="card" id="add">
     <h3>Add someone</h3>
     {{/* Two steps. First pick a person: the box searches the server's members
@@ -500,6 +557,19 @@
           <button role="radio" data-tone="warn" aria-checked="{{$ev.PicturesDisabled}}" {{if $ev.PicturesDisabled}}tabindex="-1"{{end}}>Off</button></form>
       </div>
       <p class="hint">{{if $ev.PicturesDisabled}}Off: the picture is kept, not shown.{{else}}A drawn scene with everyone going who has an avatar.{{end}}</p>
+    </div>
+    <div class="control">
+      <h4 id="potluck-label">Potluck sheet</h4>
+      <div class="seg-control" role="radiogroup" aria-labelledby="potluck-label">
+        <form method="post" action="/events/{{$ev.ID}}" data-async>
+          <input type="hidden" name="potluck" value="on">
+          <button role="radio" data-tone="ok" aria-checked="{{$ev.PotluckEnabled}}" {{if $ev.PotluckEnabled}}tabindex="-1"{{end}}>On</button></form>
+        <form method="post" action="/events/{{$ev.ID}}" data-async
+              data-confirm="Take the potluck sheet off the event? What people said is kept, and comes back if you turn it on again.">
+          <input type="hidden" name="potluck" value="off">
+          <button role="radio" aria-checked="{{not $ev.PotluckEnabled}}" {{if not $ev.PotluckEnabled}}tabindex="-1"{{end}}>Off</button></form>
+      </div>
+      <p class="hint">{{if $ev.PotluckEnabled}}People going say what they're bringing from the event's card.{{else}}A sheet of who is bringing what.{{end}}</p>
     </div>
     {{$watch := .RosterWatch}}
     <div class="control">

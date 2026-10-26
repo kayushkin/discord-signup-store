@@ -262,6 +262,11 @@ func (s *Server) handleComponent(w http.ResponseWriter, in *Interaction) {
 		}
 	}
 
+	if isPotluckAction(action) {
+		s.handlePotluckComponent(w, in, action, eventID, userID)
+		return
+	}
+
 	switch action {
 	case "join":
 		s.handleJoin(w, in, eventID, userID, displayName)
@@ -618,6 +623,10 @@ func (s *Server) handleModalSubmit(w http.ResponseWriter, in *Interaction) {
 	action, eventID, ok := parseCustomID(in.Data.CustomID)
 	if !ok {
 		s.replyEphemeral(w, "That form is not one of mine.")
+		return
+	}
+	if strings.HasPrefix(action, potluckModalPrefix) {
+		s.handlePotluckModal(w, in, action, eventID)
 		return
 	}
 	form := EventForm{

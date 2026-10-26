@@ -277,6 +277,8 @@ Each server's own mascot; a server with no row shows the site's own, Maleeha, bu
 
 `events.pictures_disabled` (INTEGER, 0): no picture of who is going shown or painted for this event; its scene and pictures are kept, inactive, and come back when pictures are switched on again. Logged in `event_updates` as `picture`.
 
+`events.potluck_enabled` (INTEGER, 0): the event has a potluck sheet. Turning it off hides the sheet and keeps every row, for when it is turned on again. Logged in `event_updates` as `potluck sheet`.
+
 ### `event_scenes` — the scene an event's picture is set in, new 2026-09-28
 
 `event_id` PK; `request_kind` (`change`, `new`, `''`), `request_comment`, `requested_at`, `requested_by`: an organiser asking for the scene again, cleared by the scene or failure that answers it; `details_signature`, the name, description, place, weekday and time, repeat rule and stages (from the limit) it was written from, and the scene format (`eventDetailsSignature`, `eventSceneFormat`: a new format asks every event for a new scene); `scene_code`, the scene in `art/SCENE.md`'s form, casting each person as a posed character; `failure`, `failed_details_signature` and `failed_at`, the last scene that did not come out and from which details, tried again an hour later; `updated_at`. A model writes it; a change to the details asks for a new one, a change to who is going does not.
@@ -442,6 +444,42 @@ enabled rule's emoji. The outcome goes on the row: a reaction made counts up, a
 refusal from Discord (most likely a missing Add Reactions permission in that
 channel) is kept in `last_error`, because nobody else would see it. The rules
 are set on dash's Messages pages.
+
+## The potluck sheet, new 2026-10-26
+
+See `potluck.go`. Only rows of people going are shown or counted, so someone who leaves drops off the sheet and comes back on it if they rejoin.
+
+### `potluck_needs` — how many of each category an event wants
+
+| column | type | description |
+|---|---|---|
+| `event_id` | INTEGER | → `events(id)` ON DELETE CASCADE. |
+| `category` | TEXT | `food`, `drinks`, `supplies` or `other`. |
+| `wanted` | INTEGER | 1–99. A category with no row has no number. Kept when a repeating event moves to its next date. |
+
+### `potluck_items` — what people going said they will bring
+
+| column | type | description |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `event_id` | INTEGER | → `events(id)` ON DELETE CASCADE. |
+| `discord_user_id` | TEXT | Who. |
+| `category` | TEXT | A category above, or `nothing` for "I am bringing nothing", which makes them count as answered. Adding an item ends their `nothing` row, and `nothing` ends their items. |
+| `item` | TEXT | What they typed, at most 100 characters; `''` for `nothing`. |
+| `added_at` | INTEGER | When. |
+| `removed_at` / `removed_by` | INTEGER / TEXT | Never deleted: taken off by `user`, an organiser (`web:<id>`), or the date rolling over (`recurrence`). 0 is on the sheet. |
+
+### `potluck_reminders` — DMs asking someone what they will bring
+
+| column | type | description |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `event_id` | INTEGER | → `events(id)` ON DELETE CASCADE. |
+| `discord_user_id` | TEXT | Who. |
+| `kind` | TEXT | `automatic` (a day before, once per date) or `nudge` (an organiser's press). |
+| `outcome` | TEXT | `sent`, `dms-closed` or `failed`. |
+| `sent_at` | INTEGER | When. |
+| `cleared_at` | INTEGER | Set when the date rolls over; 0 is the current date. |
 
 ## `event_table_rows` — **dropped 2026-09-02**
 

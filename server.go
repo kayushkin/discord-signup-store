@@ -230,6 +230,9 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/regulars", s.handleWebRegular)
 	mux.HandleFunc("POST /events/{id}/roster-notices", s.handleWebRosterNotices)
 	mux.HandleFunc("POST /events/{id}/message", s.handleWebMessage)
+	mux.HandleFunc("POST /events/{id}/potluck/needs", s.handleWebPotluckNeeds)
+	mux.HandleFunc("POST /events/{id}/potluck/remove", s.handleWebPotluckRemove)
+	mux.HandleFunc("POST /events/{id}/potluck/nudge", s.handleWebPotluckNudge)
 	mux.HandleFunc("POST /events/{id}/signups", s.handleWebToggleSignups)
 	mux.HandleFunc("POST /events/{id}/cancel", s.handleWebCancelEvent)
 	mux.HandleFunc("GET /events/{id}/members", s.handleWebMemberSearch)
@@ -457,7 +460,12 @@ func (s *Server) handleSendReminders(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sent": sent})
+	potluckSent, err := s.SendDuePotluckReminders()
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sent": sent, "potluck_sent": potluckSent})
 }
 
 // handleSendRosterNotices DMs each watching organiser the joins and leaves

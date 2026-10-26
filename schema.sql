@@ -686,3 +686,48 @@ CREATE TABLE IF NOT EXISTS auto_reactions (
     UNIQUE (guild_id, discord_user_id, emoji)
 );
 CREATE INDEX IF NOT EXISTS auto_reactions_by_author ON auto_reactions (guild_id, discord_user_id) WHERE enabled = 1;
+
+-- The potluck sheet: who is bringing what, on an event an organiser switched
+-- it on for (events.potluck_enabled). See potluck.go.
+--
+-- potluck_needs is the organiser's list of how many of each category the
+-- event wants. It belongs to the event, not the date, so a repeating event
+-- keeps it from one date to the next.
+CREATE TABLE IF NOT EXISTS potluck_needs (
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,                      -- see potluckCategories
+    wanted   INTEGER NOT NULL,
+    PRIMARY KEY (event_id, category)
+);
+
+-- potluck_items: one row per thing a person said they will bring, or one
+-- 'nothing' row for someone who said they are bringing nothing. A row is
+-- never deleted: removing it, or the date rolling over, stamps removed_at.
+-- Only rows of people going are shown or counted, so someone who leaves
+-- drops off the sheet and comes back on it if they rejoin.
+CREATE TABLE IF NOT EXISTS potluck_items (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    category        TEXT NOT NULL,               -- a potluckCategories key, or 'nothing'
+    item            TEXT NOT NULL DEFAULT '',    -- what they typed; '' for 'nothing'
+    added_at        INTEGER NOT NULL,
+    removed_at      INTEGER NOT NULL DEFAULT 0,  -- 0 = on the sheet
+    removed_by      TEXT NOT NULL DEFAULT ''     -- 'user', 'web:<id>', or 'recurrence'
+);
+CREATE INDEX IF NOT EXISTS idx_potluck_items_event ON potluck_items(event_id, removed_at);
+
+-- potluck_reminders: each DM asking someone going what they are bringing,
+-- sent by the 24-hour reminder ('automatic') or an organiser's nudge
+-- ('nudge'). The automatic one goes once per person per date: the date
+-- rolling over stamps cleared_at, and an uncleared row means they have had it.
+CREATE TABLE IF NOT EXISTS potluck_reminders (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    kind            TEXT NOT NULL,               -- 'automatic' | 'nudge'
+    outcome         TEXT NOT NULL,               -- 'sent' | 'dms-closed' | 'failed'
+    sent_at         INTEGER NOT NULL,
+    cleared_at      INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_potluck_reminders_event ON potluck_reminders(event_id, cleared_at);

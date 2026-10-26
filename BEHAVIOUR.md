@@ -139,6 +139,20 @@ Rules that hold for all eight:
   each person. The line then follows their order, not arrival; anyone joining
   afterwards waits behind all of them. Moving someone does not message them.
 
+**The potluck sheet** is an organiser's switch on the event page. With it
+on, the card carries the sheet — counts per category (food, drinks,
+supplies, other) against what the organiser asked for, what is still
+needed, and who is bringing what — and a **What I'm bringing** button,
+which stays when signups close. Only people going can answer: an item in a
+category, or "not bringing anything". The waitlist and Maybe are never
+asked. Someone who leaves drops off the sheet; what they said comes back if
+they rejoin. A day before, everyone going who has not answered gets one DM
+asking, once per date, unless they got their place in the last 30 minutes.
+The organiser's page lists who has not answered, which nobody else sees, and
+a **Nudge** button that DMs them all and counts against the DM limit above.
+A repeating event's next date starts with an empty sheet; what it needs
+carries over.
+
 ## 3. What updates, when
 
 Two kinds of surface, and the difference is the whole reason anything can ever

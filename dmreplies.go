@@ -33,6 +33,7 @@ const (
 	DMKindInvite   = "invite"   // an invite
 	DMKindPlaced   = "placed"   // an organiser put them on a list
 	DMKindPromoted = "promoted" // they were given a place
+	DMKindPotluck  = "potluck"  // asked what they are bringing
 )
 
 // How a reply was put with its event.
