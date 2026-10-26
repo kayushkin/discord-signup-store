@@ -63,7 +63,13 @@ func TestAFinishedOccurrenceRollsTheEventForward(t *testing.T) {
 	if after.Status != StatusOpen {
 		t.Errorf("status = %q, want open", after.Status)
 	}
-	if want := ev.StartsAt + 7*86400; after.StartsAt != want {
+	// A week on keeps the wall-clock start in the event's zone, so across a
+	// daylight-saving change it is 167 or 169 hours, not 168.
+	zone, err := time.LoadLocation(ev.Timezone)
+	if err != nil {
+		t.Fatalf("load zone %q: %v", ev.Timezone, err)
+	}
+	if want := time.Unix(ev.StartsAt, 0).In(zone).AddDate(0, 0, 7).Unix(); after.StartsAt != want {
 		t.Errorf("starts_at = %d, want %d (a week on)", after.StartsAt, want)
 	}
 	if want := after.StartsAt + 2*3600; after.EndsAt != want {
