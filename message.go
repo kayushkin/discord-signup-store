@@ -100,7 +100,15 @@ func renderSignupMessage(ev *Event, roster []Signup) map[string]any {
 		writeMentions(&b, waiting)
 	}
 	if ev.Potluck != nil {
-		writePotluckSection(&b, ev.Potluck, potluckTakesAnswers(ev))
+		// The whole list if it fits; otherwise the counts, so the trim
+		// below never cuts the sheet off part way through an item.
+		var full strings.Builder
+		writePotluckSection(&full, ev.Potluck, potluckTakesAnswers(ev), true)
+		if b.Len()+full.Len() <= discordMessageContentLimit {
+			b.WriteString(full.String())
+		} else {
+			writePotluckSection(&b, ev.Potluck, potluckTakesAnswers(ev), false)
+		}
 	}
 
 	content := b.String()

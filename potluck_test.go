@@ -386,3 +386,31 @@ func TestTheOrganiserTurnsThePotluckOnAndNudges(t *testing.T) {
 		t.Fatalf("messages = %+v, want the nudge recorded as one DM message to two", messages)
 	}
 }
+
+// TestABigRosterKeepsThePotluckSummaryWhole: with forty people going the
+// card has no room for every item, so it shows the counts and points at the
+// button rather than cutting the list off mid-item.
+func TestABigRosterKeepsThePotluckSummaryWhole(t *testing.T) {
+	store := testStore(t)
+	var people []string
+	for i := 0; i < 40; i++ {
+		people = append(people, fmt.Sprintf("1%017d", i))
+	}
+	ev := potluckEvent(t, store, people...)
+	for _, who := range people[:12] {
+		if _, err := store.AddPotluckItem(ev.ID, who, PotluckDrinks, strings.Repeat("Spooky punch ", 6)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ev = mustEvent(t, store, ev.ID)
+	roster, _ := store.Roster(ev.ID, false)
+	content := renderSignupMessage(ev, roster)["content"].(string)
+	if strings.Contains(content, "trimmed") {
+		t.Fatalf("card was trimmed:\n%s", content)
+	}
+	for _, want := range []string{"🥤 Drinks 12", "to see who is bringing what"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("card lacks %q:\n%s", want, content)
+		}
+	}
+}

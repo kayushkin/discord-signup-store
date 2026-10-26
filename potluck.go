@@ -431,8 +431,10 @@ func clearPotluckForNextDateTx(tx *sql.Tx, eventID, ts int64) error {
 }
 
 // writePotluckSection adds the sheet to an event's card: the counts, what is
-// still needed, and who is bringing what, by category.
-func writePotluckSection(b *strings.Builder, sheet *PotluckSheet, open bool) {
+// still needed, and who is bringing what, by category. Without withItems it
+// leaves out who is bringing what and says the button shows it: a big
+// event's roster can leave no room on the card for the list.
+func writePotluckSection(b *strings.Builder, sheet *PotluckSheet, open, withItems bool) {
 	b.WriteString("\n**🍲 Potluck**")
 	if open {
 		b.WriteString(" — press **What I'm bringing** to add yours")
@@ -442,6 +444,12 @@ func writePotluckSection(b *strings.Builder, sheet *PotluckSheet, open bool) {
 	b.WriteString("\n")
 	if line := sheet.StillNeededLine(); line != "" {
 		b.WriteString(line + "\n")
+	}
+	if !withItems {
+		if len(sheet.Items) > 0 {
+			b.WriteString("Press **What I'm bringing** to see who is bringing what.\n")
+		}
+		return
 	}
 	for _, c := range sheet.Counts() {
 		if len(c.Items) == 0 {
