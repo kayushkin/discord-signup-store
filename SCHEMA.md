@@ -481,6 +481,10 @@ See `potluck.go`. Only rows of people going are shown or counted, so someone who
 | `sent_at` | INTEGER | When. |
 | `cleared_at` | INTEGER | Set when the date rolls over; 0 is the current date. |
 
+### `potluck_requests` — things an organiser asked for, new 2026-10-26
+
+`id`, `event_id`, `category`, `item`, `wanted` (how many people, 1–99), `created_at`/`created_by`, `removed_at`/`removed_by`. Never deleted; at most 25 live. Someone going takes one by bringing it: their `potluck_items` row carries `request_id` (0 for an item nobody asked for), and only items of people going count toward `wanted`. Removing a request leaves those items as they are.
+
 ### `sheet_roles` and `sheet_role_signups` — roles on the potluck sheet, new 2026-10-26
 
 Roles people going take themselves — setup, teardown, coming for part of the event — not Discord roles (`sheetroles.go`). `sheet_roles`: `id`, `event_id`, `name`, `capacity` (0 for no cap), `created_at`/`created_by`, `removed_at`/`removed_by` (0 while on the sheet). At most 5 live per event. `sheet_role_signups`: `role_id`, `event_id`, `discord_user_id`, `source` (`''` or `sheet`), `joined_at`, `left_at`/`left_by` (`user`, `web:<id>`, `sheet-import`, `recurrence`). Neither is ever deleted; only rows of people going count, and a new date of a repeating event clears the signups and keeps the roles.

@@ -25,8 +25,12 @@ type potluckPage struct {
 	// Roles are the sheet's roles with who is in each, and whether the
 	// viewer is.
 	Roles []sheetRolePage
-	// ViewerGoing is whether the viewer may take a role.
+	// ViewerGoing is whether the viewer may take a role or a request.
 	ViewerGoing bool
+	// Requests are what an organiser asked for, with who is bringing each.
+	Requests []potluckRequestPage
+	// Categories for the request form.
+	AllCategories []potluckCategory
 }
 
 type potluckPageCategory struct {
@@ -62,7 +66,8 @@ func (s *Server) potluckPageOf(ev *Event, going []Signup, viewerID string, forOr
 		people[sg.DiscordUserID] = sg
 	}
 	page := &potluckPage{Summary: sheet.SummaryLine(), StillNeeded: sheet.StillNeededLine(),
-		TakesAnswers: potluckTakesAnswers(ev), Roles: sheetRolePages(sheet, going, viewerID)}
+		TakesAnswers: potluckTakesAnswers(ev), Roles: sheetRolePages(sheet, going, viewerID),
+		Requests: potluckRequestPages(sheet, going, viewerID), AllCategories: potluckCategories}
 	for _, sg := range going {
 		if sg.DiscordUserID == viewerID {
 			page.ViewerGoing = true

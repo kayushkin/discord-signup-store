@@ -158,6 +158,11 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		log.Printf("[discord-signup] potluck reminder history %d: %v", ev.ID, err)
 		problems = append(problems, "Could not read the potluck reminders: "+err.Error())
 	}
+	requestHistory, err := s.store.PotluckRequestHistory(ev.ID)
+	if err != nil {
+		log.Printf("[discord-signup] potluck request history %d: %v", ev.ID, err)
+		problems = append(problems, "Could not read the potluck requests: "+err.Error())
+	}
 	roleHistory, err := s.store.SheetRoleHistory(ev.ID)
 	if err != nil {
 		log.Printf("[discord-signup] sheet role history %d: %v", ev.ID, err)
@@ -199,6 +204,9 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	for _, h := range roleHistory {
 		actors = append(actors, h.By, h.RemovedBy)
 	}
+	for _, h := range requestHistory {
+		actors = append(actors, h.CreatedBy, h.RemovedBy)
+	}
 	avatars, avatarsErr := s.store.ChosenAvatarUserIDs()
 	if avatarsErr != nil {
 		log.Printf("[discord-signup] chosen avatars: %v", avatarsErr)
@@ -225,7 +233,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	data := pageData{
 		Title: ev.Name, Session: session, Event: ev, Roster: roster, Invites: invites,
 		EventLog: buildEventLog(signupUpdates, edits, invites, regulars, messages,
-			potluckLog{rows: potluckRows, reminders: potluckReminders, roles: roleHistory}, names),
+			potluckLog{rows: potluckRows, reminders: potluckReminders, roles: roleHistory, requests: requestHistory}, names),
 		CanManage:         canManage,
 		EventUnderway:     eventIsUnderway(ev),
 		EventFull:         eventIsFull(ev),

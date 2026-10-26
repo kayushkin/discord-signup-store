@@ -90,6 +90,8 @@ type PotluckItem struct {
 	Category      string `json:"category"`
 	Item          string `json:"item"`
 	AddedAt       int64  `json:"added_at"`
+	// RequestID is the organiser's request this answers, 0 for none.
+	RequestID int64 `json:"request_id"`
 }
 
 // PotluckSheet is an event's sheet as it stands. Read from the rows each
@@ -105,6 +107,9 @@ type PotluckSheet struct {
 	BringingNothing []string `json:"bringing_nothing"`
 	// Roles are the sheet's roles, with who is in each. See sheetroles.go.
 	Roles []SheetRole `json:"roles"`
+	// Requests are the things an organiser asked for, with who is
+	// bringing each. See potluckrequests.go.
+	Requests []PotluckRequest `json:"requests"`
 }
 
 // Answered says whether this person has said anything: an item, or nothing.
@@ -222,7 +227,7 @@ func (s *Store) PotluckSheetOf(eventID int64) (*PotluckSheet, error) {
 	}
 
 	rows, err = s.db.Query(`
-		SELECT p.id, p.event_id, p.discord_user_id, p.category, p.item, p.added_at
+		SELECT p.id, p.event_id, p.discord_user_id, p.category, p.item, p.added_at, p.request_id
 		FROM potluck_items p
 		JOIN signups s ON s.event_id = p.event_id AND s.discord_user_id = p.discord_user_id
 		WHERE p.event_id = ? AND p.removed_at = 0 AND s.state = ?
@@ -233,7 +238,7 @@ func (s *Store) PotluckSheetOf(eventID int64) (*PotluckSheet, error) {
 	defer rows.Close()
 	for rows.Next() {
 		var it PotluckItem
-		if err := rows.Scan(&it.ID, &it.EventID, &it.DiscordUserID, &it.Category, &it.Item, &it.AddedAt); err != nil {
+		if err := rows.Scan(&it.ID, &it.EventID, &it.DiscordUserID, &it.Category, &it.Item, &it.AddedAt, &it.RequestID); err != nil {
 			return nil, fmt.Errorf("scan potluck item: %w", err)
 		}
 		if it.Category == potluckNothing {
@@ -246,6 +251,9 @@ func (s *Store) PotluckSheetOf(eventID int64) (*PotluckSheet, error) {
 		return nil, err
 	}
 	if sheet.Roles, err = s.readSheetRoles(eventID); err != nil {
+		return nil, err
+	}
+	if sheet.Requests, err = s.readPotluckRequests(eventID, sheet.Items); err != nil {
 		return nil, err
 	}
 	return sheet, nil
@@ -293,6 +301,14 @@ func (s *Store) beginPotluckChange(eventID int64, userID string) (*sql.Tx, error
 // AddPotluckItem records one thing a person going will bring. It replaces
 // a "bringing nothing" answer.
 func (s *Store) AddPotluckItem(eventID int64, userID, category, item string) (*PotluckItem, error) {
+	return s.addPotluckItem(eventID, userID, category, item, 0)
+}
+
+// addPotluckItem adds an item, answering the organiser's request requestID
+// when it is not 0: then the request must be on the sheet, not yet taken by
+// as many as want it, and not already taken by this person — all checked in
+// the transaction that writes the row.
+func (s *Store) addPotluckItem(eventID int64, userID, category, item string, requestID int64) (*PotluckItem, error) {
 	if _, ok := potluckCategoryOf(category); !ok {
 		return nil, fmt.Errorf("%w: category %q is not one of food, drinks, supplies, other", ErrInvalidPotluck, category)
 	}
@@ -316,14 +332,19 @@ func (s *Store) AddPotluckItem(eventID int64, userID, category, item string) (*P
 	if count >= potluckItemsPerPerson {
 		return nil, fmt.Errorf("%w: you already have %d things on the sheet", ErrInvalidPotluck, count)
 	}
+	if requestID != 0 {
+		if err := checkRequestOpenTx(tx, eventID, requestID, userID); err != nil {
+			return nil, err
+		}
+	}
 	ts := now()
 	if _, err := tx.Exec(`UPDATE potluck_items SET removed_at = ?, removed_by = ?
 		WHERE event_id = ? AND discord_user_id = ? AND removed_at = 0 AND category = ?`,
 		ts, ActorUser, eventID, userID, potluckNothing); err != nil {
 		return nil, fmt.Errorf("clear bringing nothing: %w", err)
 	}
-	res, err := tx.Exec(`INSERT INTO potluck_items (event_id, discord_user_id, category, item, added_at)
-		VALUES (?,?,?,?,?)`, eventID, userID, category, item, ts)
+	res, err := tx.Exec(`INSERT INTO potluck_items (event_id, discord_user_id, category, item, added_at, request_id)
+		VALUES (?,?,?,?,?,?)`, eventID, userID, category, item, ts, requestID)
 	if err != nil {
 		return nil, fmt.Errorf("add potluck item: %w", err)
 	}
@@ -334,7 +355,8 @@ func (s *Store) AddPotluckItem(eventID int64, userID, category, item string) (*P
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}
-	return &PotluckItem{ID: id, EventID: eventID, DiscordUserID: userID, Category: category, Item: item, AddedAt: ts}, nil
+	return &PotluckItem{ID: id, EventID: eventID, DiscordUserID: userID, Category: category, Item: item, AddedAt: ts,
+		RequestID: requestID}, nil
 }
 
 // SayBringingNothing records that a person going is bringing nothing,
@@ -474,6 +496,9 @@ func writePotluckSection(b *strings.Builder, sheet *PotluckSheet, open, withItem
 	if line := sheet.StillNeededLine(); line != "" {
 		b.WriteString(line + "\n")
 	}
+	if line := sheet.AskedForLine(); line != "" {
+		b.WriteString(line + "\n")
+	}
 	if line := sheet.RolesLine(); line != "" {
 		b.WriteString(line + "\n")
 	}
@@ -553,6 +578,9 @@ func potluckDescriptionSection(sheet *PotluckSheet, roster []Signup, budget int)
 	}
 	head := "\nPotluck: " + sheet.SummaryLine()
 	if line := sheet.StillNeededLine(); line != "" {
+		head += "\n" + line
+	}
+	if line := sheet.AskedForLine(); line != "" {
 		head += "\n" + line
 	}
 	if line := sheet.RolesLine(); line != "" {

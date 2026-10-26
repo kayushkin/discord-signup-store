@@ -174,6 +174,9 @@ func (s *Server) sendPotluckReminder(ev *Event, userID, kind, opening string) bo
 	if line := ev.Potluck.StillNeededLine(); line != "" {
 		b.WriteString(line + "\n")
 	}
+	if line := ev.Potluck.AskedForLine(); line != "" {
+		b.WriteString(line + "\n")
+	}
 	b.WriteString("\nPress **What I'm bringing** to add yours, or to say you're not bringing anything.")
 	payload := map[string]any{
 		"content":          b.String(),
@@ -292,6 +295,9 @@ func potluckForumNudge(ev *Event, organiser string, roster, unanswered []Signup)
 	fmt.Fprintf(&head, "🍲 **Potluck check-in from %s** — <t:%d:R>\n", organiser, ev.StartsAt)
 	head.WriteString(sheet.SummaryLine() + "\n")
 	if line := sheet.StillNeededLine(); line != "" {
+		head.WriteString("**" + line + "**\n")
+	}
+	if line := sheet.AskedForLine(); line != "" {
 		head.WriteString("**" + line + "**\n")
 	}
 	names := map[string]string{}

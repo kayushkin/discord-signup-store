@@ -304,6 +304,28 @@
     </ul>
     </div>
     {{end}}
+    {{if .Requests}}
+    <div class="potluck-cat potluck-requests">
+      <h4>📌 Asked for</h4>
+      <ul class="potluck-items">
+        {{range .Requests}}
+        <li class="potluck-item">
+          <span class="what">{{.Emoji}} {{.Item}}{{if gt .Wanted 1}} <span class="muted">· {{len .Claims}} of {{.Wanted}}</span>{{end}}
+            {{if .People}}<span class="who">{{range $i, $p := .People}}{{if $i}},&nbsp;{{end}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}</span>{{end}}</span>
+          {{if and $.Potluck.TakesAnswers $.Potluck.ViewerGoing (not .Mine) .Open}}
+          <form method="post" action="/events/{{$ev.ID}}/potluck/requests/take" data-async>
+            <input type="hidden" name="request_id" value="{{.ID}}">
+            <button class="btn-sm">I'll bring this</button></form>
+          {{else if .Mine}}<span class="pill open">yours</span>
+          {{else if not .Open}}<span class="pill">taken</span>{{end}}
+          <form method="post" action="/events/{{$ev.ID}}/potluck/requests/remove" data-async data-confirm="Stop asking for {{.Item}}? What people said they'd bring for it stays.">
+            <input type="hidden" name="request_id" value="{{.ID}}">
+            <button class="btn-sm danger" aria-label="Stop asking for {{.Item}}" title="Stop asking">{{template "cross"}}</button></form>
+        </li>
+        {{end}}
+      </ul>
+    </div>
+    {{end}}
     {{if .Roles}}
     <div class="potluck-cat">
       <h4>🙋 Roles</h4>
@@ -357,6 +379,14 @@
 }
     <p class="hint">Anyone going who hasn't answered gets a DM by itself a day before.</p>
 
+    <div class="card-head sub-head"><h3>Ask for something</h3></div>
+    <p class="hint">Specific things you want brought. They're shown to everyone adding what they're bringing, and anyone going can take one.</p>
+    <form method="post" action="/events/{{$ev.ID}}/potluck/requests" data-async class="potluck-add">
+      <select name="category" aria-label="Category">{{range .AllCategories}}<option value="{{.Key}}">{{.Emoji}} {{.Label}}</option>{{end}}</select>
+      <input name="item" required maxlength="100" placeholder="Ice" aria-label="What you want">
+      <input name="wanted" type="number" min="1" max="99" value="1" aria-label="How many people" title="How many people" style="flex:0 0 5em">
+      <button>Ask</button>
+    </form>
     <div class="card-head sub-head"><h3>Roles</h3></div>
     <p class="hint">Things people going can sign up for themselves — setup, teardown, coming for part of it — each with its own button on the event's card. Up to 5; leave the cap empty for none.</p>
     <form method="post" action="/events/{{$ev.ID}}/potluck/roles" data-async class="potluck-add">

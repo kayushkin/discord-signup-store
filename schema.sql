@@ -785,3 +785,20 @@ CREATE TABLE IF NOT EXISTS sheet_role_signups (
 );
 CREATE INDEX IF NOT EXISTS idx_sheet_role_signups_role ON sheet_role_signups(role_id, left_at);
 CREATE INDEX IF NOT EXISTS idx_sheet_role_signups_event ON sheet_role_signups(event_id, left_at);
+
+-- potluck_requests: specific things an organiser asked for on the potluck
+-- sheet, each in a category and wanted by how many people. Someone going
+-- takes one by bringing it: their potluck_items row carries the request's
+-- id. Never deleted; a removed request is stamped. See potluckrequests.go.
+CREATE TABLE IF NOT EXISTS potluck_requests (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id    INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    category    TEXT NOT NULL,
+    item        TEXT NOT NULL,
+    wanted      INTEGER NOT NULL DEFAULT 1,
+    created_at  INTEGER NOT NULL,
+    created_by  TEXT NOT NULL DEFAULT '',
+    removed_at  INTEGER NOT NULL DEFAULT 0,
+    removed_by  TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_potluck_requests_event ON potluck_requests(event_id, removed_at);

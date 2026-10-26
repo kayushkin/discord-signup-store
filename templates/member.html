@@ -60,6 +60,25 @@
     <p class="potluck-summary">{{.Summary}}</p>
     {{if .StillNeeded}}<p class="potluck-needed">{{.StillNeeded}}</p>{{end}}
 
+    {{if .Requests}}
+    <div class="potluck-cat potluck-requests">
+      <h4>📌 Asked for</h4>
+      <ul class="potluck-items">
+        {{range .Requests}}
+        <li class="potluck-item">
+          <span class="what">{{.Emoji}} {{.Item}}{{if gt .Wanted 1}} <span class="muted">· {{len .Claims}} of {{.Wanted}}</span>{{end}}
+            {{if .People}}<span class="who">{{range $i, $p := .People}}{{if $i}},&nbsp;{{end}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}</span>{{end}}</span>
+          {{if and $.Potluck.TakesAnswers $.Potluck.ViewerGoing (not .Mine) .Open}}
+          <form method="post" action="/events/{{$ev.ID}}/potluck/requests/take">
+            <input type="hidden" name="request_id" value="{{.ID}}">
+            <button class="btn-sm">I'll bring this</button></form>
+          {{else if .Mine}}<span class="pill open">yours</span>
+          {{else if not .Open}}<span class="pill">taken</span>{{end}}
+        </li>
+        {{end}}
+      </ul>
+    </div>
+    {{end}}
     {{if eq $.MyState "attending"}}
     <div class="potluck-mine">
       <h4>What you're bringing</h4>

@@ -52,6 +52,16 @@ func (s *Server) handlePotluckComponent(w http.ResponseWriter, in *Interaction, 
 			s.replyEphemeral(w, "Unknown potluck category.")
 			return
 		}
+		// The form's example is what the organiser asked for in this
+		// category, while any of it is still open.
+		example := category.Example
+		if ev, err := s.store.GetEvent(eventID); err != nil {
+			log.Printf("[discord-signup] potluck form event=%d: %v", eventID, err)
+		} else if ev.Potluck != nil {
+			if asked := ev.Potluck.askedForIn(category.Key); asked != "" {
+				example = truncate(asked, 100)
+			}
+		}
 		writeJSON(w, 200, map[string]any{
 			"type": callbackTypeModal,
 			"data": map[string]any{
@@ -59,7 +69,7 @@ func (s *Server) handlePotluckComponent(w http.ResponseWriter, in *Interaction, 
 				"title":     truncate(category.Emoji+" "+category.Label, 45),
 				"components": []any{map[string]any{"type": componentTypeActionRow, "components": []any{
 					modalTextInput(fieldPotluckItem+"@"+potluckModalCustomID(eventID, category.Key),
-						category.Prompt, "", category.Example, textInputStyleShort, true, potluckItemLimit),
+						category.Prompt, "", example, textInputStyleShort, true, potluckItemLimit),
 				}}},
 			},
 		})
@@ -71,6 +81,8 @@ func (s *Server) handlePotluckComponent(w http.ResponseWriter, in *Interaction, 
 			s.inBackground(func() { s.syncAfterChange(eventID, nil) })
 		}
 		s.replyPotluckPanel(w, callbackTypeUpdateMessage, eventID, userID, note)
+	case action == potluckTakeRequestAction:
+		s.handleTakeRequestMenu(w, in, eventID, userID)
 	case strings.HasPrefix(action, sheetRoleCardPrefix), strings.HasPrefix(action, sheetRolePanelPrefix):
 		s.handleSheetRoleButton(w, action, eventID, userID)
 	case action == potluckClearAction:
@@ -165,6 +177,9 @@ func potluckPanel(ev *Event, userID string, going bool, note string) map[string]
 	if note != "" {
 		fmt.Fprintf(&b, "\n**%s**\n", note)
 	}
+	if line := sheet.AskedForLine(); line != "" {
+		fmt.Fprintf(&b, "\n**%s** — pick one in the menu below, or add your own.\n", line)
+	}
 	b.WriteString("\n" + sheet.SummaryLine() + "\n")
 	if line := sheet.StillNeededLine(); line != "" {
 		b.WriteString(line + "\n")
@@ -246,6 +261,10 @@ func potluckPanel(ev *Event, userID string, going bool, note string) map[string]
 	if len(sheet.Roles) > 0 {
 		data["components"] = append(data["components"].([]any), map[string]any{"type": componentTypeActionRow,
 			"components": sheetRoleButtons(ev, sheetRolePanelPrefix, userID)})
+	}
+	if menu := potluckRequestMenu(ev, userID); menu != nil {
+		// First, so it is the first thing under the text.
+		data["components"] = append([]any{menu}, data["components"].([]any)...)
 	}
 	return data
 }

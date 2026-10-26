@@ -155,6 +155,14 @@ the other posts once in the event's forum thread with who is bringing what,
 pinging only those who have not said. Discord's own event carries the sheet
 in its description too — the counts, what is still needed, and who is
 bringing what by name — as much as fits after the organiser's words.
+**Asking for things.** An organiser can ask for specific things — ice, two
+people; a folding table, one — each in a category. Wherever someone says
+what they are bringing, the open requests come first: at the top of the
+What I'm bringing view with a menu to take one, as the example in each
+category's form, and on the event page with an "I'll bring this" button.
+Taking one adds it as their item. The card, the forum check-in, the
+reminder DMs and Discord's own event list what is still asked for.
+
 **Roles on the sheet.** An organiser can add up to five roles to it —
 setup, teardown, coming for part of it — each with an optional cap. Anyone
 going takes one, or leaves it, with its own button on the card, in the What

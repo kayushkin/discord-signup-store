@@ -337,6 +337,9 @@ func eventPublishSignature(ev *Event, roster []Signup) string {
 		for _, it := range p.Items {
 			fmt.Fprintf(&b, "\x02%d\x00%s\x00%s\x00%s", it.ID, it.DiscordUserID, it.Category, it.Item)
 		}
+		for _, r := range p.Requests {
+			fmt.Fprintf(&b, "\x04%d\x00%s\x00%s\x00%d", r.ID, r.Category, r.Item, r.Wanted)
+		}
 		for _, r := range p.Roles {
 			fmt.Fprintf(&b, "\x03%d\x00%s\x00%d\x00%s", r.ID, r.Name, r.Capacity, strings.Join(r.Members, ","))
 		}

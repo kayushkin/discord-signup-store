@@ -475,6 +475,9 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// What a copied row's role columns said, apart from its item, so a
 	// change to one is not taken for a change to the other.
 	{"potluck_sheet_rows", "role_signature", "TEXT NOT NULL DEFAULT ''"},
+	// The organiser's request a potluck item answers; 0 for none. See
+	// potluckrequests.go.
+	{"potluck_items", "request_id", "INTEGER NOT NULL DEFAULT 0"},
 }
 
 // ensureColumns applies every ALTER that a pre-existing database is missing.

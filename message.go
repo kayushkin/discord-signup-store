@@ -11,6 +11,8 @@ import (
 const (
 	componentTypeActionRow = 1
 	componentTypeButton    = 2
+	// componentTypeStringSelect is a drop-down of options on a message.
+	componentTypeStringSelect = 3
 	// componentTypeTextInput is valid only inside a modal. Discord rejects it
 	// in a message, which is why a free text field cannot live on the card
 	// itself and needs the button-then-form round trip.
