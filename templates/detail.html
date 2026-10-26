@@ -318,12 +318,20 @@
       {{end}}
     </ul>
     {{if and .Unanswered .TakesAnswers}}
-    <form method="post" action="/events/{{$ev.ID}}/potluck/nudge" class="potluck-nudge" data-async
-          data-confirm="DM the {{len .Unanswered}} going who haven't said what they're bringing? It counts as one of the event's {{$.MessageLimit}} DMs per {{$.MessageWindowMinutes}} minutes.">
-      <button {{if not $.MessagesLeft}}disabled{{end}}>Nudge them by DM</button>
-      {{if not $.MessagesLeft}}<span class="hint">DMs again at {{shortTime $.MessagesNextAt}}</span>{{end}}
-    </form>
+    <div class="potluck-nudge">
+      <form method="post" action="/events/{{$ev.ID}}/potluck/nudge" data-async
+            data-confirm="DM the {{len .Unanswered}} going who haven't said what they're bringing? It counts as one of the event's {{$.MessageLimit}} DMs per {{$.MessageWindowMinutes}} minutes.">
+        <input type="hidden" name="via" value="dm">
+        <button {{if not $.MessagesLeft}}disabled{{end}}>Nudge by DM</button></form>
+      <form method="post" action="/events/{{$ev.ID}}/potluck/nudge" data-async
+            data-confirm="Post in the event's forum thread with who is bringing what, pinging the {{len .Unanswered}} who haven't said?">
+        <input type="hidden" name="via" value="forum">
+        <button class="ghost" {{if not $ev.ForumPostID}}disabled title="This event has no forum post"{{end}}>Post in the forum</button></form>
+    </div>
+    {{if not $.MessagesLeft}}<p class="hint">DMs again at {{shortTime $.MessagesNextAt}}.</p>{{end}}
+    <p class="hint">The forum post shows who is bringing what and pings only those who haven't said.</p>
     {{end}}
+}
     <p class="hint">Anyone going who hasn't answered gets a DM by itself a day before.</p>
 
     <div class="card-head sub-head"><h3>What it needs</h3></div>

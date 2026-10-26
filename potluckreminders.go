@@ -30,6 +30,9 @@ const (
 const (
 	PotluckReminderAutomatic = "automatic"
 	PotluckReminderNudge     = "nudge"
+	// PotluckReminderForum is a ping in the forum thread. It does not stand
+	// in for the DM a day before: a ping in a busy thread is easy to miss.
+	PotluckReminderForum = "forum"
 
 	potluckReminderSent      = "sent"
 	potluckReminderDMsClosed = "dms-closed"
@@ -143,7 +146,7 @@ func (s *Server) SendDuePotluckReminders() (sent int, err error) {
 		windowOpens := ev.StartsAt - int64(potluckReminderLead/time.Second)
 		reminded := map[string]bool{}
 		for _, r := range reminders {
-			if r.Kind == PotluckReminderAutomatic || r.SentAt >= windowOpens {
+			if r.Kind == PotluckReminderAutomatic || (r.Kind == PotluckReminderNudge && r.SentAt >= windowOpens) {
 				reminded[r.DiscordUserID] = true
 			}
 		}
@@ -193,9 +196,10 @@ func (s *Server) sendPotluckReminder(ev *Event, userID, kind, opening string) bo
 	return outcome == potluckReminderSent
 }
 
-// handleWebPotluckNudge DMs everyone going who has not answered the sheet,
-// on an organiser's press. It is a message to many people, so it goes
-// through the same limit as any other message by DM.
+// handleWebPotluckNudge asks everyone going who has not answered the sheet,
+// on an organiser's press: by DM to each (via=dm), which goes through the
+// same limit as any other message by DM, or by one post in the event's
+// forum thread (via=forum) that shows the sheet and pings them.
 func (s *Server) handleWebPotluckNudge(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {
@@ -226,6 +230,15 @@ func (s *Server) handleWebPotluckNudge(w http.ResponseWriter, r *http.Request) {
 	people := unansweredGoing(ev, roster)
 	if len(people) == 0 {
 		s.redirectWithNotice(w, r, ev.ID, "Nobody to nudge: everyone going has answered.")
+		return
+	}
+	switch r.FormValue("via") {
+	case MessageViaDM:
+	case MessageViaForum:
+		s.redirectWithNotice(w, r, ev.ID, s.nudgeInForum(ev, session, people))
+		return
+	default:
+		http.Error(w, "via must be dm or forum", http.StatusBadRequest)
 		return
 	}
 	body := "Asked what they are bringing to the potluck."
@@ -264,4 +277,110 @@ func (s *Server) handleWebPotluckNudge(w http.ResponseWriter, r *http.Request) {
 		notice += " " + detail
 	}
 	s.redirectWithNotice(w, r, ev.ID, notice)
+}
+
+// potluckForumNudge is the post asking in the forum thread: the sheet as it
+// stands, who is bringing what, and a ping for each person who has not said.
+// Over Discord's limit it is two posts — the sheet, then the pings — and the
+// buttons go under the last.
+func potluckForumNudge(ev *Event, organiser string, unanswered []Signup) []string {
+	sheet := ev.Potluck
+	var head strings.Builder
+	fmt.Fprintf(&head, "🍲 **Potluck check-in from %s** — <t:%d:R>\n", organiser, ev.StartsAt)
+	head.WriteString(sheet.SummaryLine() + "\n")
+	if line := sheet.StillNeededLine(); line != "" {
+		head.WriteString("**" + line + "**\n")
+	}
+	bringing := func(itemLimit int) string {
+		var b strings.Builder
+		for _, c := range sheet.Counts() {
+			if len(c.Items) == 0 {
+				continue
+			}
+			parts := make([]string, len(c.Items))
+			for i, it := range c.Items {
+				parts[i] = fmt.Sprintf("<@%s> %s", it.DiscordUserID, truncate(it.Item, itemLimit))
+			}
+			fmt.Fprintf(&b, "%s %s\n", c.Category.Emoji, strings.Join(parts, " · "))
+		}
+		if b.Len() == 0 {
+			return ""
+		}
+		return "\n**Who's bringing what**\n" + b.String()
+	}
+	mentions := make([]string, len(unanswered))
+	for i, sg := range unanswered {
+		mentions[i] = "<@" + sg.DiscordUserID + ">"
+	}
+	pings := fmt.Sprintf("\n**Haven't said yet (%d):** %s\nPress **What I'm bringing** below to add yours, or to say you're not bringing anything.",
+		len(unanswered), strings.Join(mentions, " "))
+
+	sheetPart := head.String() + bringing(potluckItemLimit)
+	if len([]rune(sheetPart)) > discordMessageContentLimit {
+		sheetPart = head.String() + bringing(40)
+	}
+	if len([]rune(sheetPart))+len([]rune(pings)) <= discordMessageContentLimit {
+		return []string{sheetPart + pings}
+	}
+	return []string{truncate(sheetPart, discordMessageContentLimit), truncate(strings.TrimPrefix(pings, "\n"), discordMessageContentLimit)}
+}
+
+// nudgeInForum posts the check-in in the event's forum thread and says what
+// happened. A forum post is not limited, as an organiser's other forum
+// messages are not; it is recorded with them.
+func (s *Server) nudgeInForum(ev *Event, session *WebSession, people []Signup) string {
+	if ev.ForumPostID == "" {
+		return "Nothing was posted: this event has no forum post. Nudge them by DM instead."
+	}
+	if len(people) > mentionsPerMessage {
+		return fmt.Sprintf("Nothing was posted: %d people have not answered, and Discord pings at most %d in a post. Nudge them by DM instead.",
+			len(people), mentionsPerMessage)
+	}
+	posts := potluckForumNudge(ev, session.DisplayName, people)
+	ids := make([]string, len(people))
+	for i, sg := range people {
+		ids[i] = sg.DiscordUserID
+	}
+	messageID, err := s.store.ClaimMessage(EventMessage{EventID: ev.ID, SentBy: session.DiscordUserID,
+		Via: MessageViaForum, Audience: []string{StateAttending}, Body: "Potluck check-in, pinging everyone going who has not said what they are bringing.",
+		Recipients: len(people)})
+	if err != nil {
+		log.Printf("[discord-signup] potluck forum nudge claim %d: %v", ev.ID, err)
+		return "Nothing was posted: " + err.Error()
+	}
+	// A quiet thread is archived by Discord and takes no messages until opened.
+	if err := s.discord.ModifyThread(ev.ForumPostID, map[string]any{"archived": false}); err != nil {
+		log.Printf("[discord-signup] unarchive forum post of %d to nudge: %v", ev.ID, err)
+	}
+	buttons := []any{potluckButton(ev.ID)}
+	if origin := s.webOrigin(); origin != "" {
+		buttons = append(buttons, map[string]any{"type": componentTypeButton, "style": buttonStyleLink,
+			"label": "Event page", "url": fmt.Sprintf("%s/events/%d", origin, ev.ID)})
+	}
+	for i, content := range posts {
+		// Only the people being asked are pinged; everyone named in the
+		// sheet shows as a name.
+		payload := map[string]any{"content": content, "allowed_mentions": map[string]any{"users": ids}}
+		if i < len(posts)-1 {
+			payload["allowed_mentions"] = map[string]any{"parse": []string{}}
+		} else {
+			payload["components"] = []any{map[string]any{"type": componentTypeActionRow, "components": buttons}}
+		}
+		if _, err := s.discord.CreateMessage(ev.ForumPostID, payload); err != nil {
+			log.Printf("[discord-signup] potluck forum nudge of %d: %v", ev.ID, err)
+			if ferr := s.store.FinishMessage(messageID, 0, 1, err.Error()); ferr != nil {
+				log.Printf("[discord-signup] potluck forum nudge finish %d: %v", ev.ID, ferr)
+			}
+			return "Discord refused the post: " + err.Error()
+		}
+	}
+	if err := s.store.FinishMessage(messageID, 1, 0, ""); err != nil {
+		log.Printf("[discord-signup] potluck forum nudge finish %d: %v", ev.ID, err)
+	}
+	for _, sg := range people {
+		if err := s.store.RecordPotluckReminder(ev.ID, sg.DiscordUserID, PotluckReminderForum, potluckReminderSent); err != nil {
+			log.Printf("[discord-signup] %v", err)
+		}
+	}
+	return fmt.Sprintf("Posted in the forum thread, with who is bringing what, pinging the %d who have not said.", len(people))
 }

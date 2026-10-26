@@ -150,7 +150,11 @@ they rejoin. A day before, everyone going who has not answered gets one DM
 asking, once per date, unless they got their place in the last 30 minutes.
 Anyone in the server can also fill it in on the event's members' page. The
 organiser's page lists who has not answered, which nobody else sees, and
-a **Nudge** button that DMs them all and counts against the DM limit above.
+**Nudge** buttons: one DMs them all and counts against the DM limit above;
+the other posts once in the event's forum thread with who is bringing what,
+pinging only those who have not said. Discord's own event carries the sheet
+in its description too — the counts, what is still needed, and who is
+bringing what by name — as much as fits after the organiser's words.
 A repeating event's next date starts with an empty sheet; what it needs
 carries over.
 

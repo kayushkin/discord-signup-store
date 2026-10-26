@@ -498,3 +498,46 @@ func (s *Store) RemoveOwnPotluckItem(eventID, itemID int64, userID string) error
 	}
 	return nil
 }
+
+// potluckDescriptionSection is the sheet for the description of Discord's own
+// event, inside a rune budget: the counts and what is still needed, then who
+// is bringing what by name — never a mention, which would ping on every
+// rewrite — shortening the items, then dropping people off the end, before
+// leaving the list out. "" when not even the counts fit.
+func potluckDescriptionSection(sheet *PotluckSheet, roster []Signup, budget int) string {
+	names := map[string]string{}
+	for _, sg := range roster {
+		names[sg.DiscordUserID] = sg.NameOnDiscord()
+	}
+	head := "\nPotluck: " + sheet.SummaryLine()
+	if line := sheet.StillNeededLine(); line != "" {
+		head += "\n" + line
+	}
+	if len([]rune(head)) > budget {
+		return ""
+	}
+	list := func(itemLimit, shown int) string {
+		var parts []string
+		for _, c := range sheet.Counts() {
+			for _, it := range c.Items {
+				parts = append(parts, fmt.Sprintf("%s %s: %s", c.Category.Emoji, names[it.DiscordUserID], truncate(it.Item, itemLimit)))
+			}
+		}
+		if len(parts) == 0 {
+			return ""
+		}
+		if shown >= len(parts) {
+			return "\n" + strings.Join(parts, "\n")
+		}
+		return "\n" + strings.Join(parts[:shown], "\n") + fmt.Sprintf("\n…and %d more", len(parts)-shown)
+	}
+	if l := list(potluckItemLimit, len(sheet.Items)); len([]rune(head+l)) <= budget {
+		return head + l
+	}
+	for shown := len(sheet.Items); shown >= 1; shown-- {
+		if l := list(40, shown); len([]rune(head+l)) <= budget {
+			return head + l
+		}
+	}
+	return head
+}

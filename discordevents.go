@@ -913,8 +913,16 @@ func signupBlock(ev *Event, roster []Signup, boardChannelID string, budget int) 
 	attending = hostFirst(attending, ev.CreatedBy)
 	// The lists come last so that trimming them for length costs the least:
 	// what goes first is how to sign up, which is the only part somebody has to
-	// have.
+	// have. The potluck sheet goes before who is going: the card and the
+	// event page list the people, and this is the one place on Discord's own
+	// event that says what is being brought.
 	remaining := budget - len([]rune(b.String()))
+	if ev.Potluck != nil {
+		if section := potluckDescriptionSection(ev.Potluck, roster, remaining); section != "" {
+			b.WriteString(section)
+			remaining -= len([]rune(section))
+		}
+	}
 	if line := rosterLine("Going", attending, remaining); line != "" {
 		b.WriteString(line)
 		remaining -= len([]rune(line))

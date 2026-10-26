@@ -371,7 +371,7 @@ func TestTheOrganiserTurnsThePotluckOnAndNudges(t *testing.T) {
 		}
 	}
 
-	postForm(t, mux, token, eventPath(ev)+"/potluck/nudge", url.Values{})
+	postForm(t, mux, token, eventPath(ev)+"/potluck/nudge", url.Values{"via": {"dm"}})
 	var opened []string
 	for _, c := range fake.recorded() {
 		if c.Method == http.MethodPost && c.Path == "/users/@me/channels" {
@@ -492,5 +492,93 @@ func TestAPotluckCardLinksTheEventPage(t *testing.T) {
 	srv.addEventPageButton(card, plain)
 	if strings.Contains(fmt.Sprint(card["components"]), "url:") {
 		t.Fatal("a card without a sheet got the link")
+	}
+}
+
+// TestTheForumNudgeShowsTheSheetAndPingsOnlyTheSilent: one post in the
+// event's thread with who is bringing what and who has not said, pinging
+// only the second, and it does not stand in for the DM a day before.
+func TestTheForumNudgeShowsTheSheetAndPingsOnlyTheSilent(t *testing.T) {
+	_, store, fake, mux, token := webTestServer(t)
+	ev := publishedEvent(t, store, 0, "alice", "bob", "cy")
+	on, post := true, "thread-9"
+	store.UpdateEvent(ev.ID, EventPatch{PotluckEnabled: &on, ForumPostID: &post})
+	if _, err := store.AddPotluckItem(ev.ID, "alice", PotluckFood, "Tamales"); err != nil {
+		t.Fatal(err)
+	}
+	postForm(t, mux, token, eventPath(ev)+"/potluck/nudge", url.Values{"via": {"forum"}})
+
+	var posted []recordedCall
+	for _, c := range fake.recorded() {
+		if c.Method == http.MethodPost && c.Path == "/channels/thread-9/messages" {
+			posted = append(posted, c)
+		}
+	}
+	if len(posted) != 1 {
+		t.Fatalf("posted %d messages in the thread, want 1", len(posted))
+	}
+	content := fmt.Sprint(posted[0].Body["content"])
+	for _, want := range []string{"Who's bringing what", "<@alice> Tamales", "Haven't said yet (2):", "<@bob>", "<@cy>"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("post lacks %q:\n%s", want, content)
+		}
+	}
+	if pinged := fmt.Sprint(posted[0].Body["allowed_mentions"]); strings.Contains(pinged, "alice") || !strings.Contains(pinged, "bob") {
+		t.Errorf("allowed mentions = %s, want bob and cy only", pinged)
+	}
+	if !strings.Contains(fmt.Sprint(posted[0].Body["components"]), PotluckCustomID(ev.ID)) {
+		t.Error("the post has no What I'm bringing button")
+	}
+	if dms := len(fake.recorded()); dms == 0 {
+		t.Fatal("no calls recorded")
+	}
+	for _, c := range fake.recorded() {
+		if c.Path == "/users/@me/channels" {
+			t.Fatal("the forum nudge sent a DM")
+		}
+	}
+	reminders, _ := store.PotluckRemindersFor(ev.ID)
+	if len(reminders) != 2 || reminders[0].Kind != PotluckReminderForum {
+		t.Fatalf("reminders = %+v, want two forum pings", reminders)
+	}
+}
+
+// TestDiscordsOwnEventDescriptionCarriesTheSheet: the counts, what is still
+// needed and who is bringing what by name, inside Discord's 1000
+// characters, and stripped off again when Discord's copy is read back.
+func TestDiscordsOwnEventDescriptionCarriesTheSheet(t *testing.T) {
+	store := testStore(t)
+	ev := potluckEvent(t, store, "ann", "bo")
+	store.db.Exec(`UPDATE signups SET display_name = 'Ann' WHERE discord_user_id = 'ann'`)
+	store.SetPotluckNeeds(ev.ID, map[string]int{PotluckDrinks: 2})
+	if _, err := store.AddPotluckItem(ev.ID, "ann", PotluckFood, "Pumpkin pie"); err != nil {
+		t.Fatal(err)
+	}
+	ev = mustEvent(t, store, ev.ID)
+	roster, _ := store.Roster(ev.ID, false)
+	description := nativeEventDescription(ev, roster, "board")
+	for _, want := range []string{"Potluck: 🍲 Food 1 · 🥤 Drinks 0/2", "Still needed: 2 drinks", "🍲 Ann: Pumpkin pie"} {
+		if !strings.Contains(description, want) {
+			t.Errorf("description lacks %q:\n%s", want, description)
+		}
+	}
+	if strings.Contains(description, "<@") {
+		t.Error("the description mentions someone, which would ping on every rewrite")
+	}
+	if got := stripSignupPointer(description); got != ev.Description {
+		t.Errorf("read back = %q, want the organiser's own %q", got, ev.Description)
+	}
+
+	// A long description leaves less room: the list shortens, never the
+	// organiser's words, and it stays inside the limit.
+	long := strings.Repeat("Bring a costume. ", 52)
+	store.UpdateEvent(ev.ID, EventPatch{Description: &long})
+	for i := 0; i < 6; i++ {
+		store.AddPotluckItem(ev.ID, "bo", PotluckDrinks, strings.Repeat("Sparkling cider ", 5))
+	}
+	ev = mustEvent(t, store, ev.ID)
+	description = nativeEventDescription(ev, roster, "board")
+	if n := len([]rune(description)); n > nativeDescriptionLimit || !strings.HasPrefix(description, long) {
+		t.Fatalf("description is %d runes, or lost the organiser's words", n)
 	}
 }
