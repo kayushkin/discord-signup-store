@@ -180,6 +180,8 @@
   {{end}}{{end}}
 
   <section class="card" id="roster">
+    {{/* Each list is a row of name tags; pressing a name opens what can be
+         done with that person, so the page is not a wall of buttons. */}}
     <div class="card-head">
       <h3>Going</h3>
       <span class="badge">{{$ev.AttendingCount}}{{if $ev.Capacity}} / {{$ev.Capacity}}{{end}}</span>
@@ -187,36 +189,35 @@
       {{if and $ev.Capacity (gt $ev.AttendingCount $ev.Capacity)}}<span class="pill closed">over the limit</span>{{end}}
     </div>
     {{if not .Going}}<p class="empty">Nobody yet.</p>{{end}}
-    <ol class="people">
-      {{range $i, $s := .Going}}
-      <li class="person">
-        <span class="place">{{add $i 1}}</span>
-        <span class="who">{{avatar $.AvatarUserIDs $s.DiscordUserID}}{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}{{if index $.RegularIDs $s.DiscordUserID}} <span class="regular-mark" title="A regular: a place on every date">{{template "regular"}}</span>{{end}}{{if index $.OrganiserIDs $s.DiscordUserID}} <span class="pill organiser-badge">{{if eq $s.DiscordUserID $ev.CreatedBy}}host{{else}}organiser{{end}}</span>{{end}}</span>
-        <span class="when" title="Signed up">{{shortTime $s.SignedUpAt}}</span>
-        {{if $canManage}}<span class="row-actions">
-          {{if $ev.RecurrenceRule}}{{$regular := index $.RegularIDs $s.DiscordUserID}}
-          <form method="post" action="/events/{{$ev.ID}}/regulars" data-async>
-            <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
-            <input type="hidden" name="regular" value="{{if $regular}}false{{else}}true{{end}}">
-            <button class="btn-sm regular-toggle{{if $regular}} is-on{{end}}" aria-pressed="{{$regular}}"
-                    title="{{if $regular}}A regular: a place on every date. Press to stop.{{else}}Make them a regular: a place on every date{{end}}">{{template "regular"}}<span class="btn-text">{{if $regular}}Regular{{else}}Make regular{{end}}</span></button></form>
-          {{end}}
-          {{if ne $s.DiscordUserID $ev.CreatedBy}}{{$organiser := index $.OrganiserIDs $s.DiscordUserID}}
+    <ul class="people-tags">
+      {{range $s := .Going}}{{$organiser := index $.OrganiserIDs $s.DiscordUserID}}{{$regular := index $.RegularIDs $s.DiscordUserID}}
+      <li><details class="person-menu">
+        <summary>{{avatar $.AvatarUserIDs $s.DiscordUserID}}<span class="tag-name">{{or $s.ReadableName $s.DisplayName}}</span>{{if eq $s.DiscordUserID $ev.CreatedBy}}<span class="tag-mark host-mark" title="Host">host</span>{{else if $organiser}}<span class="tag-mark organiser-mark" title="Organiser">★</span>{{end}}{{if $regular}}<span class="tag-mark" title="A regular">{{template "regular"}}</span>{{end}}</summary>
+        <div class="menu">
+          <div class="menu-head">{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}<span class="muted small">going since {{shortTime $s.SignedUpAt}}</span></div>
+          {{if $canManage}}
+          {{if ne $s.DiscordUserID $ev.CreatedBy}}
           <form method="post" action="/events/{{$ev.ID}}/organisers" data-async{{if not $organiser}}
                 data-confirm="Make {{or $s.ReadableName $s.DisplayName}} an organiser of this event? They can edit it and its people, and make others organisers."{{end}}>
             <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
             <input type="hidden" name="organiser" value="{{if $organiser}}false{{else}}true{{end}}">
-            <button class="btn-sm organiser-toggle{{if $organiser}} is-on{{end}}" aria-pressed="{{if $organiser}}true{{else}}false{{end}}"
-                    title="{{if $organiser}}An organiser of this event. Press to take it back.{{else}}Make them an organiser of this event{{end}}">★<span class="btn-text">{{if $organiser}}Organiser{{else}}Make organiser{{end}}</span></button></form>
+            <button class="menu-item">★ {{if $organiser}}Stop being an organiser{{else}}Make organiser{{end}}</button></form>
+          {{end}}
+          {{if $ev.RecurrenceRule}}
+          <form method="post" action="/events/{{$ev.ID}}/regulars" data-async>
+            <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
+            <input type="hidden" name="regular" value="{{if $regular}}false{{else}}true{{end}}">
+            <button class="menu-item">{{template "regular"}} {{if $regular}}Stop being a regular{{else}}Make regular (every date){{end}}</button></form>
           {{end}}
           <form method="post" action="/events/{{$ev.ID}}/roster/remove" data-async
                 data-confirm="Take {{or $s.ReadableName $s.DisplayName}} off?{{if $.PlaceFreesOnLeave}} Their place goes to whoever is next on the waitlist, who will be messaged.{{else if and $ev.Capacity (gt $ev.AttendingCount $ev.Capacity)}} The event is over its limit, so nobody moves up.{{end}}">
             <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
-            <button class="btn-sm danger" aria-label="Remove" title="Remove"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span class="btn-text">Remove</span></button></form>
-        </span>{{end}}
-      </li>
+            <button class="menu-item danger"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Remove</button></form>
+          {{end}}
+        </div>
+      </details></li>
       {{end}}
-    </ol>
+    </ul>
 
     {{if .RegularsAway}}
     <p class="regulars-away">{{template "regular"}} Regulars not going this date:
@@ -229,186 +230,67 @@
       {{if $ev.WaitlistDisabled}}<span class="muted small">turned off</span>{{end}}
     </div>
     {{if not .Waiting}}<p class="empty">Nobody waiting.</p>{{end}}
-    <ol class="people">
+    <ul class="people-tags">
       {{$last := len .Waiting}}
       {{range .Waiting}}
-      <li class="person waiting">
-        <span class="place wait" title="Number {{.WaitlistPlace}} in line">#{{.WaitlistPlace}}</span>
-        <span class="who">{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}</span>
-        <span class="when">{{shortTime .SignedUpAt}}</span>
-        {{if $canManage}}<span class="row-actions">
-          <span class="mover">
-            <form method="post" action="/events/{{$ev.ID}}/waitlist/move" data-async>
-              <input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
-              <input type="hidden" name="to" value="{{add .WaitlistPlace -1}}">
-              <button class="icon-btn" aria-label="Move up" title="Move up" {{if eq .WaitlistPlace 1}}disabled{{end}}><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M5 12.5 10 7.5l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></form>
-            <form method="post" action="/events/{{$ev.ID}}/waitlist/move" data-async>
-              <input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
-              <input type="hidden" name="to" value="{{add .WaitlistPlace 1}}">
-              <button class="icon-btn" aria-label="Move down" title="Move down" {{if eq .WaitlistPlace $last}}disabled{{end}}><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M5 7.5 10 12.5l5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></form>
-          </span>
+      <li><details class="person-menu">
+        <summary><span class="tag-place">{{.WaitlistPlace}}</span>{{avatar $.AvatarUserIDs .DiscordUserID}}<span class="tag-name">{{or .ReadableName .DisplayName}}</span></summary>
+        <div class="menu">
+          <div class="menu-head">{{person .ReadableName .DisplayName .DiscordUserID}}<span class="muted small">number {{.WaitlistPlace}} · waiting since {{shortTime .SignedUpAt}}</span></div>
+          {{if $canManage}}
           <form method="post" action="/events/{{$ev.ID}}/roster/promote" data-async
                 data-confirm="Give {{or .ReadableName .DisplayName}} a place now, ahead of the line{{if $ev.Capacity}} and past the limit if it is full{{end}}? They will be messaged.">
             <input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
-            <button class="btn-sm" aria-label="Give a place" title="Give a place"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 16V4M5 9l5-5 5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="btn-text">Give a place</span></button></form>
+            <button class="menu-item">↑ Give a place now</button></form>
+          {{if gt .WaitlistPlace 1}}
+          <form method="post" action="/events/{{$ev.ID}}/waitlist/move" data-async>
+            <input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
+            <input type="hidden" name="to" value="{{add .WaitlistPlace -1}}">
+            <button class="menu-item">⌃ Move up the line</button></form>
+          {{end}}
+          {{if lt .WaitlistPlace $last}}
+          <form method="post" action="/events/{{$ev.ID}}/waitlist/move" data-async>
+            <input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
+            <input type="hidden" name="to" value="{{add .WaitlistPlace 1}}">
+            <button class="menu-item">⌄ Move down the line</button></form>
+          {{end}}
           <form method="post" action="/events/{{$ev.ID}}/roster/remove" data-async
                 data-confirm="Take {{or .ReadableName .DisplayName}} off the waitlist?">
             <input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
-            <button class="btn-sm danger" aria-label="Remove" title="Remove"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span class="btn-text">Remove</span></button></form>
-        </span>{{end}}
-      </li>
+            <button class="menu-item danger"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Remove</button></form>
+          {{end}}
+        </div>
+      </details></li>
       {{end}}
-    </ol>
+    </ul>
     {{end}}
 
     {{if .Maybes}}
-    <div class="card-head sub-head"><h3>Maybe</h3><span class="badge">{{len .Maybes}}</span>
-      <span class="muted small">holds no place</span></div>
-    <ol class="people">
+    <div class="card-head sub-head"><h3>Maybe</h3><span class="badge">{{len .Maybes}}</span></div>
+    <ul class="people-tags">
       {{range .Maybes}}
-      <li class="person">
-        <span class="place muted">?</span>
-        <span class="who">{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}</span>
-        <span class="when">{{shortTime .StateChangedAt}}</span>
-        {{if $canManage}}<span class="row-actions">
+      <li><details class="person-menu">
+        <summary>{{avatar $.AvatarUserIDs .DiscordUserID}}<span class="tag-name">{{or .ReadableName .DisplayName}}</span></summary>
+        <div class="menu">
+          <div class="menu-head">{{person .ReadableName .DisplayName .DiscordUserID}}<span class="muted small">maybe since {{shortTime .StateChangedAt}}</span></div>
+          {{if $canManage}}
           <form method="post" action="/events/{{$ev.ID}}/roster/promote" data-async
                 data-confirm="Give {{or .ReadableName .DisplayName}} a place now{{if $ev.Capacity}}, past the limit if it is full{{end}}? They will be messaged.">
             <input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
-            <button class="btn-sm" aria-label="Give a place" title="Give a place"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 16V4M5 9l5-5 5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="btn-text">Give a place</span></button></form>
+            <button class="menu-item">↑ Give a place now</button></form>
           <form method="post" action="/events/{{$ev.ID}}/roster/remove" data-async
                 data-confirm="Take {{or .ReadableName .DisplayName}} off the Maybe list?">
             <input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
-            <button class="btn-sm danger" aria-label="Remove" title="Remove"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span class="btn-text">Remove</span></button></form>
-        </span>{{end}}
-      </li>
-      {{end}}
-    </ol>
-    {{end}}
-  </section>
-
-  {{if $canManage}}
-  {{with .Potluck}}
-  <section class="card" id="potluck">
-    <div class="card-head"><h3>🍲 Potluck</h3></div>
-    <p class="potluck-summary">{{.Summary}}</p>
-    {{if .StillNeeded}}<p class="potluck-needed">{{.StillNeeded}}</p>{{end}}
-    {{if .Requests}}
-    <div class="potluck-cat potluck-requests">
-      <h4>📌 Asked for</h4>
-      <ul class="potluck-items">
-        {{range .Requests}}
-        <li class="potluck-item">
-          <span class="what">{{.Emoji}} {{.Item}}{{if gt .Wanted 1}} <span class="muted">· {{len .Claims}} of {{.Wanted}}</span>{{end}}
-            {{if .People}}<span class="who">{{range $i, $p := .People}}{{if $i}},&nbsp;{{end}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}</span>{{end}}</span>
-          {{if and $.Potluck.TakesAnswers $.Potluck.ViewerGoing (not .Mine) .Open}}
-          <form method="post" action="/events/{{$ev.ID}}/potluck/requests/take" data-async>
-            <input type="hidden" name="request_id" value="{{.ID}}">
-            <button class="btn-sm">I'll bring this</button></form>
-          {{else if .Mine}}<span class="pill open">yours</span>
-          {{else if not .Open}}<span class="pill">taken</span>{{end}}
-          <form method="post" action="/events/{{$ev.ID}}/potluck/requests/remove" data-async data-confirm="Stop asking for {{.Item}}? What people said they'd bring for it stays.">
-            <input type="hidden" name="request_id" value="{{.ID}}">
-            <button class="btn-sm danger" aria-label="Stop asking for {{.Item}}" title="Stop asking">{{template "cross"}}</button></form>
-        </li>
-        {{end}}
-      </ul>
-    </div>
-    {{end}}
-    {{range .Categories}}{{if or .Items .Wanted}}
-    <div class="potluck-cat">
-    <h4>{{.Emoji}} {{.Label}} <span class="badge">{{.Have}}{{if .Wanted}} / {{.Wanted}}{{end}}</span></h4>
-    {{if not .Items}}<p class="empty">Nothing yet.</p>{{end}}
-    <ul class="potluck-items">
-      {{range .Items}}
-      <li class="potluck-item">
-        <span class="what">{{.Item}}<span class="who">{{avatar $.AvatarUserIDs .Person.DiscordUserID}}{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}</span></span>
-        <form method="post" action="/events/{{$ev.ID}}/potluck/remove" data-async data-confirm="Take “{{.Item}}” off the sheet?">
-          <input type="hidden" name="item_id" value="{{.ID}}">
-          <button class="btn-sm danger" aria-label="Remove {{.Item}}" title="Remove">{{template "cross"}}</button></form>
-      </li>
+            <button class="menu-item danger"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Remove</button></form>
+          {{end}}
+        </div>
+      </details></li>
       {{end}}
     </ul>
-    </div>
-    {{end}}{{end}}
-    {{if .Roles}}
-    <div class="potluck-cat" id="roles">
-      <h4>🙋 Roles</h4>
-      {{range .Roles}}
-      <div class="sheet-role">
-        <div class="sheet-role-head">
-          <strong>{{.Name}}</strong> <span class="badge">{{.Count}}</span>
-          {{if and $.Potluck.TakesAnswers $.Potluck.ViewerGoing}}
-          <form method="post" action="/events/{{$ev.ID}}/potluck/roles/toggle" data-async>
-            <input type="hidden" name="role_id" value="{{.ID}}">
-            {{if .Mine}}<button class="btn-sm ghost">Leave</button>{{else if .Full}}<button class="btn-sm" disabled>Full</button>{{else}}<button class="btn-sm">Count me in</button>{{end}}
-          </form>
-          {{end}}
-          <form method="post" action="/events/{{$ev.ID}}/potluck/roles/remove" data-async data-confirm="Take the role {{.Name}} off the sheet? Who was in it stays in the log.">
-            <input type="hidden" name="role_id" value="{{.ID}}">
-            <button class="btn-sm danger" aria-label="Remove the role {{.Name}}" title="Remove the role">{{template "cross"}}</button></form>
-        </div>
-        {{if .People}}<ul class="name-cloud">{{range .People}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}</li>{{end}}</ul>
-        {{else}}<p class="empty">Nobody yet.</p>{{end}}
-      </div>
-      {{end}}
-    </div>
     {{end}}
-    {{if .Nothing}}
-    <p class="muted small">Not bringing anything:
-      {{range $i, $p := .Nothing}}{{if $i}}, {{end}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}</p>
-    {{end}}
-
-    <details class="fold">
-      <summary>Haven't answered <span class="badge">{{len .Unanswered}}</span></summary>
-      {{if not .Unanswered}}<p class="empty">Everyone going has answered.</p>{{end}}
-      <ul class="name-cloud">
-        {{range .Unanswered}}
-        <li title="{{if .LastFailed}}{{.LastFailed}}{{else if .LastAsked}}Asked {{shortTime .LastAsked}}{{else}}Not asked yet{{end}}">{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}{{if .LastFailed}} <span class="muted small">· {{.LastFailed}}</span>{{else if .LastAsked}} <span class="muted small">· asked</span>{{end}}</li>
-        {{end}}
-      </ul>
-      {{if and .Unanswered .TakesAnswers}}
-      <div class="potluck-nudge">
-        <form method="post" action="/events/{{$ev.ID}}/potluck/nudge" data-async
-              data-confirm="DM the {{len .Unanswered}} who haven't answered? It counts as one of the event's {{$.MessageLimit}} DMs per {{$.MessageWindowMinutes}} minutes.">
-          <input type="hidden" name="via" value="dm">
-          <button {{if not $.MessagesLeft}}disabled title="DMs again at {{shortTime $.MessagesNextAt}}"{{end}}>Nudge by DM</button></form>
-        <form method="post" action="/events/{{$ev.ID}}/potluck/nudge" data-async
-              data-confirm="Post who's bringing what in the forum thread, pinging the {{len .Unanswered}} who haven't answered?">
-          <input type="hidden" name="via" value="forum">
-          <button class="ghost" {{if not $ev.ForumPostID}}disabled title="This event has no forum post"{{end}}>Post in the forum</button></form>
-      </div>
-      {{end}}
-    </details>
-
-    <details class="fold">
-      <summary>Set up the sheet</summary>
-      <h4>Ask for something</h4>
-      <form method="post" action="/events/{{$ev.ID}}/potluck/requests" data-async class="potluck-add">
-        <select name="category" aria-label="Category">{{range .AllCategories}}<option value="{{.Key}}">{{.Emoji}} {{.Label}}</option>{{end}}</select>
-        <input name="item" required maxlength="100" placeholder="e.g. Ice" aria-label="What you want">
-        <input name="wanted" type="number" min="1" max="99" value="1" aria-label="How many people" title="How many people" class="narrow-number">
-        <button>Ask</button>
-      </form>
-      <h4>Add a role</h4>
-      <form method="post" action="/events/{{$ev.ID}}/potluck/roles" data-async class="potluck-add">
-        <input name="name" required maxlength="40" placeholder="e.g. Setup (6:00)" aria-label="Role name">
-        <input name="capacity" type="number" min="0" max="999" placeholder="cap" aria-label="Cap, empty for none" title="Cap, empty for none" class="narrow-number">
-        <button>Add</button>
-      </form>
-      <h4>How many of each</h4>
-      <form method="post" action="/events/{{$ev.ID}}/potluck/needs" data-async class="potluck-needs">
-        {{range .Categories}}
-        <label>{{.Emoji}} {{.Label}} <input type="number" name="wanted_{{.Key}}" min="0" max="99" value="{{if .Wanted}}{{.Wanted}}{{end}}" placeholder="any"></label>
-        {{end}}
-        <button>Save</button>
-      </form>
-    </details>
-  </section>
-  {{end}}
-
-  <section class="card fold-card" id="add">
-    <details class="fold">
-    <summary><h3>Add or invite someone</h3></summary>
+    {{if $canManage}}
+    <details class="fold" id="add" data-remember>
+    <summary>Add or invite someone</summary>
     {{/* Two steps. First pick a person: the box searches the server's members
          as you type, and picking one puts their user id in the hidden field —
          a name is never sent, since two members can share one. Then the box
@@ -512,59 +394,134 @@
     </ol>
     {{end}}
     </details>
+    {{end}}
   </section>
-  {{end}}
 
   {{if $canManage}}
-  <section class="card fold-card" id="message">
-    <details class="fold"{{if .Replies}} open{{end}}>
-    <summary><h3>Message people</h3>{{if .Replies}} <span class="badge">{{len .Replies}} {{if eq (len .Replies) 1}}reply{{else}}replies{{end}}</span>{{end}}</summary>
-    <form method="post" action="/events/{{$ev.ID}}/message" data-async data-message class="message-form" data-dms-left="{{.MessagesLeft}}"
-          data-going="{{len .Going}}" data-waiting="{{len .Waiting}}" data-maybe="{{len .Maybes}}">
-      <textarea name="body" rows="4" maxlength="{{.MessageBodyLimit}}" required placeholder="What do you want to tell them?"></textarea>
-      <div class="hint msg-count" data-count>0 / {{.MessageBodyLimit}}</div>
-      <div class="msg-opts">
-        <div class="msg-opt"><span class="msg-label">To</span>
-          <span class="chips">
-            <span class="chip is-fixed">Going · {{len .Going}}</span>
-            {{if .Waiting}}<label class="chip"><input type="checkbox" name="include_waitlisted" value="on"> Waitlist · {{len .Waiting}}</label>{{end}}
-            {{if .Maybes}}<label class="chip"><input type="checkbox" name="include_maybe" value="on"> Maybe · {{len .Maybes}}</label>{{end}}
-          </span>
-        </div>
-        <div class="msg-opt"><span class="msg-label">How</span>
-          <span class="seg-control radio-seg" role="radiogroup" aria-label="How to send it">
-            <label{{if not $ev.ForumPostID}} class="is-off" title="This event has no forum post"{{end}}><input type="radio" name="via" value="forum" {{if $ev.ForumPostID}}checked{{else}}disabled{{end}}> Forum thread, pinging them</label>
-            <label{{if not .MessagesLeft}} class="is-off"{{end}} title="{{.MessageLimit}} per {{.MessageWindowMinutes}} minutes"><input type="radio" name="via" value="dm" {{if not $ev.ForumPostID}}checked{{end}}{{if not .MessagesLeft}} disabled{{end}}> Private DM to each <span class="muted">· {{.MessagesLeft}} left</span></label>
-          </span>
-        </div>
-      </div>
-      <div class="msg-foot">
-        <button {{if and (not $ev.ForumPostID) (not .MessagesLeft)}}disabled{{end}}>Send message</button>
-        {{if not .MessagesLeft}}<span class="hint">DMs again at {{shortTime .MessagesNextAt}}</span>{{end}}
-      </div>
-    </form>
-
-    <div class="card-head sub-head" id="replies"><h3>Replies</h3><span class="badge">{{len .Replies}}</span></div>
-    {{if not .Replies}}<p class="empty">No replies yet.</p>{{end}}
-    <ol class="replies">
-      {{range .Replies}}
-      <li class="reply">
-        <div class="reply-head">
-          <span class="who">{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}</span>
-          <span class="when">{{shortTime .At}}</span>
-        </div>
-        <div class="reply-to">{{if eq .Matched "reply"}}replying to{{else}}after{{end}}
-          {{if eq .AnsweringKind "message"}}your message “{{.AnsweringSummary}}”{{else if .AnsweringSummary}}{{.AnsweringSummary}}{{else}}a DM{{end}}{{if eq .Matched "latest"}} <span class="muted" title="They did not use Reply; this was the last DM the bot sent them about an event.">· best guess</span>{{end}}</div>
-        <div class="reply-body prose">{{if .Content}}{{.Content}}{{else}}<span class="muted">no text</span>{{end}}{{if .Attachments}} <span class="muted">· {{.Attachments}} attachment{{if gt .Attachments 1}}s{{end}}, see the DM</span>{{end}}</div>
+  {{with .Potluck}}
+  <section class="card" id="potluck">
+    <div class="card-head"><h3>🍲 Potluck</h3></div>
+    <p class="potluck-summary">{{.Summary}}</p>
+    {{if .StillNeeded}}<p class="potluck-needed">{{.StillNeeded}}</p>{{end}}
+    {{if .Requests}}
+    <div class="potluck-cat potluck-requests">
+      <h4>📌 Asked for</h4>
+      <ul class="potluck-items">
+        {{range .Requests}}
+        <li class="potluck-item">
+          <span class="what">{{.Emoji}} {{.Item}}{{if gt .Wanted 1}} <span class="muted">· {{len .Claims}} of {{.Wanted}}</span>{{end}}
+            {{if .People}}<span class="who">{{range $i, $p := .People}}{{if $i}},&nbsp;{{end}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}</span>{{end}}</span>
+          {{if and $.Potluck.TakesAnswers $.Potluck.ViewerGoing (not .Mine) .Open}}
+          <form method="post" action="/events/{{$ev.ID}}/potluck/requests/take" data-async>
+            <input type="hidden" name="request_id" value="{{.ID}}">
+            <button class="btn-sm">I'll bring this</button></form>
+          {{else if .Mine}}<span class="pill open">yours</span>
+          {{else if not .Open}}<span class="pill">taken</span>{{end}}
+          <form method="post" action="/events/{{$ev.ID}}/potluck/requests/remove" data-async data-confirm="Stop asking for {{.Item}}? What people said they'd bring for it stays.">
+            <input type="hidden" name="request_id" value="{{.ID}}">
+            <button class="btn-sm danger" aria-label="Stop asking for {{.Item}}" title="Stop asking">{{template "cross"}}</button></form>
+        </li>
+        {{end}}
+      </ul>
+    </div>
+    {{end}}
+    {{range .Categories}}{{if or .Items .Wanted}}
+    <div class="potluck-cat">
+    <h4>{{.Emoji}} {{.Label}} <span class="badge">{{.Have}}{{if .Wanted}} / {{.Wanted}}{{end}}</span></h4>
+    {{if not .Items}}<p class="empty">Nothing yet.</p>{{end}}
+    <ul class="potluck-items">
+      {{range .Items}}
+      <li class="potluck-item">
+        <span class="what">{{.Item}}<span class="who">{{avatar $.AvatarUserIDs .Person.DiscordUserID}}{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}</span></span>
+        <form method="post" action="/events/{{$ev.ID}}/potluck/remove" data-async data-confirm="Take “{{.Item}}” off the sheet?">
+          <input type="hidden" name="item_id" value="{{.ID}}">
+          <button class="btn-sm danger" aria-label="Remove {{.Item}}" title="Remove">{{template "cross"}}</button></form>
       </li>
       {{end}}
-    </ol>
+    </ul>
+    </div>
+    {{end}}{{end}}
+    {{if .Roles}}
+    <div class="potluck-cat" id="roles">
+      <h4>🙋 Roles</h4>
+      {{range .Roles}}
+      <div class="sheet-role">
+        <div class="sheet-role-head">
+          <strong>{{.Name}}</strong> <span class="badge">{{.Count}}</span>
+          {{if and $.Potluck.TakesAnswers $.Potluck.ViewerGoing}}
+          <form method="post" action="/events/{{$ev.ID}}/potluck/roles/toggle" data-async>
+            <input type="hidden" name="role_id" value="{{.ID}}">
+            {{if .Mine}}<button class="btn-sm ghost">Leave</button>{{else if .Full}}<button class="btn-sm" disabled>Full</button>{{else}}<button class="btn-sm">Count me in</button>{{end}}
+          </form>
+          {{end}}
+          <form method="post" action="/events/{{$ev.ID}}/potluck/roles/remove" data-async data-confirm="Take the role {{.Name}} off the sheet? Who was in it stays in the log.">
+            <input type="hidden" name="role_id" value="{{.ID}}">
+            <button class="btn-sm danger" aria-label="Remove the role {{.Name}}" title="Remove the role">{{template "cross"}}</button></form>
+        </div>
+        {{if .People}}<ul class="name-cloud">{{range .People}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}</li>{{end}}</ul>
+        {{else}}<p class="empty">Nobody yet.</p>{{end}}
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+    {{if .Nothing}}
+    <p class="muted small">Not bringing anything:
+      {{range $i, $p := .Nothing}}{{if $i}}, {{end}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}</p>
+    {{end}}
+
+    <details class="fold" id="unanswered" data-remember>
+      <summary>Haven't answered <span class="badge">{{len .Unanswered}}</span></summary>
+      {{if not .Unanswered}}<p class="empty">Everyone going has answered.</p>{{end}}
+      <ul class="name-cloud">
+        {{range .Unanswered}}
+        <li title="{{if .LastFailed}}{{.LastFailed}}{{else if .LastAsked}}Asked {{shortTime .LastAsked}}{{else}}Not asked yet{{end}}">{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}{{if .LastFailed}} <span class="muted small">· {{.LastFailed}}</span>{{else if .LastAsked}} <span class="muted small">· asked</span>{{end}}</li>
+        {{end}}
+      </ul>
+      {{if and .Unanswered .TakesAnswers}}
+      <div class="potluck-nudge">
+        <form method="post" action="/events/{{$ev.ID}}/potluck/nudge" data-async
+              data-confirm="DM the {{len .Unanswered}} who haven't answered? It counts as one of the event's {{$.MessageLimit}} DMs per {{$.MessageWindowMinutes}} minutes.">
+          <input type="hidden" name="via" value="dm">
+          <button {{if not $.MessagesLeft}}disabled title="DMs again at {{shortTime $.MessagesNextAt}}"{{end}}>Nudge by DM</button></form>
+        <form method="post" action="/events/{{$ev.ID}}/potluck/nudge" data-async
+              data-confirm="Post who's bringing what in the forum thread, pinging the {{len .Unanswered}} who haven't answered?">
+          <input type="hidden" name="via" value="forum">
+          <button class="ghost" {{if not $ev.ForumPostID}}disabled title="This event has no forum post"{{end}}>Post in the forum</button></form>
+      </div>
+      {{end}}
+    </details>
+
+    <details class="fold" id="sheet-setup" data-remember>
+      <summary>Set up the sheet</summary>
+      <h4>Ask for something</h4>
+      <form method="post" action="/events/{{$ev.ID}}/potluck/requests" data-async class="potluck-add">
+        <select name="category" aria-label="Category">{{range .AllCategories}}<option value="{{.Key}}">{{.Emoji}} {{.Label}}</option>{{end}}</select>
+        <input name="item" required maxlength="100" placeholder="e.g. Ice" aria-label="What you want">
+        <input name="wanted" type="number" min="1" max="99" value="1" aria-label="How many people" title="How many people" class="narrow-number">
+        <button>Ask</button>
+      </form>
+      <h4>Add a role</h4>
+      <form method="post" action="/events/{{$ev.ID}}/potluck/roles" data-async class="potluck-add">
+        <input name="name" required maxlength="40" placeholder="e.g. Setup (6:00)" aria-label="Role name">
+        <input name="capacity" type="number" min="0" max="999" placeholder="cap" aria-label="Cap, empty for none" title="Cap, empty for none" class="narrow-number">
+        <button>Add</button>
+      </form>
+      <h4>How many of each</h4>
+      <form method="post" action="/events/{{$ev.ID}}/potluck/needs" data-async class="potluck-needs">
+        {{range .Categories}}
+        <label>{{.Emoji}} {{.Label}} <input type="number" name="wanted_{{.Key}}" min="0" max="99" value="{{if .Wanted}}{{.Wanted}}{{end}}" placeholder="any"></label>
+        {{end}}
+        <button>Save</button>
+      </form>
     </details>
   </section>
   {{end}}
 
+  {{end}}
+
+
   <section class="card fold-card">
-    <details class="fold">
+    <details class="fold" id="log" data-remember>
     <summary><h3>Log</h3> <span class="badge">{{len .EventLog}}</span></summary>
     {{if not .EventLog}}<p class="empty">Nothing yet.</p>{{end}}
     {{if .EventLog}}
@@ -588,7 +545,7 @@
     {{/* Two fixed choices each, the current one lit. The labels never change;
          only which one is lit does, so what a press will do is always the
          button's own word. */}}
-    <details class="fold settings-fold">
+    <details class="fold settings-fold side-fold" data-remember>
     <summary>Settings <span class="muted small">· signups {{if $open}}open{{else}}closed{{end}}{{if $ev.PotluckEnabled}} · potluck on{{end}}</span></summary>
     <div class="control">
       <h4 id="signups-label">Signups</h4>
@@ -668,6 +625,53 @@
   </section>
   {{end}}
 
+  {{if $canManage}}
+  <section class="card side-card" id="message">
+    <details class="fold side-fold" data-remember{{if .Replies}} open{{end}}>
+    <summary><h3>Message people</h3>{{if .Replies}} <span class="badge">{{len .Replies}} {{if eq (len .Replies) 1}}reply{{else}}replies{{end}}</span>{{end}}</summary>
+    <form method="post" action="/events/{{$ev.ID}}/message" data-async data-message class="message-form" data-dms-left="{{.MessagesLeft}}"
+          data-going="{{len .Going}}" data-waiting="{{len .Waiting}}" data-maybe="{{len .Maybes}}">
+      <textarea name="body" rows="4" maxlength="{{.MessageBodyLimit}}" required placeholder="What do you want to tell them?"></textarea>
+      <div class="hint msg-count" data-count>0 / {{.MessageBodyLimit}}</div>
+      <div class="msg-opts">
+        <div class="msg-opt"><span class="msg-label">To</span>
+          <span class="chips">
+            <span class="chip is-fixed">Going · {{len .Going}}</span>
+            {{if .Waiting}}<label class="chip"><input type="checkbox" name="include_waitlisted" value="on"> Waitlist · {{len .Waiting}}</label>{{end}}
+            {{if .Maybes}}<label class="chip"><input type="checkbox" name="include_maybe" value="on"> Maybe · {{len .Maybes}}</label>{{end}}
+          </span>
+        </div>
+        <div class="msg-opt"><span class="msg-label">How</span>
+          <span class="seg-control radio-seg" role="radiogroup" aria-label="How to send it">
+            <label{{if not $ev.ForumPostID}} class="is-off" title="This event has no forum post"{{end}}><input type="radio" name="via" value="forum" {{if $ev.ForumPostID}}checked{{else}}disabled{{end}}> Forum thread, pinging them</label>
+            <label{{if not .MessagesLeft}} class="is-off"{{end}} title="{{.MessageLimit}} per {{.MessageWindowMinutes}} minutes"><input type="radio" name="via" value="dm" {{if not $ev.ForumPostID}}checked{{end}}{{if not .MessagesLeft}} disabled{{end}}> Private DM to each <span class="muted">· {{.MessagesLeft}} left</span></label>
+          </span>
+        </div>
+      </div>
+      <div class="msg-foot">
+        <button {{if and (not $ev.ForumPostID) (not .MessagesLeft)}}disabled{{end}}>Send message</button>
+        {{if not .MessagesLeft}}<span class="hint">DMs again at {{shortTime .MessagesNextAt}}</span>{{end}}
+      </div>
+    </form>
+
+    <div class="card-head sub-head" id="replies"><h3>Replies</h3><span class="badge">{{len .Replies}}</span></div>
+    {{if not .Replies}}<p class="empty">No replies yet.</p>{{end}}
+    <ol class="replies">
+      {{range .Replies}}
+      <li class="reply">
+        <div class="reply-head">
+          <span class="who">{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}</span>
+          <span class="when">{{shortTime .At}}</span>
+        </div>
+        <div class="reply-to">{{if eq .Matched "reply"}}replying to{{else}}after{{end}}
+          {{if eq .AnsweringKind "message"}}your message “{{.AnsweringSummary}}”{{else if .AnsweringSummary}}{{.AnsweringSummary}}{{else}}a DM{{end}}{{if eq .Matched "latest"}} <span class="muted" title="They did not use Reply; this was the last DM the bot sent them about an event.">· best guess</span>{{end}}</div>
+        <div class="reply-body prose">{{if .Content}}{{.Content}}{{else}}<span class="muted">no text</span>{{end}}{{if .Attachments}} <span class="muted">· {{.Attachments}} attachment{{if gt .Attachments 1}}s{{end}}, see the DM</span>{{end}}</div>
+      </li>
+      {{end}}
+    </ol>
+    </details>
+  </section>
+  {{end}}
   <section class="card side-card info">
     <h4>On Discord</h4>
     {{if $ev.DiscordScheduledEventID}}

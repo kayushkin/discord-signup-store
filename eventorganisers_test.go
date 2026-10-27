@@ -34,7 +34,7 @@ func TestAnOrganiserMakesAnotherWhoCanThenEditTheEvent(t *testing.T) {
 		t.Fatal("lee, made an organiser by kim, does not get the edit page")
 	}
 	page := getPage(t, mux, host.Token, eventPath(ev)).Body.String()
-	for _, want := range []string{`organiser-badge">organiser`, `organiser-badge">host`, "made an organiser"} {
+	for _, want := range []string{`organiser-mark`, `host-mark`, "Stop being an organiser", "made an organiser"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the organiser page lacks %q", want)
 		}
