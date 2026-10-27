@@ -615,6 +615,24 @@ ul.potluck-items{list-style:none;margin:0;padding:0}
 .potluck-add input{flex:1 1 180px;min-width:0}
 .potluck-requests{border-left:4px solid var(--warn);padding-left:10px}
 .potluck-requests .who{gap:4px;flex-wrap:wrap}
+/* Sections an organiser opens now and then: a heading with a turning arrow,
+   shut until pressed. */
+details.fold{margin-top:14px;border-top:2px dashed var(--ink);padding-top:10px}
+.fold-card details.fold{margin-top:0;border-top:0;padding-top:0}
+details.fold>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;font-weight:700}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::before{content:"▸";display:inline-block;transition:transform .15s}
+details.fold[open]>summary::before{transform:rotate(90deg)}
+details.fold>summary h3{margin:0}
+details.fold[open]>summary{margin-bottom:8px}
+details.fold h4{margin:12px 0 4px;font-size:14px}
+.narrow-number{flex:0 0 5.5em}
+.side-card details.settings-fold{margin-top:0;border-top:0;padding-top:0}
+/* On a phone a person is one line; when they signed up shows on hover. */
+@media (max-width:600px){
+  #roster .person .when{display:none}
+  #roster .person .who{grid-row:1 / span 2;align-self:center}
+}
 .organiser-badge{background:var(--blue);color:var(--paper-light);border-color:var(--blue)}
 .organiser-toggle.is-on{background:var(--blue);color:var(--paper-light);border-color:var(--ink)}
 .sheet-role{margin:8px 0 12px}

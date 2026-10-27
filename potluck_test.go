@@ -364,7 +364,7 @@ func TestTheOrganiserTurnsThePotluckOnAndNudges(t *testing.T) {
 	}
 
 	page := getPage(t, mux, token, eventPath(ev)).Body.String()
-	for _, want := range []string{`id="potluck"`, "Still needed: 3 food, 2 drinks", "Tamales", "answered</h3>",
+	for _, want := range []string{`id="potluck"`, "Still needed: 3 food, 2 drinks", "Tamales", "t answered <span class=\"badge\">",
 		`action="` + eventPath(ev) + `/potluck/nudge"`, "changed the potluck sheet: off → on"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("event page lacks %s", want)
@@ -450,7 +450,7 @@ func TestAMemberFillsInThePotluckFromTheEventPage(t *testing.T) {
 			t.Errorf("Kat's page lacks %q", want)
 		}
 	}
-	if strings.Contains(page, "answered</h3>") || strings.Contains(page, "only organisers see") {
+	if strings.Contains(page, "t answered <span class=\"badge\">") || strings.Contains(page, "only organisers see") {
 		t.Error("the members' page says who has not answered")
 	}
 
