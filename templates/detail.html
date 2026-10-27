@@ -128,7 +128,7 @@
       <div class="field" data-field>
         <dt>About</dt>
         <dd class="field-view">
-          <span class="prose">{{if $ev.Description}}{{$ev.Description}}{{else}}<span class="muted">no description</span>{{end}}</span>
+          {{if $ev.Description}}<div class="description">{{description $ev.Description}}</div>{{else}}<span class="muted">no description</span>{{end}}
           {{if $canManage}}<button type="button" class="icon-btn edit" data-edit aria-label="Edit the description">{{template "pencil"}}</button>{{end}}
         </dd>
         {{if $canManage}}

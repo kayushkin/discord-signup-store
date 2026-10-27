@@ -22,7 +22,7 @@
         <dd class="field-view"><span>{{$ev.Location}}
           <a class="map-link" href="{{mapsURL $ev.Location}}" target="_blank" rel="noopener">{{template "pin"}} Map</a></span></dd></div>{{end}}
       {{if $ev.Description}}<div class="field"><dt>About</dt>
-        <dd class="field-view"><span class="prose">{{$ev.Description}}</span></dd></div>{{end}}
+        <dd class="field-view"><div class="description">{{description $ev.Description}}</div></dd></div>{{end}}
     </dl>
     {{if eq $ev.Status "open"}}
     <form method="post" class="member-join" action="/events/{{$ev.ID}}/{{if .MyState}}leave{{else}}join{{end}}">

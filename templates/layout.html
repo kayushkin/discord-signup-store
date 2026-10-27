@@ -240,8 +240,10 @@ details.aka[open] .caret{transform:rotate(180deg)}
 /* The event page: the event and its people on the left, its controls and
    Discord's side of it on the right. */
 main:has(.event-layout){max-width:1140px}
-.event-layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:20px;align-items:start}
-.event-side{position:sticky;top:16px;display:flex;flex-direction:column;gap:18px}
+.event-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:start}
+/* The side column scrolls with the page. Scrolling it in a box of its own
+   clipped its first heading, its cards' shadows and anything wider than it. */
+.event-side{display:flex;flex-direction:column;gap:18px}
 .event-side .card{margin:0}
 /* On a phone it is one column: the event, then its controls, then the
    people, with Discord's side of it last. minmax(0,1fr), not 1fr, or a wide
@@ -274,6 +276,10 @@ main:has(.event-layout){max-width:1140px}
 .field-view > span:first-child{flex:0 1 auto}
 .field-view .sub{display:block;color:var(--dim);font-size:12px;margin-top:2px}
 .prose{white-space:pre-wrap}
+/* An event description, rendered from markdown. */
+.description{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.description>:first-child{margin-top:0}.description>:last-child{margin-bottom:0}
+.description p{margin:0 0 .7em}.description ul,.description ol{margin:0 0 .7em;padding-left:1.4em}
 .field.editing > .field-view, .field.editing dd.field-view{display:none}
 .icon-btn{background:transparent;border:1.5px solid transparent;color:var(--ink);border-radius:2px;box-shadow:none;
   width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;flex:none}
@@ -527,6 +533,10 @@ label.chip:has(input:checked){background:color-mix(in srgb,var(--blue) 16%,var(-
 .radio-seg label:has(input:checked) .muted{color:inherit;opacity:.75}
 .radio-seg label:has(input:focus-visible){outline:3px solid var(--accent);outline-offset:-3px}
 .radio-seg label.is-off{opacity:.45;cursor:not-allowed}
+/* In the narrow side column the ways to send stack, one per row. */
+.event-side .radio-seg{min-width:0;flex-basis:100%;flex-direction:column}
+.event-side .radio-seg label{gap:4px}
+.event-side .radio-seg label + label{border-left:0;border-top:2px solid var(--ink)}
 .msg-foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .msg-foot .hint{flex:1;min-width:200px;margin:0}
 @media (max-width:600px){.radio-seg{min-width:0;flex-basis:100%}.msg-label{width:auto}}
@@ -724,10 +734,8 @@ button.menu-item.danger{color:var(--bad)}
 .sort-switch{display:flex;gap:6px;margin:2px 0 4px}
 .sort-switch button{min-height:0;padding:3px 10px;font-size:12px}
 .sort-switch button[aria-pressed=true]{background:var(--ink);color:var(--paper-light)}
-/* The sidebar on a computer: always open, and it stays in view as the page
-   scrolls, scrolling itself when it is taller than the window. */
+/* The sidebar on a computer is always open. */
 @media (min-width:901px){
-  .event-side{max-height:calc(100vh - 32px);overflow-y:auto}
   details.side-fold>summary{pointer-events:none}
   details.side-fold>summary::before{display:none}
 }

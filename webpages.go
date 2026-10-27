@@ -189,6 +189,8 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 	},
 	// mapsURL opens a place in Google Maps.
 	"mapsURL": mapsURL,
+	// description renders an event description as Discord markdown.
+	"description": descriptionHTML,
 	// person shows someone by their short name with their Discord name
 	// behind it.
 	"person": personHTML,
