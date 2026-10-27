@@ -481,6 +481,10 @@ See `potluck.go`. Only rows of people going are shown or counted, so someone who
 | `sent_at` | INTEGER | When. |
 | `cleared_at` | INTEGER | Set when the date rolls over; 0 is the current date. |
 
+### `event_organisers` — people made organisers of one event, new 2026-10-27
+
+`event_id`, `discord_user_id`, `added_at`/`added_by`, `removed_at`/`removed_by`. Never deleted. A live row lets that person edit that event — `mayEditEvent` checks it after the creator and before the server's editors — and make others organisers of it. Kept across a repeating event's dates.
+
 ### `potluck_requests` — things an organiser asked for, new 2026-10-26
 
 `id`, `event_id`, `category`, `item`, `wanted` (how many people, 1–99), `created_at`/`created_by`, `removed_at`/`removed_by`. Never deleted; at most 25 live. Someone going takes one by bringing it: their `potluck_items` row carries `request_id` (0 for an item nobody asked for), and only items of people going count toward `wanted`. Removing a request leaves those items as they are.

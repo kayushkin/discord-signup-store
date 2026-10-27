@@ -130,11 +130,14 @@ func (s *Server) mayEditAllEventsIn(actor editActor) (bool, error) {
 }
 
 // mayEditEvent reports whether someone may edit one event: whoever created
-// it — matched on created_by, the Discord user id, never a name — or anyone
-// who may edit every event in its server.
+// it — matched on created_by, the Discord user id, never a name — someone
+// made an organiser of it, or anyone who may edit every event in its server.
 func (s *Server) mayEditEvent(actor editActor, ev *Event) (bool, error) {
 	if ev.CreatedBy != "" && ev.CreatedBy == actor.UserID {
 		return true, nil
+	}
+	if organiser, err := s.store.IsEventOrganiser(ev.ID, actor.UserID); err != nil || organiser {
+		return organiser, err
 	}
 	return s.mayEditAllEventsIn(actor)
 }

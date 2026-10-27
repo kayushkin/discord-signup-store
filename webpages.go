@@ -76,6 +76,9 @@ type pageData struct {
 	// RegularIDs are a repeating event's regulars, and RegularsAway those of
 	// them not going on the current date.
 	RegularIDs   map[string]bool
+	// OrganiserIDs are the people made organisers of the event, and the
+	// host, for the badge; the server's own editors carry none.
+	OrganiserIDs map[string]bool
 	RegularsAway []EventRegular
 	// MessagesLeft is how many more messages the event may send in the
 	// current window, and MessagesNextAt when the next is allowed once none

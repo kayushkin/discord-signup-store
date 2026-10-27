@@ -194,7 +194,7 @@
       {{range $i, $s := .Going}}
       <li class="person">
         <span class="place">{{add $i 1}}</span>
-        <span class="who">{{avatar $.AvatarUserIDs $s.DiscordUserID}}{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}{{if index $.RegularIDs $s.DiscordUserID}} <span class="regular-mark" title="A regular: a place on every date">{{template "regular"}}</span>{{end}}</span>
+        <span class="who">{{avatar $.AvatarUserIDs $s.DiscordUserID}}{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}{{if index $.RegularIDs $s.DiscordUserID}} <span class="regular-mark" title="A regular: a place on every date">{{template "regular"}}</span>{{end}}{{if index $.OrganiserIDs $s.DiscordUserID}} <span class="pill organiser-badge">{{if eq $s.DiscordUserID $ev.CreatedBy}}host{{else}}organiser{{end}}</span>{{end}}</span>
         <span class="when">{{shortTime $s.SignedUpAt}}</span>
         {{if $canManage}}<span class="row-actions">
           {{if $ev.RecurrenceRule}}{{$regular := index $.RegularIDs $s.DiscordUserID}}
@@ -203,6 +203,14 @@
             <input type="hidden" name="regular" value="{{if $regular}}false{{else}}true{{end}}">
             <button class="btn-sm regular-toggle{{if $regular}} is-on{{end}}" aria-pressed="{{$regular}}"
                     title="{{if $regular}}A regular: a place on every date. Press to stop.{{else}}Make them a regular: a place on every date{{end}}">{{template "regular"}}<span class="btn-text">{{if $regular}}Regular{{else}}Make regular{{end}}</span></button></form>
+          {{end}}
+          {{if ne $s.DiscordUserID $ev.CreatedBy}}{{$organiser := index $.OrganiserIDs $s.DiscordUserID}}
+          <form method="post" action="/events/{{$ev.ID}}/organisers" data-async{{if not $organiser}}
+                data-confirm="Make {{or $s.ReadableName $s.DisplayName}} an organiser of this event? They can edit it and its people, and make others organisers."{{end}}>
+            <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
+            <input type="hidden" name="organiser" value="{{if $organiser}}false{{else}}true{{end}}">
+            <button class="btn-sm organiser-toggle{{if $organiser}} is-on{{end}}" aria-pressed="{{if $organiser}}true{{else}}false{{end}}"
+                    title="{{if $organiser}}An organiser of this event. Press to take it back.{{else}}Make them an organiser of this event{{end}}">★<span class="btn-text">{{if $organiser}}Organiser{{else}}Make organiser{{end}}</span></button></form>
           {{end}}
           <form method="post" action="/events/{{$ev.ID}}/roster/remove" data-async
                 data-confirm="Take {{or $s.ReadableName $s.DisplayName}} off?{{if $.PlaceFreesOnLeave}} Their place goes to whoever is next on the waitlist, who will be messaged.{{else if and $ev.Capacity (gt $ev.AttendingCount $ev.Capacity)}} The event is over its limit, so nobody moves up.{{end}}">
@@ -327,7 +335,7 @@
     </div>
     {{end}}
     {{if .Roles}}
-    <div class="potluck-cat">
+    <div class="potluck-cat" id="roles">
       <h4>🙋 Roles</h4>
       {{range .Roles}}
       <div class="sheet-role">

@@ -411,6 +411,9 @@ func (s *Server) mayEditEventAsMember(ev *Event, userID string) (bool, error) {
 	if ev.CreatedBy != "" && ev.CreatedBy == userID {
 		return true, nil
 	}
+	if organiser, err := s.store.IsEventOrganiser(ev.ID, userID); err != nil || organiser {
+		return organiser, err
+	}
 	if s.discord == nil {
 		return false, errors.New("checking who may edit needs a Discord client")
 	}

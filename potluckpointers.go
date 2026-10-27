@@ -66,13 +66,24 @@ func (s *Server) replyEphemeralWithComponents(w http.ResponseWriter, content str
 	})
 }
 
-// potluckSheetLink goes after an event's name in #events: a link to its
-// page, where the sheet and its roles are, for an event with a sheet.
-func (s *Server) potluckSheetLink(ev *Event) string {
+// potluckSheetLinks go under an event's name in #events, one to a line: the
+// potluck list, and, when the sheet has roles, signing up to them. Both
+// open the event's page at that part of it. "" for an event without a
+// sheet taking answers.
+func (s *Server) potluckSheetLinks(ev *Event) string {
 	origin := s.webOrigin()
 	if origin == "" || !potluckTakesAnswers(ev) {
 		return ""
 	}
+	page := fmt.Sprintf("%s/events/%d", origin, ev.ID)
 	// Words and an arrow, no emoji, for the reason webRosterLink gives.
-	return fmt.Sprintf("[Potluck sheet →](%s/events/%d)", origin, ev.ID)
+	links := fmt.Sprintf("\n[Potluck list →](%s#potluck)", page)
+	if ev.Potluck != nil && len(ev.Potluck.Roles) > 0 {
+		names := make([]string, len(ev.Potluck.Roles))
+		for i, r := range ev.Potluck.Roles {
+			names[i] = escapeMarkdown(strings.TrimSpace(strings.SplitN(r.Name, "(", 2)[0]))
+		}
+		links += fmt.Sprintf("\n[Sign up to %s →](%s#roles)", strings.Join(names, ", "), page)
+	}
+	return links
 }

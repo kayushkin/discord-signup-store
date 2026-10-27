@@ -117,7 +117,7 @@
     {{end}}
 
     {{if .Roles}}
-    <div class="potluck-cat">
+    <div class="potluck-cat" id="roles">
       <h4>🙋 Roles</h4>
       {{range .Roles}}
       <div class="sheet-role">
@@ -156,7 +156,7 @@
     <div class="card-head"><h3>Going</h3><span class="badge">{{$ev.AttendingCount}}{{if $ev.Capacity}} / {{$ev.Capacity}}{{end}}</span></div>
     {{if not .Going}}<p class="empty">Nobody yet.</p>{{end}}
     <ul class="name-cloud">
-      {{range .Going}}<li>{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}{{if eq .DiscordUserID $ev.CreatedBy}} <span class="pill">host</span>{{end}}</li>{{end}}
+      {{range .Going}}<li>{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}{{if eq .DiscordUserID $ev.CreatedBy}} <span class="pill">host</span>{{else if index $.OrganiserIDs .DiscordUserID}} <span class="pill organiser-badge">organiser</span>{{end}}</li>{{end}}
     </ul>
     {{if .Waiting}}
     <div class="card-head sub-head"><h3>Waitlist</h3><span class="badge">{{len .Waiting}}</span></div>

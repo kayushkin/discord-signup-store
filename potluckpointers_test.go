@@ -79,7 +79,10 @@ func TestAWebJoinToAPotluckLandsOnItsPage(t *testing.T) {
 	}
 	linker := NewServer(store, nil, nil)
 	linker.EnableWeb(&OAuthConfig{RedirectURL: "https://events.example/auth/callback"})
-	if link := linker.potluckSheetLink(mustEvent(t, store, ev.ID)); link != fmt.Sprintf("[Potluck sheet →](https://events.example%s)", eventPath(ev)) {
+	store.AddSheetRole(ev.ID, "Setup (6:00)", 0, "test")
+	store.AddSheetRole(ev.ID, "Teardown", 0, "test")
+	want := fmt.Sprintf("\n[Potluck list →](https://events.example%[1]s#potluck)\n[Sign up to Setup, Teardown →](https://events.example%[1]s#roles)", eventPath(ev))
+	if link := linker.potluckSheetLinks(mustEvent(t, store, ev.ID)); link != want {
 		t.Errorf("#events link = %q", link)
 	}
 }

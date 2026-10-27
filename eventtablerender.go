@@ -157,7 +157,11 @@ type eventTableBlock struct {
 func buildEventTableBlock(ev *Event, roster []Signup, first bool, buttons func(*Event) []any, nameLink func(*Event) string) eventTableBlock {
 	title, _, _ := eventHeadlineParts(ev)
 	if nameLink != nil {
-		if link := nameLink(ev); link != "" {
+		// A link that starts a new line goes under the name; any other sits
+		// beside it.
+		if link := nameLink(ev); strings.HasPrefix(link, "\n") {
+			title += link
+		} else if link != "" {
 			title += " " + link
 		}
 	}
@@ -447,7 +451,7 @@ func (s *Server) RefreshEventTable(guildID string) error {
 		return err
 	}
 	return s.publishPackedTable(guildID, tableSurface{
-		channelID: table.ChannelID, buttons: eventTableButtons, nameLink: s.potluckSheetLink,
+		channelID: table.ChannelID, buttons: eventTableButtons, nameLink: s.potluckSheetLinks,
 		pages:    func() ([]TablePage, error) { return s.store.TablePages(guildID) },
 		setPage:  func(p int, m string) error { return s.store.SetTablePage(guildID, p, m) },
 		dropPage: func(p int) error { return s.store.DeleteTablePage(guildID, p) },

@@ -155,12 +155,18 @@ the other posts once in the event's forum thread with who is bringing what,
 pinging only those who have not said. Discord's own event carries the sheet
 in its description too — the counts, what is still needed, and who is
 bringing what by name — as much as fits after the organiser's words.
+**Organisers of one event.** Whoever may edit an event can make someone on
+it an organiser, from their row on the event page, and take it back. An
+organiser may do on that event whatever its creator may, and nothing on any
+other. The pages badge the host and the organisers.
+
 **Getting a place points at the sheet.** On an event with a sheet, the
 reply to Join, and the DM when someone moves up or an organiser puts them
 down as going, say it is a potluck, name the roles and what is still asked
 for, and carry What I'm bringing and a link to the event page. A Join on
-the web lands on the event page. #events puts a "Potluck sheet →" link
-beside the event's name. Each person may bring up to ten things, and every
+the web lands on the event page. #events puts "Potluck list →" under the
+event's name, and "Sign up to Setup, Teardown →" when the sheet has roles,
+each opening that part of the event page. Each person may bring up to ten things, and every
 surface says they can add another.
 
 **Asking for things.** An organiser can ask for specific things — ice, two

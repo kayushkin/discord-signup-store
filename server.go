@@ -232,6 +232,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/waitlist/move", s.handleWebWaitlistMove)
 	mux.HandleFunc("POST /events/{id}/holds/release", s.handleWebReleaseHold)
 	mux.HandleFunc("POST /events/{id}/regulars", s.handleWebRegular)
+	mux.HandleFunc("POST /events/{id}/organisers", s.handleWebEventOrganiser)
 	mux.HandleFunc("POST /events/{id}/roster-notices", s.handleWebRosterNotices)
 	mux.HandleFunc("POST /events/{id}/message", s.handleWebMessage)
 	mux.HandleFunc("POST /events/{id}/potluck/needs", s.handleWebPotluckNeeds)

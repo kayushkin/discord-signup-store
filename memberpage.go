@@ -47,6 +47,12 @@ func (s *Server) renderMemberEventPage(w http.ResponseWriter, session *WebSessio
 		}
 	}
 	data.Going = hostFirst(data.Going, ev.CreatedBy)
+	organisers, err := s.store.EventOrganisers(ev.ID)
+	if err != nil {
+		log.Printf("[discord-signup] organisers %d: %v", ev.ID, err)
+		problems = append(problems, "Could not read the organisers: "+err.Error())
+	}
+	data.OrganiserIDs = organiserIDsOf(ev, organisers)
 	if data.EventPicture, err = s.eventPicturePanelOf(ev); err != nil {
 		log.Printf("[discord-signup] event picture %d: %v", ev.ID, err)
 		problems = append(problems, "Could not read the picture of who is going: "+err.Error())

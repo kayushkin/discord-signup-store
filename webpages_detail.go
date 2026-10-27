@@ -158,6 +158,11 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		log.Printf("[discord-signup] potluck reminder history %d: %v", ev.ID, err)
 		problems = append(problems, "Could not read the potluck reminders: "+err.Error())
 	}
+	organisers, err := s.store.EventOrganisers(ev.ID)
+	if err != nil {
+		log.Printf("[discord-signup] organisers %d: %v", ev.ID, err)
+		problems = append(problems, "Could not read the organisers: "+err.Error())
+	}
 	requestHistory, err := s.store.PotluckRequestHistory(ev.ID)
 	if err != nil {
 		log.Printf("[discord-signup] potluck request history %d: %v", ev.ID, err)
@@ -207,6 +212,9 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	for _, h := range requestHistory {
 		actors = append(actors, h.CreatedBy, h.RemovedBy)
 	}
+	for _, o := range organisers {
+		actors = append(actors, o.AddedBy, o.RemovedBy)
+	}
 	avatars, avatarsErr := s.store.ChosenAvatarUserIDs()
 	if avatarsErr != nil {
 		log.Printf("[discord-signup] chosen avatars: %v", avatarsErr)
@@ -233,7 +241,8 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	data := pageData{
 		Title: ev.Name, Session: session, Event: ev, Roster: roster, Invites: invites,
 		EventLog: buildEventLog(signupUpdates, edits, invites, regulars, messages,
-			potluckLog{rows: potluckRows, reminders: potluckReminders, roles: roleHistory, requests: requestHistory}, names),
+			potluckLog{rows: potluckRows, reminders: potluckReminders, roles: roleHistory, requests: requestHistory},
+			organisers, names),
 		CanManage:         canManage,
 		EventUnderway:     eventIsUnderway(ev),
 		EventFull:         eventIsFull(ev),
@@ -297,6 +306,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 			data.Maybes = append(data.Maybes, sg)
 		}
 	}
+	data.OrganiserIDs = organiserIDsOf(ev, organisers)
 	if data.Potluck, err = s.potluckPageOf(ev, data.Going, session.DiscordUserID, true); err != nil {
 		log.Printf("[discord-signup] potluck page %d: %v", ev.ID, err)
 		data.Error = strings.TrimSpace(data.Error + " Could not read the potluck sheet: " + err.Error())

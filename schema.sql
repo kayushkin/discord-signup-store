@@ -802,3 +802,19 @@ CREATE TABLE IF NOT EXISTS potluck_requests (
     removed_by  TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_potluck_requests_event ON potluck_requests(event_id, removed_at);
+
+-- event_organisers: people an organiser of an event made organisers of it
+-- too. They may do whatever its creator may on that event, including making
+-- others organisers. Never deleted; removing someone stamps removed_at. The
+-- creator (events.created_by) and the server's own editors are organisers
+-- without a row. See eventorganisers.go.
+CREATE TABLE IF NOT EXISTS event_organisers (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    added_at        INTEGER NOT NULL,
+    added_by        TEXT NOT NULL,
+    removed_at      INTEGER NOT NULL DEFAULT 0,
+    removed_by      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_event_organisers_event ON event_organisers(event_id, removed_at);
