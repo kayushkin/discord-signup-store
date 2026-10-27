@@ -83,16 +83,22 @@
     <div class="potluck-mine">
       <h4>What you're bringing</h4>
       {{if $.MyPotluck}}
-      <ul class="potluck-items">
+      <ul class="people-tags item-tags">
         {{range $.MyPotluck}}
-        <li class="potluck-item">
-          <span class="what">{{.Item}}</span>
-          {{if $.Potluck.TakesAnswers}}
-          <form method="post" action="/events/{{$ev.ID}}/potluck/mine/remove">
+        <li><details class="tag-menu">
+          <summary><span class="tag-name">{{.Item}}</span></summary>
+          <div class="menu">
+            {{if $.Potluck.TakesAnswers}}
+          <form method="post" action="/events/{{$ev.ID}}/potluck/edit" class="menu-edit">
             <input type="hidden" name="item_id" value="{{.ID}}">
-            <button class="btn-sm danger" aria-label="Remove {{.Item}}" title="Remove">{{template "cross"}}</button></form>
-          {{end}}
-        </li>
+            <input name="item" required maxlength="100" value="{{.Item}}" aria-label="What it is">
+            <button class="btn-sm">Save</button></form>
+            <form method="post" action="/events/{{$ev.ID}}/potluck/mine/remove">
+              <input type="hidden" name="item_id" value="{{.ID}}">
+              <button class="menu-item danger">{{template "cross"}} Remove</button></form>
+            {{else}}<p class="muted small">The sheet is closed.</p>{{end}}
+          </div>
+        </details></li>
         {{end}}
       </ul>
       {{else if $.MySaidNothing}}<p class="muted">You said you're not bringing anything. Add something below to change that.</p>
@@ -139,13 +145,25 @@
     <div class="potluck-cat">
       <h4>{{.Emoji}} {{.Label}} <span class="badge">{{.Have}}{{if .Wanted}} / {{.Wanted}}{{end}}</span></h4>
       {{if not .Items}}<p class="empty">Nobody yet.</p>{{end}}
-      <ul class="potluck-items">
-        {{range .Items}}
-        <li class="potluck-item">
-          <span class="what">{{.Item}}<span class="who">{{avatar $.AvatarUserIDs .Person.DiscordUserID}}{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}</span></span>
-        </li>
-        {{end}}
-      </ul>
+    <ul class="people-tags item-tags">
+      {{range .Items}}
+      <li><details class="tag-menu">
+        <summary><span class="tag-name">{{.Item}}</span>{{if eq .Person.DiscordUserID $.Session.DiscordUserID}}<span class="tag-mark">you</span>{{end}}</summary>
+        <div class="menu">
+          <div class="menu-head"><span>{{avatar $.AvatarUserIDs .Person.DiscordUserID}}{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}</span><span class="muted small">is bringing this</span></div>
+          {{if and $.Potluck.TakesAnswers (eq .Person.DiscordUserID $.Session.DiscordUserID)}}
+          <form method="post" action="/events/{{$ev.ID}}/potluck/edit" class="menu-edit">
+            <input type="hidden" name="item_id" value="{{.ID}}">
+            <input name="item" required maxlength="100" value="{{.Item}}" aria-label="What it is">
+            <button class="btn-sm">Save</button></form>
+          <form method="post" action="/events/{{$ev.ID}}/potluck/mine/remove" data-confirm="Take “{{.Item}}” off the sheet?">
+            <input type="hidden" name="item_id" value="{{.ID}}">
+            <button class="menu-item danger">{{template "cross"}} Remove</button></form>
+          {{end}}
+        </div>
+      </details></li>
+      {{end}}
+    </ul>
     </div>
     {{end}}{{end}}
   </section>
@@ -154,8 +172,9 @@
   <section class="card">
     <div class="card-head"><h3>Going</h3><span class="badge">{{$ev.AttendingCount}}{{if $ev.Capacity}} / {{$ev.Capacity}}{{end}}</span></div>
     {{if not .Going}}<p class="empty">Nobody yet.</p>{{end}}
-    <ul class="name-cloud">
-      {{range .Going}}<li>{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}{{if eq .DiscordUserID $ev.CreatedBy}} <span class="pill">host</span>{{else if index $.OrganiserIDs .DiscordUserID}} <span class="pill organiser-badge">organiser</span>{{end}}</li>{{end}}
+    {{template "sortswitch"}}
+    <ul class="name-cloud" data-sortable>
+      {{range .Going}}<li data-name="{{or .ReadableName .DisplayName}}">{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}{{if eq .DiscordUserID $ev.CreatedBy}} <span class="pill">host</span>{{else if index $.OrganiserIDs .DiscordUserID}} <span class="pill organiser-badge">organiser</span>{{end}}</li>{{end}}
     </ul>
     {{if .Waiting}}
     <div class="card-head sub-head"><h3>Waitlist</h3><span class="badge">{{len .Waiting}}</span></div>
@@ -165,8 +184,8 @@
     {{end}}
     {{if .Maybes}}
     <div class="card-head sub-head"><h3>Maybe</h3><span class="badge">{{len .Maybes}}</span></div>
-    <ul class="name-cloud">
-      {{range .Maybes}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}</li>{{end}}
+    <ul class="name-cloud" data-sortable>
+      {{range .Maybes}}<li data-name="{{or .ReadableName .DisplayName}}">{{person .ReadableName .DisplayName .DiscordUserID}}</li>{{end}}
     </ul>
     {{end}}
   </section>

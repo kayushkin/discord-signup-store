@@ -652,3 +652,53 @@ func (s *Store) PotluckHistory(eventID int64) ([]PotluckHistoryRow, error) {
 	}
 	return out, rows.Err()
 }
+
+// EditPotluckItem changes what one item says. Only its owner may, unless
+// asOrganiser. Kept as history, as every change to the sheet is: the old row
+// is taken off under actor and a new one, in the same category and answering
+// the same request, is added for the same person.
+func (s *Store) EditPotluckItem(eventID, itemID int64, text, editorID string, asOrganiser bool, actor string) (*PotluckItem, error) {
+	text = strings.Join(strings.Fields(text), " ")
+	if text == "" || len([]rune(text)) > potluckItemLimit {
+		return nil, fmt.Errorf("%w: say what it is, in at most %d characters", ErrInvalidPotluck, potluckItemLimit)
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback()
+	var old PotluckItem
+	err = tx.QueryRow(`SELECT id, event_id, discord_user_id, category, item, request_id FROM potluck_items
+		WHERE id = ? AND event_id = ? AND removed_at = 0 AND category != ?`, itemID, eventID, potluckNothing).
+		Scan(&old.ID, &old.EventID, &old.DiscordUserID, &old.Category, &old.Item, &old.RequestID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read potluck item: %w", err)
+	}
+	if !asOrganiser && old.DiscordUserID != editorID {
+		return nil, ErrNotFound
+	}
+	if old.Item == text {
+		return &old, nil
+	}
+	ts := now()
+	if _, err := tx.Exec(`UPDATE potluck_items SET removed_at = ?, removed_by = ? WHERE id = ?`, ts, actor, old.ID); err != nil {
+		return nil, fmt.Errorf("take off old item: %w", err)
+	}
+	res, err := tx.Exec(`INSERT INTO potluck_items (event_id, discord_user_id, category, item, added_at, request_id)
+		VALUES (?,?,?,?,?,?)`, eventID, old.DiscordUserID, old.Category, text, ts, old.RequestID)
+	if err != nil {
+		return nil, fmt.Errorf("add edited item: %w", err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, fmt.Errorf("read potluck item id: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return &PotluckItem{ID: id, EventID: eventID, DiscordUserID: old.DiscordUserID, Category: old.Category,
+		Item: text, AddedAt: ts, RequestID: old.RequestID}, nil
+}

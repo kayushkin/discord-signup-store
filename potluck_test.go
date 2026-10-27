@@ -622,3 +622,36 @@ func TestThePotluckIsInTheEventLog(t *testing.T) {
 		t.Error("the log has a line for a “nothing” the add itself replaced")
 	}
 }
+
+// TestEditingAnItem: its owner may change what it says, someone else may
+// not, an organiser may change anyone's; each change is in the log as the
+// old wording off and the new on.
+func TestEditingAnItem(t *testing.T) {
+	_, store, _, mux, token := webTestServer(t)
+	ev := publishedEvent(t, store, 0, "alice", "member", "other")
+	on := true
+	store.UpdateEvent(ev.ID, EventPatch{PotluckEnabled: &on})
+	member, _ := store.CreateWebSession("member", "Member", "", map[string]uint64{"g1": 0})
+	other, _ := store.CreateWebSession("other", "Other", "", map[string]uint64{"g1": 0})
+	pie, _ := store.AddPotluckItem(ev.ID, "member", PotluckFood, "Pie")
+
+	postForm(t, mux, other.Token, eventPath(ev)+"/potluck/edit", url.Values{"item_id": {fmt.Sprint(pie.ID)}, "item": {"Rocks"}})
+	if got := mustSheet(t, store, ev.ID).ItemsOf("member"); got[0].Item != "Pie" {
+		t.Fatalf("someone else changed member's item to %q", got[0].Item)
+	}
+	postForm(t, mux, member.Token, eventPath(ev)+"/potluck/edit", url.Values{"item_id": {fmt.Sprint(pie.ID)}, "item": {"Pumpkin pie"}})
+	mine := mustSheet(t, store, ev.ID).ItemsOf("member")
+	if len(mine) != 1 || mine[0].Item != "Pumpkin pie" || mine[0].Category != PotluckFood {
+		t.Fatalf("after member's edit: %+v", mine)
+	}
+	postForm(t, mux, token, eventPath(ev)+"/potluck/edit", url.Values{"item_id": {fmt.Sprint(mine[0].ID)}, "item": {"Two pumpkin pies"}})
+	if got := mustSheet(t, store, ev.ID).ItemsOf("member"); got[0].Item != "Two pumpkin pies" {
+		t.Fatalf("the organiser's edit did not land: %+v", got)
+	}
+	page := getPage(t, mux, token, eventPath(ev)).Body.String()
+	for _, want := range []string{"potluck: took off 🍲 Pie", "potluck: bringing 🍲 Pumpkin pie", "potluck: bringing 🍲 Two pumpkin pies", `data-sort-mode="az"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the organiser page lacks %q", want)
+		}
+	}
+}

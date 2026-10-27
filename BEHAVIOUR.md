@@ -155,6 +155,13 @@ the other posts once in the event's forum thread with who is bringing what,
 pinging only those who have not said. Discord's own event carries the sheet
 in its description too — the counts, what is still needed, and who is
 bringing what by name — as much as fits after the organiser's words.
+**The event pages.** People show as name tags, in signup order or A to Z;
+pressing one opens what can be done with that person. Things brought show
+as tags too; pressing one shows who is bringing it, and its owner, or an
+organiser, can change its wording or remove it there. On a computer the
+organiser's settings and messages sit in a sidebar that stays in view; on a
+phone they fold, as the rarely used sections do.
+
 **Organisers of one event.** Whoever may edit an event can make someone on
 it an organiser, from their row on the event page, and take it back. An
 organiser may do on that event whatever its creator may, and nothing on any

@@ -239,6 +239,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/potluck/remove", s.handleWebPotluckRemove)
 	mux.HandleFunc("POST /events/{id}/potluck/nudge", s.handleWebPotluckNudge)
 	mux.HandleFunc("POST /events/{id}/potluck/mine", s.handleWebMyPotluckAdd)
+	mux.HandleFunc("POST /events/{id}/potluck/edit", s.handleWebPotluckEdit)
 	mux.HandleFunc("POST /events/{id}/potluck/requests", s.handleWebPotluckRequestAdd)
 	mux.HandleFunc("POST /events/{id}/potluck/requests/remove", s.handleWebPotluckRequestRemove)
 	mux.HandleFunc("POST /events/{id}/potluck/requests/take", s.handleWebMyPotluckRequest)

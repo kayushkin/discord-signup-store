@@ -1,5 +1,6 @@
 {{define "pin"}}<svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true"><path d="M10 18s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="10" cy="8" r="2.2" fill="currentColor"/></svg>{{end}}
 {{define "cross"}}<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>{{end}}
+{{define "sortswitch"}}<div class="sort-switch" role="group" aria-label="Order people by"><button type="button" class="btn-sm ghost" data-sort-mode="signup" aria-pressed="true">Signup order</button><button type="button" class="btn-sm ghost" data-sort-mode="az" aria-pressed="false">A–Z</button></div>{{end}}
 {{define "layout"}}<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -695,25 +696,34 @@ ol.name-cloud li::before{counter-increment:place;content:counter(place) ".";font
 /* People as name tags; pressing one opens a menu of what can be done with
    that person. */
 ul.people-tags{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
-.person-menu{position:relative}
-.person-menu>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;padding:3px 10px;
+.tag-menu{position:relative}
+.tag-menu>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;padding:3px 10px;
   border:1.5px solid var(--ink);border-radius:999px;background:var(--paper-light);font-size:14px;line-height:1.5}
-.person-menu>summary::-webkit-details-marker{display:none}
-.person-menu[open]>summary{background:var(--ink);color:var(--paper-light)}
-.person-menu>summary .avatar{width:20px;height:20px;margin-right:5px}
+.tag-menu>summary::-webkit-details-marker{display:none}
+.tag-menu[open]>summary{background:var(--ink);color:var(--paper-light)}
+.tag-menu>summary .avatar{width:20px;height:20px;margin-right:5px}
 .tag-mark{margin-left:5px;font-size:12px;display:inline-flex}
 .host-mark{text-transform:uppercase;font-weight:800;font-size:10px;letter-spacing:.6px}
 .organiser-mark{color:var(--blue)}
-.person-menu[open] .organiser-mark{color:inherit}
+.tag-menu[open] .organiser-mark{color:inherit}
 .tag-place{font-weight:800;color:var(--dim);margin-right:6px;font-variant-numeric:tabular-nums}
-.person-menu .menu{position:absolute;z-index:30;top:calc(100% + 4px);left:0;min-width:230px;background:var(--paper-light);
+.tag-menu .menu{position:absolute;z-index:30;top:calc(100% + 4px);left:0;min-width:230px;background:var(--paper-light);
   border:2px solid var(--ink);box-shadow:var(--shadow);padding:6px;display:flex;flex-direction:column;gap:2px}
 .menu-head{display:flex;flex-direction:column;gap:2px;padding:4px 8px 8px;border-bottom:1px dotted var(--rule);margin-bottom:4px}
-.person-menu .menu form{margin:0}
+.menu-head:last-child{border-bottom:0;margin-bottom:0;padding-bottom:4px}
+.tag-menu .menu form{margin:0}
 button.menu-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:0;box-shadow:none;
   color:var(--ink);padding:8px;font-size:14px;font-weight:600;transform:none;min-height:0}
 button.menu-item:hover{background:var(--paper-deep);transform:none;box-shadow:none}
 button.menu-item.danger{color:var(--bad)}
+/* A thing brought is a tag too; a long one wraps inside its tag. */
+.item-tags .tag-menu>summary{border-radius:14px;max-width:100%}
+.item-tags .tag-name{overflow-wrap:anywhere}
+.menu-edit{display:flex;gap:6px;padding:4px 6px 6px}
+.menu-edit input{flex:1;min-width:0;padding:6px 8px;font-size:14px}
+.sort-switch{display:flex;gap:6px;margin:2px 0 4px}
+.sort-switch button{min-height:0;padding:3px 10px;font-size:12px}
+.sort-switch button[aria-pressed=true]{background:var(--ink);color:var(--paper-light)}
 /* The sidebar on a computer: always open, and it stays in view as the page
    scrolls, scrolling itself when it is taller than the window. */
 @media (min-width:901px){
@@ -1312,7 +1322,7 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
   });
   openSide();
   if (wide.addEventListener) wide.addEventListener("change", openSide);
-  var menus = document.querySelectorAll("details.person-menu");
+  var menus = document.querySelectorAll("details.tag-menu");
   menus.forEach(function (d) {
     d.addEventListener("toggle", function () {
       if (!d.open) return;
@@ -1323,9 +1333,35 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     });
   });
   document.addEventListener("click", function (e) {
-    if (e.target.closest("details.person-menu")) return;
+    if (e.target.closest("details.tag-menu")) return;
     menus.forEach(function (d) { d.open = false; });
   });
+  // People in signup order, as the page sends them, or A to Z; the choice
+  // is kept for the next page.
+  var lists = document.querySelectorAll("[data-sortable]");
+  lists.forEach(function (list) {
+    Array.prototype.forEach.call(list.children, function (li, i) { li.setAttribute("data-order", i); });
+  });
+  function sortPeople(mode) {
+    lists.forEach(function (list) {
+      var items = Array.prototype.slice.call(list.children);
+      items.sort(function (a, b) {
+        if (mode === "az") return a.getAttribute("data-name").localeCompare(b.getAttribute("data-name"), undefined, { sensitivity: "base" });
+        return a.getAttribute("data-order") - b.getAttribute("data-order");
+      });
+      items.forEach(function (li) { list.appendChild(li); });
+    });
+    document.querySelectorAll("[data-sort-mode]").forEach(function (b) {
+      b.setAttribute("aria-pressed", b.getAttribute("data-sort-mode") === mode ? "true" : "false");
+    });
+    try { localStorage.setItem("dss-people-sort", mode); } catch (e) {}
+  }
+  document.querySelectorAll("[data-sort-mode]").forEach(function (b) {
+    b.addEventListener("click", function () { sortPeople(b.getAttribute("data-sort-mode")); });
+  });
+  var chosen = null;
+  try { chosen = localStorage.getItem("dss-people-sort"); } catch (e) {}
+  if (chosen === "az") sortPeople("az");
 })();
 </script>
 </body></html>{{end}}

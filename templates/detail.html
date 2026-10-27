@@ -189,9 +189,10 @@
       {{if and $ev.Capacity (gt $ev.AttendingCount $ev.Capacity)}}<span class="pill closed">over the limit</span>{{end}}
     </div>
     {{if not .Going}}<p class="empty">Nobody yet.</p>{{end}}
-    <ul class="people-tags">
+    {{template "sortswitch"}}
+    <ul class="people-tags" data-sortable>
       {{range $s := .Going}}{{$organiser := index $.OrganiserIDs $s.DiscordUserID}}{{$regular := index $.RegularIDs $s.DiscordUserID}}
-      <li><details class="person-menu">
+      <li data-name="{{or $s.ReadableName $s.DisplayName}}"><details class="tag-menu">
         <summary>{{avatar $.AvatarUserIDs $s.DiscordUserID}}<span class="tag-name">{{or $s.ReadableName $s.DisplayName}}</span>{{if eq $s.DiscordUserID $ev.CreatedBy}}<span class="tag-mark host-mark" title="Host">host</span>{{else if $organiser}}<span class="tag-mark organiser-mark" title="Organiser">★</span>{{end}}{{if $regular}}<span class="tag-mark" title="A regular">{{template "regular"}}</span>{{end}}</summary>
         <div class="menu">
           <div class="menu-head">{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}<span class="muted small">going since {{shortTime $s.SignedUpAt}}</span></div>
@@ -233,7 +234,7 @@
     <ul class="people-tags">
       {{$last := len .Waiting}}
       {{range .Waiting}}
-      <li><details class="person-menu">
+      <li><details class="tag-menu">
         <summary><span class="tag-place">{{.WaitlistPlace}}</span>{{avatar $.AvatarUserIDs .DiscordUserID}}<span class="tag-name">{{or .ReadableName .DisplayName}}</span></summary>
         <div class="menu">
           <div class="menu-head">{{person .ReadableName .DisplayName .DiscordUserID}}<span class="muted small">number {{.WaitlistPlace}} · waiting since {{shortTime .SignedUpAt}}</span></div>
@@ -267,9 +268,9 @@
 
     {{if .Maybes}}
     <div class="card-head sub-head"><h3>Maybe</h3><span class="badge">{{len .Maybes}}</span></div>
-    <ul class="people-tags">
+    <ul class="people-tags" data-sortable>
       {{range .Maybes}}
-      <li><details class="person-menu">
+      <li data-name="{{or .ReadableName .DisplayName}}"><details class="tag-menu">
         <summary>{{avatar $.AvatarUserIDs .DiscordUserID}}<span class="tag-name">{{or .ReadableName .DisplayName}}</span></summary>
         <div class="menu">
           <div class="menu-head">{{person .ReadableName .DisplayName .DiscordUserID}}<span class="muted small">maybe since {{shortTime .StateChangedAt}}</span></div>
@@ -429,14 +430,23 @@
     <div class="potluck-cat">
     <h4>{{.Emoji}} {{.Label}} <span class="badge">{{.Have}}{{if .Wanted}} / {{.Wanted}}{{end}}</span></h4>
     {{if not .Items}}<p class="empty">Nothing yet.</p>{{end}}
-    <ul class="potluck-items">
+    <ul class="people-tags item-tags">
       {{range .Items}}
-      <li class="potluck-item">
-        <span class="what">{{.Item}}<span class="who">{{avatar $.AvatarUserIDs .Person.DiscordUserID}}{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}</span></span>
-        <form method="post" action="/events/{{$ev.ID}}/potluck/remove" data-async data-confirm="Take “{{.Item}}” off the sheet?">
-          <input type="hidden" name="item_id" value="{{.ID}}">
-          <button class="btn-sm danger" aria-label="Remove {{.Item}}" title="Remove">{{template "cross"}}</button></form>
-      </li>
+      <li><details class="tag-menu">
+        <summary><span class="tag-name">{{.Item}}</span></summary>
+        <div class="menu">
+          <div class="menu-head"><span>{{avatar $.AvatarUserIDs .Person.DiscordUserID}}{{person .Person.ReadableName .Person.DisplayName .Person.DiscordUserID}}</span><span class="muted small">is bringing this</span></div>
+          {{if $.Potluck.TakesAnswers}}
+          <form method="post" action="/events/{{$ev.ID}}/potluck/edit" data-async class="menu-edit">
+            <input type="hidden" name="item_id" value="{{.ID}}">
+            <input name="item" required maxlength="100" value="{{.Item}}" aria-label="What it is">
+            <button class="btn-sm">Save</button></form>
+          <form method="post" action="/events/{{$ev.ID}}/potluck/remove" data-async data-confirm="Take “{{.Item}}” off the sheet?">
+            <input type="hidden" name="item_id" value="{{.ID}}">
+            <button class="menu-item danger">{{template "cross"}} Remove</button></form>
+          {{end}}
+        </div>
+      </details></li>
       {{end}}
     </ul>
     </div>

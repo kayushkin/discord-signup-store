@@ -154,3 +154,36 @@ func (s *Server) handleWebMyPotluckRemove(w http.ResponseWriter, r *http.Request
 	s.inBackground(func() { s.syncAfterChange(ev.ID, nil) })
 	s.redirectWithNotice(w, r, ev.ID, "Taken off the sheet.")
 }
+
+// handleWebPotluckEdit changes what an item says: any item for whoever may
+// edit the event, the viewer's own for anyone else.
+func (s *Server) handleWebPotluckEdit(w http.ResponseWriter, r *http.Request) {
+	session := s.requireSession(w, r)
+	if session == nil {
+		return
+	}
+	ev, canManage := s.webEventForMember(w, r, session)
+	if ev == nil {
+		return
+	}
+	itemID, err := strconv.ParseInt(r.FormValue("item_id"), 10, 64)
+	if err != nil {
+		http.Error(w, "item_id must be an integer", http.StatusBadRequest)
+		return
+	}
+	actor := ActorUser
+	if canManage {
+		actor = "web:" + session.DiscordUserID
+	}
+	item, err := s.store.EditPotluckItem(ev.ID, itemID, r.FormValue("item"), session.DiscordUserID, canManage, actor)
+	if errors.Is(err, ErrNotFound) {
+		s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: that is not on the sheet, or not yours.")
+		return
+	}
+	if err != nil {
+		s.redirectWithNotice(w, r, ev.ID, potluckWebRefusal(err))
+		return
+	}
+	s.inBackground(func() { s.syncAfterChange(ev.ID, nil) })
+	s.redirectWithNotice(w, r, ev.ID, "Changed to "+item.Item+".")
+}
