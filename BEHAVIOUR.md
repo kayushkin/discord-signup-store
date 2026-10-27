@@ -155,6 +155,14 @@ the other posts once in the event's forum thread with who is bringing what,
 pinging only those who have not said. Discord's own event carries the sheet
 in its description too — the counts, what is still needed, and who is
 bringing what by name — as much as fits after the organiser's words.
+**Getting a place points at the sheet.** On an event with a sheet, the
+reply to Join, and the DM when someone moves up or an organiser puts them
+down as going, say it is a potluck, name the roles and what is still asked
+for, and carry What I'm bringing and a link to the event page. A Join on
+the web lands on the event page. #events puts a "Potluck sheet →" link
+beside the event's name. Each person may bring up to ten things, and every
+surface says they can add another.
+
 **Asking for things.** An organiser can ask for specific things — ice, two
 people; a folding table, one — each in a category. Wherever someone says
 what they are bringing, the open requests come first: at the top of the

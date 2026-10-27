@@ -95,6 +95,7 @@
         </li>
         {{end}}
       </ul>
+      <p class="hint">Bringing more than one thing? Add each one below.</p>
       {{else if $.MySaidNothing}}<p class="muted">You said you're not bringing anything. Add something below to change that.</p>
       {{else}}<p class="muted">You haven't said yet.</p>{{end}}
       {{if .TakesAnswers}}
@@ -102,8 +103,8 @@
         <select name="category" aria-label="Category">
           {{range $.PotluckCategories}}<option value="{{.Key}}">{{.Emoji}} {{.Label}}</option>{{end}}
         </select>
-        <input name="item" required maxlength="100" placeholder="What you're bringing" aria-label="What you're bringing">
-        <button>Add</button>
+        <input name="item" required maxlength="100" placeholder="{{if $.MyPotluck}}Something else you're bringing{{else}}What you're bringing{{end}}" aria-label="What you're bringing">
+        <button>{{if $.MyPotluck}}Add another{{else}}Add{{end}}</button>
       </form>
       {{if not (or $.MyPotluck $.MySaidNothing)}}
       <form method="post" action="/events/{{$ev.ID}}/potluck/mine/nothing">

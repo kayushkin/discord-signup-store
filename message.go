@@ -321,8 +321,13 @@ func (s *Server) tellTheyHaveAPlace(ev *Event, promoted *Signup, content string)
 	if ev.StartsAt > 0 {
 		content += fmt.Sprintf("\n🗓️ <t:%d:F>", ev.StartsAt)
 	}
+	content += potluckJoinNote(ev)
+	payload := map[string]any{"content": content}
+	if components := s.potluckJoinComponents(ev); components != nil {
+		payload["components"] = components
+	}
 
-	err := s.sendEventDM(ev, promoted.DiscordUserID, map[string]any{"content": content}, DMKindPromoted, "getting a place")
+	err := s.sendEventDM(ev, promoted.DiscordUserID, payload, DMKindPromoted, "getting a place")
 	if err == nil {
 		return
 	}

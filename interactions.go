@@ -337,6 +337,10 @@ func (s *Server) handleJoin(w http.ResponseWriter, in *Interaction, eventID int6
 		s.replyEphemeral(w, describeJoin(result, nil))
 		return
 	}
+	if result.Signup.State == StateAttending && !result.AlreadySignedUp {
+		s.replyEphemeralWithComponents(w, describeJoin(result, ev)+potluckJoinNote(ev), s.potluckJoinComponents(ev))
+		return
+	}
 	s.replyEphemeral(w, describeJoin(result, ev))
 }
 

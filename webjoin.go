@@ -142,6 +142,13 @@ func (s *Server) handleWebJoin(w http.ResponseWriter, r *http.Request) {
 	case result.Signup.State == StateWaitlisted:
 		signupPageRedirectWithMascotReaction(w, r, fmt.Sprintf("%s is full, so you are on the waitlist at number %d. If someone drops out you move up and get a message on Discord.", ev.Name, result.Signup.WaitlistPlace), "waitlisted")
 	default:
+		// An event with a sheet sends them to its page, where the sheet is.
+		if joined, err := s.store.GetEvent(ev.ID); err == nil && potluckTakesAnswers(joined) {
+			http.Redirect(w, r, fmt.Sprintf("/events/%d?%s&%s", ev.ID,
+				noticeQuery(fmt.Sprintf("You're going to %s. It's a potluck — say below what you're bringing.", ev.Name)),
+				mascotReactionQuery("joined")), http.StatusSeeOther)
+			return
+		}
 		signupPageRedirectWithMascotReaction(w, r, fmt.Sprintf("You're going to %s.", ev.Name), "joined")
 	}
 }

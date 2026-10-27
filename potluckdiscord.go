@@ -217,6 +217,9 @@ func potluckPanel(ev *Event, userID string, going bool, note string) map[string]
 			parts[i] = c.Emoji + " " + it.Item
 		}
 		fmt.Fprintf(&b, "\n**You're bringing:** %s\n", strings.Join(parts, " · "))
+		if len(mine) < potluckItemsPerPerson {
+			fmt.Fprintf(&b, "Bringing more? Add another with the buttons below — up to %d things.\n", potluckItemsPerPerson)
+		}
 	case sheet.SaidNothing(userID):
 		b.WriteString("\n**You said you're not bringing anything.**\n")
 	default:

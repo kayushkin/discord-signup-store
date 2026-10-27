@@ -64,7 +64,7 @@ const (
 	// potluckItemLimit is the most characters one item may have.
 	potluckItemLimit = 100
 	// potluckItemsPerPerson stops one person filling the sheet.
-	potluckItemsPerPerson = 6
+	potluckItemsPerPerson = 10
 	// potluckWantedLimit is the most an organiser may ask for of one category.
 	potluckWantedLimit = 99
 )

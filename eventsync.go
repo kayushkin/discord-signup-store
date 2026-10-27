@@ -326,9 +326,10 @@ func eventPublishSignature(ev *Event, roster []Signup) string {
 	// The potluck sheet is on the card, with a link to the event page.
 	// Written only when the event has one, so every signature from before the
 	// sheet stayed as it was; "2" since the link, and "3" since Discord's
-	// own event's description carries the sheet, so each redraws once.
+	// own event's description carries the sheet, so each redraws once; "4"
+	// since #events links the sheet.
 	if ev.PotluckEnabled {
-		b.WriteString("\x00potluck3")
+		b.WriteString("\x00potluck4")
 	}
 	if p := ev.Potluck; p != nil {
 		for _, c := range potluckCategories {
