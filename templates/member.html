@@ -34,6 +34,17 @@
       <span class="muted">{{$ev.AttendingCount}}{{if $ev.Capacity}} of {{$ev.Capacity}}{{end}} going{{if .FreePlaces}} · {{.FreePlaces}} free{{end}}{{if $ev.WaitlistCount}} · {{$ev.WaitlistCount}} waiting{{end}}</span>
     </form>
     {{end}}
+    {{if and $ev.RecurrenceRule (or .IAmRegular (eq $ev.Status "open"))}}
+    {{/* A regular is put on as going every time the event repeats. */}}
+    <form method="post" class="member-regular" action="/events/{{$ev.ID}}/regulars">
+      <input type="hidden" name="discord_user_id" value="{{.Session.DiscordUserID}}">
+      <input type="hidden" name="regular" value="{{if .IAmRegular}}false{{else}}true{{end}}">
+      {{if .IAmRegular}}<button class="ghost btn-sm regular-toggle is-on">{{template "regular"}} Stop being a regular</button>
+      <span class="muted">You're put on as going every time it repeats.</span>
+      {{else}}<button class="ghost btn-sm regular-toggle">{{template "regular"}} Be a regular</button>
+      <span class="muted">Be put on as going every time it repeats.</span>{{end}}
+    </form>
+    {{end}}
   </section>
 
   {{with .EventPicture}}{{if .Signature}}
@@ -174,7 +185,7 @@
     {{if not .Going}}<p class="empty">Nobody yet.</p>{{end}}
     {{template "sortswitch"}}
     <ul class="name-cloud" data-sortable>
-      {{range .Going}}<li data-name="{{or .ReadableName .DisplayName}}">{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}{{if eq .DiscordUserID $ev.CreatedBy}} <span class="pill">host</span>{{else if index $.OrganiserIDs .DiscordUserID}} <span class="pill organiser-badge">organiser</span>{{end}}</li>{{end}}
+      {{range .Going}}<li data-name="{{or .ReadableName .DisplayName}}">{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}{{if eq .DiscordUserID $ev.CreatedBy}} <span class="pill">host</span>{{else if index $.OrganiserIDs .DiscordUserID}} <span class="pill organiser-badge">organiser</span>{{end}}{{if index $.RegularIDs .DiscordUserID}} <span class="regular-mark" title="A regular">{{template "regular"}}</span>{{end}}</li>{{end}}
     </ul>
     {{if .Waiting}}
     <div class="card-head sub-head"><h3>Waitlist</h3><span class="badge">{{len .Waiting}}</span></div>

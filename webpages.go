@@ -113,6 +113,9 @@ type pageData struct {
 	MyPotluck []PotluckItem
 	// MySaidNothing is whether they said they are bringing nothing.
 	MySaidNothing bool
+	// IAmRegular is whether the viewer is a current regular of a repeating
+	// event, for the members' page.
+	IAmRegular bool
 	// PotluckCategories are the sheet's categories, for the members' form.
 	PotluckCategories []potluckCategory
 	// ViewerHasAvatar is whether the signed-in viewer has an approved avatar,

@@ -253,42 +253,102 @@ func renameStoredPinValues(db *sql.DB) error {
 }
 
 // handleWebRegular makes someone a regular or stops them being one
-// (regular=true or false). Making someone a regular also puts them on the
-// current date as going, if they are not already.
+// (regular=true or false). An organiser may do it for anyone; anyone else in
+// the server only for themselves. An organiser making someone a regular also
+// puts them on the current date as going, past the limit if need be; someone
+// making themselves one joins the current date as Join does.
 func (s *Server) handleWebRegular(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {
 		return
 	}
-	ev, canManage := s.webEvent(w, r, session)
+	ev, canManage := s.webEventForMember(w, r, session)
 	if ev == nil {
 		return
 	}
-	if !canManage {
-		http.Error(w, "you cannot edit this event", http.StatusForbidden)
+	userID := strings.TrimSpace(r.FormValue("discord_user_id"))
+	themselves := userID == session.DiscordUserID
+	if !canManage && !themselves {
+		http.Error(w, "you can make only yourself a regular of an event you cannot edit", http.StatusForbidden)
 		return
 	}
 	if ev.RecurrenceRule == "" {
 		s.redirectWithNotice(w, r, ev.ID, "Only a repeating event has regulars: there is no next date to keep a place on.")
 		return
 	}
-	userID := strings.TrimSpace(r.FormValue("discord_user_id"))
 	actor := "web:" + session.DiscordUserID
 	if r.FormValue("regular") != "true" {
 		err := s.store.EndRegular(ev.ID, userID, actor)
 		if errors.Is(err, ErrNotFound) {
-			s.redirectWithNotice(w, r, ev.ID, "They were not a regular.")
+			s.redirectWithNotice(w, r, ev.ID, regularWords(themselves, "You were not a regular.", "They were not a regular."))
 			return
 		}
 		if err != nil {
 			log.Printf("[discord-signup] end regular %s on %d: %v", userID, ev.ID, err)
-			http.Error(w, "could not stop them being a regular: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "could not stop being a regular: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		s.redirectWithNotice(w, r, ev.ID, "No longer a regular. They keep this date's place, and are not put on the next one.")
+		s.redirectWithNotice(w, r, ev.ID, regularWords(themselves,
+			"You're no longer a regular. You keep this date's place, and are not put on the next one.",
+			"No longer a regular. They keep this date's place, and are not put on the next one."))
+		return
+	}
+	if themselves && !canManage {
+		s.redirectWithNotice(w, r, ev.ID, s.makeSelfRegular(ev, session))
 		return
 	}
 	s.redirectWithNotice(w, r, ev.ID, s.makePersonRegular(ev, session, userID))
+}
+
+// regularWords picks the sentence for someone acting on themselves or on
+// someone else.
+func regularWords(themselves bool, aboutYou, aboutThem string) string {
+	if themselves {
+		return aboutYou
+	}
+	return aboutThem
+}
+
+// makeSelfRegular makes the viewer a regular of an event they cannot edit.
+// On this date they join as Join does — going if there is room, otherwise the
+// waitlist — and from the next date on they are put on as going, as every
+// regular is.
+func (s *Server) makeSelfRegular(ev *Event, session *WebSession) string {
+	if s.discord == nil {
+		return "Nothing was changed: there is no Discord client, so your name in the server cannot be read."
+	}
+	member, err := s.discord.GuildMember(ev.GuildID, session.DiscordUserID)
+	if errors.Is(err, ErrUnknownMember) {
+		return "Nothing was changed: Discord says you are no longer in this event's server."
+	}
+	if err != nil {
+		log.Printf("[discord-signup] self regular event=%d: read member %s: %v", ev.ID, session.DiscordUserID, err)
+		return "Nothing was changed: could not read your name in the server from Discord. Try again."
+	}
+	placed := ""
+	result, err := s.joinAsThemselves(ev.ID, session.DiscordUserID, member.DisplayName, JoinedViaWebPage)
+	switch {
+	case errors.Is(err, ErrEventNotOpen):
+		placed = "Signups for this date are closed, so you are not on it."
+	case errors.Is(err, ErrEventFull):
+		placed = "This date is full and has no waitlist, so you are not on it."
+	case err != nil:
+		log.Printf("[discord-signup] self regular join event=%d user=%s: %v", ev.ID, session.DiscordUserID, err)
+		return "Nothing was changed: something went wrong signing you up. Try again."
+	case result.Signup.State == StateWaitlisted:
+		placed = fmt.Sprintf("This date is full, so you are on its waitlist at number %d.", result.Signup.WaitlistPlace)
+	default:
+		placed = "You're going on this date."
+	}
+	made, err := s.store.MakeRegular(ev.ID, session.DiscordUserID, member.DisplayName, "web:"+session.DiscordUserID)
+	if err != nil {
+		log.Printf("[discord-signup] make %s a regular of %d: %v", session.DiscordUserID, ev.ID, err)
+		return placed + " Could not make you a regular: " + err.Error() + "."
+	}
+	if !made {
+		return placed + " You were already a regular."
+	}
+	return placed + " You're a regular now: you are put on as going every time the event repeats."
 }
 
 // makePersonRegular makes one person a regular and puts them on the current

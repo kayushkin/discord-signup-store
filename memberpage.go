@@ -53,6 +53,20 @@ func (s *Server) renderMemberEventPage(w http.ResponseWriter, session *WebSessio
 		problems = append(problems, "Could not read the organisers: "+err.Error())
 	}
 	data.OrganiserIDs = organiserIDsOf(ev, organisers)
+	data.RegularIDs = map[string]bool{}
+	if ev.RecurrenceRule != "" {
+		regulars, err := s.store.Regulars(ev.ID)
+		if err != nil {
+			log.Printf("[discord-signup] regulars %d: %v", ev.ID, err)
+			problems = append(problems, "Could not read the regulars: "+err.Error())
+		}
+		for _, p := range regulars {
+			if p.EndedAt == 0 {
+				data.RegularIDs[p.DiscordUserID] = true
+			}
+		}
+		data.IAmRegular = data.RegularIDs[session.DiscordUserID]
+	}
 	if data.EventPicture, err = s.eventPicturePanelOf(ev); err != nil {
 		log.Printf("[discord-signup] event picture %d: %v", ev.ID, err)
 		problems = append(problems, "Could not read the picture of who is going: "+err.Error())

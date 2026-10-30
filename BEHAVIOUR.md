@@ -68,7 +68,9 @@ Join takes them past it instead of onto the waitlist.
 
 **Regulars are on every date.** On a repeating event an organiser can make
 someone a regular — from their row in Going, or with *Make regular* when adding
-them. When the date rolls over and the roster clears, every regular is put
+them — and anyone in the server can make themselves one with *Be a regular* on
+the event's page, which also joins them to the current date as Join does.
+When the date rolls over and the roster clears, every regular is put
 back on as going, past the limit if it comes to that. The host becomes a
 regular the first time the event repeats; if they stop being one, that stands.
 

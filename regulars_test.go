@@ -2,6 +2,7 @@ package discordsignup
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -98,5 +99,54 @@ func TestTheEventPageMakesSomeoneARegular(t *testing.T) {
 	postForm(t, mux, token, eventPath(ev)+"/regulars", url.Values{"discord_user_id": {"bob"}, "regular": {"false"}})
 	if regulars, _ = store.Regulars(ev.ID); regulars[0].EndedAt == 0 {
 		t.Error("bob is still a regular after stopping")
+	}
+}
+
+// TestAMemberMakesThemselvesARegular from the members' page: they join this
+// date as Join does, are a regular from then on, can stop, and cannot make
+// anyone else one.
+func TestAMemberMakesThemselvesARegular(t *testing.T) {
+	_, store, fake, mux, _ := webTestServer(t)
+	fake.on(http.MethodGet, "/guilds/g1/members/member", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"nick":"Member","user":{"id":"member","username":"member"}}`))
+	})
+	ev := publishedEvent(t, store, 1, "host")
+	rule := "FREQ=WEEKLY"
+	store.UpdateEvent(ev.ID, EventPatch{RecurrenceRule: &rule})
+	store.Join(ev.ID, "first", "First", JoinedViaButton)
+	member, _ := store.CreateWebSession("member", "Member", "", map[string]uint64{"g1": 0})
+
+	page := getPage(t, mux, member.Token, eventPath(ev)).Body.String()
+	if !strings.Contains(page, "Be a regular") {
+		t.Fatal("the members' page of a repeating event does not offer Be a regular")
+	}
+	postForm(t, mux, member.Token, eventPath(ev)+"/regulars", url.Values{"discord_user_id": {"member"}, "regular": {"true"}})
+	regulars, _ := store.Regulars(ev.ID)
+	if len(regulars) != 1 || regulars[0].DiscordUserID != "member" || regulars[0].EndedAt != 0 {
+		t.Fatalf("regulars = %+v, want member", regulars)
+	}
+	roster, _ := store.Roster(ev.ID, false)
+	for _, sg := range roster {
+		if sg.DiscordUserID == "member" && sg.State != StateWaitlisted {
+			t.Errorf("member is %s on a full date, want the waitlist as Join gives", sg.State)
+		}
+	}
+	if page := getPage(t, mux, member.Token, eventPath(ev)).Body.String(); !strings.Contains(page, "Stop being a regular") {
+		t.Error("the members' page does not offer a regular Stop being a regular")
+	}
+
+	refused := httptest.NewRequest(http.MethodPost, eventPath(ev)+"/regulars",
+		strings.NewReader(url.Values{"discord_user_id": {"first"}, "regular": {"true"}}.Encode()))
+	refused.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	refused.AddCookie(&http.Cookie{Name: sessionCookieName, Value: member.Token})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, refused)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("a member making someone else a regular = %d, want 403", rec.Code)
+	}
+
+	postForm(t, mux, member.Token, eventPath(ev)+"/regulars", url.Values{"discord_user_id": {"member"}, "regular": {"false"}})
+	if regulars, _ = store.Regulars(ev.ID); regulars[0].EndedAt == 0 {
+		t.Error("member is still a regular after stopping")
 	}
 }
