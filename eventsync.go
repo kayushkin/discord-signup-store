@@ -341,9 +341,14 @@ func eventPublishSignature(ev *Event, roster []Signup) string {
 		for _, r := range p.Requests {
 			fmt.Fprintf(&b, "\x04%d\x00%s\x00%s\x00%d", r.ID, r.Category, r.Item, r.Wanted)
 		}
-		for _, r := range p.Roles {
-			fmt.Fprintf(&b, "\x03%d\x00%s\x00%d\x00%s", r.ID, r.Name, r.Capacity, strings.Join(r.Members, ","))
-		}
+	}
+	// Roles have their own switch since 2026-10-30, so an event with them
+	// on redraws once.
+	if ev.RolesEnabled {
+		b.WriteString("\x00roles1")
+	}
+	for _, r := range ev.Roles {
+		fmt.Fprintf(&b, "\x03%d\x00%s\x00%d\x00%s", r.ID, r.Name, r.Capacity, strings.Join(r.Members, ","))
 	}
 	for _, sg := range roster {
 		fmt.Fprintf(&b, "\x01%s\x00%s\x00%s\x00%s", sg.DiscordUserID, sg.DisplayName, sg.ReadableName, sg.State)

@@ -16,6 +16,7 @@ import (
 func TestJoiningAPotluckSaysToBringSomething(t *testing.T) {
 	srv, priv, store := testServer(t)
 	ev := potluckEvent(t, store)
+	switchRolesOn(t, store, ev.ID)
 	store.AddSheetRole(ev.ID, "Setup", 0, "test")
 	store.AddPotluckRequest(ev.ID, PotluckSupplies, "Ice", 1, "test")
 	plain := testEvent(t, store, 0)
@@ -79,10 +80,11 @@ func TestAWebJoinToAPotluckLandsOnItsPage(t *testing.T) {
 	}
 	linker := NewServer(store, nil, nil)
 	linker.EnableWeb(&OAuthConfig{RedirectURL: "https://events.example/auth/callback"})
+	store.UpdateEvent(ev.ID, EventPatch{RolesEnabled: &on})
 	store.AddSheetRole(ev.ID, "Setup (6:00)", 0, "test")
 	store.AddSheetRole(ev.ID, "Teardown", 0, "test")
 	want := fmt.Sprintf("\n[Potluck list →](https://events.example%[1]s#potluck)\n[Sign up to Setup, Teardown →](https://events.example%[1]s#roles)", eventPath(ev))
-	if link := linker.potluckSheetLinks(mustEvent(t, store, ev.ID)); link != want {
+	if link := linker.potluckAndRolesLinks(mustEvent(t, store, ev.ID)); link != want {
 		t.Errorf("#events link = %q", link)
 	}
 }

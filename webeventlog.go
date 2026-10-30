@@ -159,6 +159,7 @@ var eventUpdateFieldWords = map[string]string{
 	"waitlist_disabled": "waitlist",
 	"pictures_disabled": "picture",
 	"potluck_enabled":   "potluck sheet",
+	"roles_enabled":     "roles",
 	"created_by":        "host",
 }
 
@@ -188,7 +189,7 @@ func (n eventLogNames) eventUpdateValue(field, value string) template.HTML {
 			return "off"
 		}
 		return "on"
-	case "potluck_enabled":
+	case "potluck_enabled", "roles_enabled":
 		if value == "true" {
 			return "on"
 		}

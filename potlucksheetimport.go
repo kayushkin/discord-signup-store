@@ -397,7 +397,7 @@ func (s *Server) pollPotluckSheet(imp PotluckSheetImport) (int, error) {
 			unmatched = append(unmatched, row.Name)
 			continue
 		}
-		did, err := s.store.copySheetRow(ev.ID, userID, row, ev.Potluck.Roles)
+		did, err := s.store.copySheetRow(ev.ID, userID, row, ev.Roles)
 		if err != nil {
 			return changed, errors.Join(err, s.store.recordSheetPoll(ev.ID, err, unmatched))
 		}

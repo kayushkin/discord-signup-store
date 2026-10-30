@@ -113,6 +113,11 @@ func renderSignupMessage(ev *Event, roster []Signup) map[string]any {
 			writePotluckSection(&b, ev.Potluck, potluckTakesAnswers(ev), false)
 		}
 	}
+	if ev.RolesEnabled {
+		var roles strings.Builder
+		writeSheetRolesSection(&roles, ev.Roles, sheetRolesTakeAnswers(ev))
+		b.WriteString(roles.String())
+	}
 
 	content := b.String()
 	if len(content) > discordMessageContentLimit {
@@ -128,11 +133,15 @@ func renderSignupMessage(ev *Event, roster []Signup) map[string]any {
 	}
 	if ev.Status == StatusOpen {
 		payload["components"] = append(signupComponents(ev), sheetRoleRow(ev)...)
-	} else if potluckTakesAnswers(ev) {
+	} else if potluckTakesAnswers(ev) || sheetRolesTakeAnswers(ev) {
 		// Signups closed, but the people going can still say what they
 		// will bring and take roles.
-		payload["components"] = append([]any{map[string]any{"type": componentTypeActionRow,
-			"components": []any{potluckButton(ev.ID)}}}, sheetRoleRow(ev)...)
+		var rows []any
+		if potluckTakesAnswers(ev) {
+			rows = append(rows, map[string]any{"type": componentTypeActionRow,
+				"components": []any{potluckButton(ev.ID)}})
+		}
+		payload["components"] = append(rows, sheetRoleRow(ev)...)
 	} else {
 		// An empty array, not a missing key. Omitting components on an edit
 		// leaves the old buttons in place, so a closed event would keep a live
@@ -321,9 +330,9 @@ func (s *Server) tellTheyHaveAPlace(ev *Event, promoted *Signup, content string)
 	if ev.StartsAt > 0 {
 		content += fmt.Sprintf("\n🗓️ <t:%d:F>", ev.StartsAt)
 	}
-	content += potluckJoinNote(ev)
+	content += potluckAndRolesJoinNote(ev)
 	payload := map[string]any{"content": content}
-	if components := s.potluckJoinComponents(ev); components != nil {
+	if components := s.potluckAndRolesJoinComponents(ev); components != nil {
 		payload["components"] = components
 	}
 

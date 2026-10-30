@@ -307,6 +307,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		}
 	}
 	data.OrganiserIDs = organiserIDsOf(ev, organisers)
+	data.Roles = sheetRolesPageOf(ev, data.Going, session.DiscordUserID)
 	if data.Potluck, err = s.potluckPageOf(ev, data.Going, session.DiscordUserID, true); err != nil {
 		log.Printf("[discord-signup] potluck page %d: %v", ev.ID, err)
 		data.Error = strings.TrimSpace(data.Error + " Could not read the potluck sheet: " + err.Error())
@@ -418,6 +419,10 @@ func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 	if r.Form.Has("potluck") {
 		on := r.FormValue("potluck") == "on"
 		patch.PotluckEnabled = &on
+	}
+	if r.Form.Has("roles") {
+		on := r.FormValue("roles") == "on"
+		patch.RolesEnabled = &on
 	}
 	// Raising the limit here does exactly what raising it from Discord does,
 	// because it is now the same function rather than a second copy of the

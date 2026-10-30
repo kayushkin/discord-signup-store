@@ -115,9 +115,14 @@ type Event struct {
 	PicturesDisabled bool `json:"pictures_disabled"`
 	// PotluckEnabled shows the potluck sheet: who is bringing what. Off — the
 	// zero value — is an ordinary event. See potluck.go.
-	PotluckEnabled bool  `json:"potluck_enabled"`
-	CreatedAt      int64 `json:"created_at"`
-	UpdatedAt      int64 `json:"updated_at"`
+	PotluckEnabled bool `json:"potluck_enabled"`
+	// RolesEnabled shows the event's roles — setup, teardown and the like —
+	// that people going sign up to. Off, the zero value, hides them and keeps
+	// them. Apart from the potluck sheet: either can be on alone. See
+	// sheetroles.go.
+	RolesEnabled bool  `json:"roles_enabled"`
+	CreatedAt    int64 `json:"created_at"`
+	UpdatedAt    int64 `json:"updated_at"`
 
 	// AttendingCount and WaitlistCount are computed by the read path. They are
 	// never stored, so they can never disagree with the signups table.
@@ -129,6 +134,9 @@ type Event struct {
 	// Potluck is the sheet as it stands, read with the counts; nil when the
 	// event has no sheet.
 	Potluck *PotluckSheet `json:"potluck,omitempty"`
+	// Roles are the event's roles with who going is in each, read with the
+	// counts; nil when roles are off.
+	Roles []SheetRole `json:"roles,omitempty"`
 }
 
 // Signup is one person's place on one roster.
@@ -426,6 +434,10 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	{"events", "pictures_disabled", "INTEGER NOT NULL DEFAULT 0"},
 	// Whether the event has a potluck sheet. See potluck.go.
 	{"events", "potluck_enabled", "INTEGER NOT NULL DEFAULT 0"},
+	// Whether the event has roles people going sign up to. See sheetroles.go.
+	// Roles were part of the potluck sheet until 2026-10-30; see
+	// columnBackfills.
+	{"events", "roles_enabled", "INTEGER NOT NULL DEFAULT 0"},
 	// An organiser asking for an event's scene again, with a comment.
 	{"event_scenes", "request_kind", "TEXT NOT NULL DEFAULT ''"},
 	{"event_scenes", "request_comment", "TEXT NOT NULL DEFAULT ''"},
@@ -619,6 +631,15 @@ func dropRetiredTables(db *sql.DB) error {
 	return nil
 }
 
+// columnBackfills set a column for the rows already there, once, right after
+// ensureColumns adds it; keyed "table.column".
+var columnBackfills = map[string]string{
+	// Roles were part of the potluck sheet until 2026-10-30, so an event
+	// whose sheet was on and had roles keeps them on.
+	"events.roles_enabled": `UPDATE events SET roles_enabled = 1 WHERE potluck_enabled = 1
+		AND EXISTS (SELECT 1 FROM sheet_roles r WHERE r.event_id = events.id AND r.removed_at = 0)`,
+}
+
 func ensureColumns(db *sql.DB) error {
 	for _, c := range columnsAddedAfterFirstRelease {
 		have, err := columnExists(db, c.table, c.column)
@@ -633,6 +654,11 @@ func ensureColumns(db *sql.DB) error {
 			return fmt.Errorf("add column %s.%s: %w", c.table, c.column, err)
 		}
 		log.Printf("[discord-signup] added column %s.%s", c.table, c.column)
+		if backfill, ok := columnBackfills[c.table+"."+c.column]; ok {
+			if _, err := db.Exec(backfill); err != nil {
+				return fmt.Errorf("fill new column %s.%s: %w", c.table, c.column, err)
+			}
+		}
 	}
 	return nil
 }
@@ -719,14 +745,14 @@ func (s *Store) CreateEvent(e Event) (*Event, error) {
 		                    attending_role_id, waitlist_role_id, starts_at, ends_at,
 		                    location, entity_type, recurrence_rule, timezone, origin,
 		                    discord_interested_count, discord_synced_at, created_by,
-		                    pictures_disabled, potluck_enabled, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		                    pictures_disabled, potluck_enabled, roles_enabled, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		e.GuildID, e.ChannelID, e.MessageID, e.DiscordScheduledEventID,
 		e.Name, e.Description, e.Capacity, e.Status,
 		e.AttendingRoleID, e.WaitlistRoleID, e.StartsAt, e.EndsAt,
 		e.Location, e.EntityType, e.RecurrenceRule, e.Timezone, e.Origin,
 		e.DiscordInterestedCount, e.DiscordSyncedAt, e.CreatedBy, boolToInt(e.PicturesDisabled),
-		boolToInt(e.PotluckEnabled), ts, ts)
+		boolToInt(e.PotluckEnabled), boolToInt(e.RolesEnabled), ts, ts)
 	if err != nil {
 		return nil, fmt.Errorf("insert event: %w", err)
 	}
@@ -745,7 +771,7 @@ const eventColumns = `id, guild_id, channel_id, message_id, discord_scheduled_ev
 	title_written_at, native_title_written, forum_title_written,
 	native_name_written, native_description_written, native_starts_at_written,
 	native_ends_at_written, native_location_written, native_written_at,
-	new_events_message_id, waitlist_disabled, pictures_disabled, potluck_enabled, created_at, updated_at`
+	new_events_message_id, waitlist_disabled, pictures_disabled, potluck_enabled, roles_enabled, created_at, updated_at`
 
 func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 	var e Event
@@ -757,7 +783,7 @@ func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 		&e.TitleWrittenAt, &e.NativeTitleWritten, &e.ForumTitleWritten,
 		&e.NativeWritten.Name, &e.NativeWritten.Description, &e.NativeWritten.StartsAt,
 		&e.NativeWritten.EndsAt, &e.NativeWritten.Location, &e.NativeWritten.At,
-		&e.NewEventsMessageID, &e.WaitlistDisabled, &e.PicturesDisabled, &e.PotluckEnabled, &e.CreatedAt, &e.UpdatedAt)
+		&e.NewEventsMessageID, &e.WaitlistDisabled, &e.PicturesDisabled, &e.PotluckEnabled, &e.RolesEnabled, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -851,6 +877,11 @@ func (s *Store) fillCounts(e *Event) error {
 	}
 	if e.PotluckEnabled {
 		if e.Potluck, err = s.PotluckSheetOf(e.ID); err != nil {
+			return err
+		}
+	}
+	if e.RolesEnabled {
+		if e.Roles, err = s.readSheetRoles(e.ID); err != nil {
 			return err
 		}
 	}
@@ -1020,6 +1051,9 @@ func (s *Store) UpdateEvent(id int64, patch EventPatch) (*Event, error) {
 	if patch.PotluckEnabled != nil {
 		add("potluck_enabled", boolToInt(*patch.PotluckEnabled))
 	}
+	if patch.RolesEnabled != nil {
+		add("roles_enabled", boolToInt(*patch.RolesEnabled))
+	}
 	if patch.DiscordInterestedCount != nil {
 		add("discord_interested_count", *patch.DiscordInterestedCount)
 		add("discord_synced_at", now())
@@ -1074,6 +1108,9 @@ type EventPatch struct {
 	// PotluckEnabled shows or hides the potluck sheet. Hiding it keeps what
 	// people said, for when it is shown again.
 	PotluckEnabled *bool `json:"potluck_enabled"`
+	// RolesEnabled shows or hides the roles. Hiding them keeps the roles and
+	// who took them, for when they are shown again.
+	RolesEnabled *bool `json:"roles_enabled"`
 }
 
 // validateRecurrence enforces the one rule that cannot be defaulted: a

@@ -116,9 +116,10 @@ func (s *Store) RollOverOccurrence(eventID, nextStart, nextEnd int64) (withdrawn
 		ts, HoldOutcomeExpired, ActorRecurrence, eventID); err != nil {
 		return nil, nil, fmt.Errorf("expire held places: %w", err)
 	}
-	// What people said they would bring, and the reminders asking them, were
-	// for the date that ran. The organiser's list of what is wanted stays.
-	if err := clearPotluckForNextDateTx(tx, eventID, ts); err != nil {
+	// What people said they would bring, the reminders asking them, and who
+	// took each role were for the date that ran. The organiser's list of
+	// what is wanted, and the roles, stay.
+	if err := clearPotluckAndRolesForNextDateTx(tx, eventID, ts); err != nil {
 		return nil, nil, err
 	}
 	for i := range withdrawn {

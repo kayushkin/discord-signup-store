@@ -194,7 +194,7 @@ func potluckPanel(ev *Event, userID string, going bool, note string) map[string]
 		}
 		fmt.Fprintf(&b, "%s %s\n", c.Category.Emoji, strings.Join(parts, " · "))
 	}
-	for _, r := range sheet.Roles {
+	for _, r := range ev.Roles {
 		mentions := make([]string, len(r.Members))
 		for i, id := range r.Members {
 			mentions[i] = "<@" + id + ">"
@@ -261,7 +261,7 @@ func potluckPanel(ev *Event, userID string, going bool, note string) map[string]
 		map[string]any{"type": componentTypeActionRow, "components": categoryButtons},
 		map[string]any{"type": componentTypeActionRow, "components": answerButtons},
 	}
-	if len(sheet.Roles) > 0 {
+	if sheetRolesTakeAnswers(ev) && len(ev.Roles) > 0 {
 		data["components"] = append(data["components"].([]any), map[string]any{"type": componentTypeActionRow,
 			"components": sheetRoleButtons(ev, sheetRolePanelPrefix, userID)})
 	}
@@ -273,13 +273,13 @@ func potluckPanel(ev *Event, userID string, going bool, note string) map[string]
 }
 
 // addEventPageButton puts a link to the event's page on the web beside a
-// potluck event's buttons, where everyone going can read the whole sheet: a
-// card for a full event has room only for the counts. A link button rather
-// than a link in the text, so Discord shows no preview. Nothing when the
-// web pages are off or the event has no sheet.
+// the buttons of an event with a potluck sheet or roles, where everyone going
+// can read the whole sheet: a card for a full event has room only for the
+// counts. A link button rather than a link in the text, so Discord shows no
+// preview. Nothing when the web pages are off or the event has neither.
 func (s *Server) addEventPageButton(card map[string]any, ev *Event) {
 	origin := s.webOrigin()
-	if origin == "" || !ev.PotluckEnabled {
+	if origin == "" || (!ev.PotluckEnabled && !ev.RolesEnabled) {
 		return
 	}
 	link := map[string]any{

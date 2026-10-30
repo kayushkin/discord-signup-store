@@ -451,7 +451,7 @@ func (s *Server) RefreshEventTable(guildID string) error {
 		return err
 	}
 	return s.publishPackedTable(guildID, tableSurface{
-		channelID: table.ChannelID, buttons: eventTableButtons, nameLink: s.potluckSheetLinks,
+		channelID: table.ChannelID, buttons: eventTableButtons, nameLink: s.potluckAndRolesLinks,
 		pages:    func() ([]TablePage, error) { return s.store.TablePages(guildID) },
 		setPage:  func(p int, m string) error { return s.store.SetTablePage(guildID, p, m) },
 		dropPage: func(p int) error { return s.store.DeleteTablePage(guildID, p) },

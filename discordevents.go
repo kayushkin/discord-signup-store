@@ -923,6 +923,10 @@ func signupBlock(ev *Event, roster []Signup, boardChannelID string, budget int) 
 			remaining -= len([]rune(section))
 		}
 	}
+	if line := sheetRolesLine(ev.Roles); line != "" && len([]rune(line))+1 <= remaining {
+		b.WriteString("\n" + line)
+		remaining -= len([]rune(line)) + 1
+	}
 	if line := rosterLine("Going", attending, remaining); line != "" {
 		b.WriteString(line)
 		remaining -= len([]rune(line))

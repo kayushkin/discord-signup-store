@@ -450,29 +450,6 @@
     </ul>
     </div>
     {{end}}{{end}}
-    {{if .Roles}}
-    <div class="potluck-cat" id="roles">
-      <h4>🙋 Roles</h4>
-      {{range .Roles}}
-      <div class="sheet-role">
-        <div class="sheet-role-head">
-          <strong>{{.Name}}</strong> <span class="badge">{{.Count}}</span>
-          {{if and $.Potluck.TakesAnswers $.Potluck.ViewerGoing}}
-          <form method="post" action="/events/{{$ev.ID}}/potluck/roles/toggle" data-async>
-            <input type="hidden" name="role_id" value="{{.ID}}">
-            {{if .Mine}}<button class="btn-sm ghost">Leave</button>{{else if .Full}}<button class="btn-sm" disabled>Full</button>{{else}}<button class="btn-sm">Count me in</button>{{end}}
-          </form>
-          {{end}}
-          <form method="post" action="/events/{{$ev.ID}}/potluck/roles/remove" data-async data-confirm="Take the role {{.Name}} off the sheet? Who was in it stays in the log.">
-            <input type="hidden" name="role_id" value="{{.ID}}">
-            <button class="btn-sm danger" aria-label="Remove the role {{.Name}}" title="Remove the role">{{template "cross"}}</button></form>
-        </div>
-        {{if .People}}<ul class="name-cloud">{{range .People}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}</li>{{end}}</ul>
-        {{else}}<p class="empty">Nobody yet.</p>{{end}}
-      </div>
-      {{end}}
-    </div>
-    {{end}}
     {{if .Nothing}}
     <p class="muted small">Not bringing anything:
       {{range $i, $p := .Nothing}}{{if $i}}, {{end}}{{person $p.ReadableName $p.DisplayName $p.DiscordUserID}}{{end}}</p>
@@ -509,18 +486,45 @@
         <input name="wanted" type="number" min="1" max="99" value="1" aria-label="How many people" title="How many people" class="narrow-number">
         <button>Ask</button>
       </form>
-      <h4>Add a role</h4>
-      <form method="post" action="/events/{{$ev.ID}}/potluck/roles" data-async class="potluck-add">
-        <input name="name" required maxlength="40" placeholder="e.g. Setup (6:00)" aria-label="Role name">
-        <input name="capacity" type="number" min="0" max="999" placeholder="cap" aria-label="Cap, empty for none" title="Cap, empty for none" class="narrow-number">
-        <button>Add</button>
-      </form>
       <h4>How many of each</h4>
       <form method="post" action="/events/{{$ev.ID}}/potluck/needs" data-async class="potluck-needs">
         {{range .Categories}}
         <label>{{.Emoji}} {{.Label}} <input type="number" name="wanted_{{.Key}}" min="0" max="99" value="{{if .Wanted}}{{.Wanted}}{{end}}" placeholder="any"></label>
         {{end}}
         <button>Save</button>
+      </form>
+    </details>
+  </section>
+  {{end}}
+
+  {{with .Roles}}
+  <section class="card" id="roles">
+    <div class="card-head"><h3>🙋 Roles</h3></div>
+    {{if not .Roles}}<p class="empty">No roles yet. Add one below — setup, teardown, coming for part of it.</p>{{end}}
+    {{range .Roles}}
+    <div class="sheet-role">
+      <div class="sheet-role-head">
+        <strong>{{.Name}}</strong> <span class="badge">{{.Count}}</span>
+        {{if and $.Roles.TakesAnswers $.Roles.ViewerGoing}}
+        <form method="post" action="/events/{{$ev.ID}}/roles/toggle" data-async>
+          <input type="hidden" name="role_id" value="{{.ID}}">
+          {{if .Mine}}<button class="btn-sm ghost">Leave</button>{{else if .Full}}<button class="btn-sm" disabled>Full</button>{{else}}<button class="btn-sm">Count me in</button>{{end}}
+        </form>
+        {{end}}
+        <form method="post" action="/events/{{$ev.ID}}/roles/remove" data-async data-confirm="Take the role {{.Name}} off the event? Who was in it stays in the log.">
+          <input type="hidden" name="role_id" value="{{.ID}}">
+          <button class="btn-sm danger" aria-label="Remove the role {{.Name}}" title="Remove the role">{{template "cross"}}</button></form>
+      </div>
+      {{if .People}}<ul class="name-cloud">{{range .People}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}</li>{{end}}</ul>
+      {{else}}<p class="empty">Nobody yet.</p>{{end}}
+    </div>
+    {{end}}
+    <details class="fold" id="roles-setup" data-remember{{if not .Roles}} open{{end}}>
+      <summary>Add a role</summary>
+      <form method="post" action="/events/{{$ev.ID}}/roles" data-async class="potluck-add">
+        <input name="name" required maxlength="40" placeholder="e.g. Setup (6:00)" aria-label="Role name">
+        <input name="capacity" type="number" min="0" max="999" placeholder="cap" aria-label="Cap, empty for none" title="Cap, empty for none" class="narrow-number">
+        <button>Add</button>
       </form>
     </details>
   </section>
@@ -555,7 +559,7 @@
          only which one is lit does, so what a press will do is always the
          button's own word. */}}
     <details class="fold settings-fold side-fold" data-remember>
-    <summary>Settings <span class="muted small">· signups {{if $open}}open{{else}}closed{{end}}{{if $ev.PotluckEnabled}} · potluck on{{end}}</span></summary>
+    <summary>Settings <span class="muted small">· signups {{if $open}}open{{else}}closed{{end}}{{if $ev.PotluckEnabled}} · potluck on{{end}}{{if $ev.RolesEnabled}} · roles on{{end}}</span></summary>
     <div class="control">
       <h4 id="signups-label">Signups</h4>
       <div class="seg-control" role="radiogroup" aria-labelledby="signups-label">
@@ -607,6 +611,18 @@
               data-confirm="Take the potluck sheet off the event? What people said is kept, and comes back if you turn it on again.">
           <input type="hidden" name="potluck" value="off">
           <button role="radio" aria-checked="{{not $ev.PotluckEnabled}}" {{if not $ev.PotluckEnabled}}tabindex="-1"{{end}}>Off</button></form>
+      </div>
+    </div>
+    <div class="control">
+      <h4 id="roles-label">Roles to sign up to</h4>
+      <div class="seg-control" role="radiogroup" aria-labelledby="roles-label">
+        <form method="post" action="/events/{{$ev.ID}}" data-async>
+          <input type="hidden" name="roles" value="on">
+          <button role="radio" data-tone="ok" aria-checked="{{$ev.RolesEnabled}}" {{if $ev.RolesEnabled}}tabindex="-1"{{end}}>On</button></form>
+        <form method="post" action="/events/{{$ev.ID}}" data-async
+              data-confirm="Take the roles off the event? The roles and who took them are kept, and come back if you turn them on again.">
+          <input type="hidden" name="roles" value="off">
+          <button role="radio" aria-checked="{{not $ev.RolesEnabled}}" {{if not $ev.RolesEnabled}}tabindex="-1"{{end}}>Off</button></form>
       </div>
     </div>
     {{$watch := .RosterWatch}}

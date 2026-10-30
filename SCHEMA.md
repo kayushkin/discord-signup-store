@@ -279,6 +279,8 @@ Each server's own mascot; a server with no row shows the site's own, Maleeha, bu
 
 `events.potluck_enabled` (INTEGER, 0): the event has a potluck sheet. Turning it off hides the sheet and keeps every row, for when it is turned on again. Logged in `event_updates` as `potluck sheet`.
 
+`events.roles_enabled` (INTEGER, 0), new 2026-10-30: the event has roles to sign up to (`sheet_roles`), apart from the potluck sheet. Turning it off hides the roles and keeps every row. When the column was added, it was set on for each event whose sheet was on and had a live role, since roles were part of the sheet until then. Logged in `event_updates` as `roles_enabled`, shown as `roles`.
+
 ### `event_scenes` — the scene an event's picture is set in, new 2026-09-28
 
 `event_id` PK; `request_kind` (`change`, `new`, `''`), `request_comment`, `requested_at`, `requested_by`: an organiser asking for the scene again, cleared by the scene or failure that answers it; `details_signature`, the name, description, place, weekday and time, repeat rule and stages (from the limit) it was written from, and the scene format (`eventDetailsSignature`, `eventSceneFormat`: a new format asks every event for a new scene); `scene_code`, the scene in `art/SCENE.md`'s form, casting each person as a posed character; `failure`, `failed_details_signature` and `failed_at`, the last scene that did not come out and from which details, tried again an hour later; `updated_at`. A model writes it; a change to the details asks for a new one, a change to who is going does not.
@@ -489,7 +491,7 @@ See `potluck.go`. Only rows of people going are shown or counted, so someone who
 
 `id`, `event_id`, `category`, `item`, `wanted` (how many people, 1–99), `created_at`/`created_by`, `removed_at`/`removed_by`. Never deleted; at most 25 live. Someone going takes one by bringing it: their `potluck_items` row carries `request_id` (0 for an item nobody asked for), and only items of people going count toward `wanted`. Removing a request leaves those items as they are.
 
-### `sheet_roles` and `sheet_role_signups` — roles on the potluck sheet, new 2026-10-26
+### `sheet_roles` and `sheet_role_signups` — roles, new 2026-10-26; their own switch since 2026-10-30
 
 Roles people going take themselves — setup, teardown, coming for part of the event — not Discord roles (`sheetroles.go`). `sheet_roles`: `id`, `event_id`, `name`, `capacity` (0 for no cap), `created_at`/`created_by`, `removed_at`/`removed_by` (0 while on the sheet). At most 5 live per event. `sheet_role_signups`: `role_id`, `event_id`, `discord_user_id`, `source` (`''` or `sheet`), `joined_at`, `left_at`/`left_by` (`user`, `web:<id>`, `sheet-import`, `recurrence`). Neither is ever deleted; only rows of people going count, and a new date of a repeating event clears the signups and keeps the roles.
 

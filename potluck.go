@@ -105,8 +105,6 @@ type PotluckSheet struct {
 	// BringingNothing are the Discord user ids of people going who said they
 	// are bringing nothing.
 	BringingNothing []string `json:"bringing_nothing"`
-	// Roles are the sheet's roles, with who is in each. See sheetroles.go.
-	Roles []SheetRole `json:"roles"`
 	// Requests are the things an organiser asked for, with who is
 	// bringing each. See potluckrequests.go.
 	Requests []PotluckRequest `json:"requests"`
@@ -248,9 +246,6 @@ func (s *Store) PotluckSheetOf(eventID int64) (*PotluckSheet, error) {
 		sheet.Items = append(sheet.Items, it)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if sheet.Roles, err = s.readSheetRoles(eventID); err != nil {
 		return nil, err
 	}
 	if sheet.Requests, err = s.readPotluckRequests(eventID, sheet.Items); err != nil {
@@ -463,9 +458,10 @@ func (s *Store) SetPotluckNeeds(eventID int64, needs map[string]int, actor strin
 // many of a category an event wants.
 const potluckWantedField = "potluck_wanted_"
 
-// clearPotluckForNextDateTx starts a repeating event's next date with an
-// empty sheet and nobody reminded. The needs stay.
-func clearPotluckForNextDateTx(tx *sql.Tx, eventID, ts int64) error {
+// clearPotluckAndRolesForNextDateTx starts a repeating event's next date
+// with an empty sheet, nobody reminded and nobody in a role. The needs and
+// the roles stay.
+func clearPotluckAndRolesForNextDateTx(tx *sql.Tx, eventID, ts int64) error {
 	if _, err := tx.Exec(`UPDATE potluck_items SET removed_at = ?, removed_by = ?
 		WHERE event_id = ? AND removed_at = 0`, ts, ActorRecurrence, eventID); err != nil {
 		return fmt.Errorf("clear potluck sheet: %w", err)
@@ -476,7 +472,7 @@ func clearPotluckForNextDateTx(tx *sql.Tx, eventID, ts int64) error {
 	}
 	if _, err := tx.Exec(`UPDATE sheet_role_signups SET left_at = ?, left_by = ?
 		WHERE event_id = ? AND left_at = 0`, ts, ActorRecurrence, eventID); err != nil {
-		return fmt.Errorf("clear sheet roles: %w", err)
+		return fmt.Errorf("clear roles: %w", err)
 	}
 	return nil
 }
@@ -499,9 +495,6 @@ func writePotluckSection(b *strings.Builder, sheet *PotluckSheet, open, withItem
 	if line := sheet.AskedForLine(); line != "" {
 		b.WriteString(line + "\n")
 	}
-	if line := sheet.RolesLine(); line != "" {
-		b.WriteString(line + "\n")
-	}
 	if !withItems {
 		if len(sheet.Items) > 0 {
 			b.WriteString("Press **What I'm bringing**, or open the event page, to see who is bringing what.\n")
@@ -517,16 +510,6 @@ func writePotluckSection(b *strings.Builder, sheet *PotluckSheet, open, withItem
 			parts[i] = fmt.Sprintf("<@%s> %s", it.DiscordUserID, it.Item)
 		}
 		fmt.Fprintf(b, "%s %s\n", c.Category.Emoji, strings.Join(parts, " · "))
-	}
-	for _, r := range sheet.Roles {
-		if len(r.Members) == 0 {
-			continue
-		}
-		mentions := make([]string, len(r.Members))
-		for i, id := range r.Members {
-			mentions[i] = "<@" + id + ">"
-		}
-		fmt.Fprintf(b, "%s %s: %s\n", sheetRoleEmoji, r.Name, strings.Join(mentions, ", "))
 	}
 }
 
@@ -581,9 +564,6 @@ func potluckDescriptionSection(sheet *PotluckSheet, roster []Signup, budget int)
 		head += "\n" + line
 	}
 	if line := sheet.AskedForLine(); line != "" {
-		head += "\n" + line
-	}
-	if line := sheet.RolesLine(); line != "" {
 		head += "\n" + line
 	}
 	if len([]rune(head)) > budget {

@@ -169,13 +169,14 @@ it an organiser, from their row on the event page, and take it back. An
 organiser may do on that event whatever its creator may, and nothing on any
 other. The pages badge the host and the organisers.
 
-**Getting a place points at the sheet.** On an event with a sheet, the
-reply to Join, and the DM when someone moves up or an organiser puts them
-down as going, say it is a potluck, name the roles and what is still asked
-for, and carry What I'm bringing and a link to the event page. A Join on
-the web lands on the event page. #events puts "Potluck list →" under the
-event's name, and "Sign up to Setup, Teardown →" when the sheet has roles,
-each opening that part of the event page. Each person may bring up to ten things, and every
+**Getting a place points at the sheet and the roles.** On an event with a
+sheet or roles, the reply to Join, and the DM when someone moves up or an
+organiser puts them down as going, say it is a potluck, name the roles and
+what is still asked for, and carry What I'm bringing (with a sheet), a
+button per role (with roles) and a link to the event page. A Join on the
+web lands on the event page. #events puts "Potluck list →" under the
+event's name when it has a sheet, and "Sign up to Setup, Teardown →" when
+it has roles, each opening that part of the event page. Each person may bring up to ten things, and every
 surface says they can add another.
 
 **Asking for things.** An organiser can ask for specific things — ice, two
@@ -186,11 +187,15 @@ category's form, and on the event page with an "I'll bring this" button.
 Taking one adds it as their item. The card, the forum check-in, the
 reminder DMs and Discord's own event list what is still asked for.
 
-**Roles on the sheet.** An organiser can add up to five roles to it —
-setup, teardown, coming for part of it — each with an optional cap. Anyone
-going takes one, or leaves it, with its own button on the card, in the What
-I'm bringing view or on the event page; a full role refuses. They are not
-Discord roles: nothing is granted on Discord.
+**Roles** are a switch of their own on the event page, apart from the
+potluck sheet, so an event can have either, both or neither. With roles on,
+an organiser can add up to five — setup, teardown, coming for part of it —
+each with an optional cap, and the card lists them under **🙋 Roles** with
+who is in each. Anyone going takes one, or leaves it, with its own button
+on the card, in the What I'm bringing view when there is a sheet, or on the
+event page; a full role refuses. Switching roles off hides them and keeps
+them and who took them. They are not Discord roles: nothing is granted on
+Discord.
 
 A repeating event's next date starts with an empty sheet and empty roles;
 what it needs, and the roles, carry over. The organiser's log has every change to the sheet: each thing

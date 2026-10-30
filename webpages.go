@@ -113,6 +113,8 @@ type pageData struct {
 	MyPotluck []PotluckItem
 	// MySaidNothing is whether they said they are bringing nothing.
 	MySaidNothing bool
+	// Roles is the event's roles section; nil when roles are off.
+	Roles *sheetRolesPage
 	// IAmRegular is whether the viewer is a current regular of a repeating
 	// event, for the members' page.
 	IAmRegular bool

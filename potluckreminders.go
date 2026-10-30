@@ -327,7 +327,7 @@ func potluckForumNudge(ev *Event, organiser string, roster, unanswered []Signup)
 		mentions[i] = "<@" + sg.DiscordUserID + ">"
 	}
 	roles := ""
-	for _, r := range sheet.Roles {
+	for _, r := range ev.Roles {
 		people := make([]string, len(r.Members))
 		for i, id := range r.Members {
 			people[i] = names[id]

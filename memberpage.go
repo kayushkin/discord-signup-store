@@ -75,6 +75,7 @@ func (s *Server) renderMemberEventPage(w http.ResponseWriter, session *WebSessio
 		log.Printf("[discord-signup] potluck page %d: %v", ev.ID, err)
 		problems = append(problems, "Could not read the potluck sheet: "+err.Error())
 	}
+	data.Roles = sheetRolesPageOf(ev, data.Going, session.DiscordUserID)
 	if ev.Potluck != nil {
 		data.MyPotluck = ev.Potluck.ItemsOf(session.DiscordUserID)
 		data.MySaidNothing = ev.Potluck.SaidNothing(session.DiscordUserID)
@@ -83,9 +84,9 @@ func (s *Server) renderMemberEventPage(w http.ResponseWriter, session *WebSessio
 	s.render(w, "member.html", data)
 }
 
-// memberPotluckEvent loads the event a member's potluck form names, for
+// memberFormEvent loads the event a member's potluck or roles form names, for
 // anyone in its server, or writes the response and returns nil.
-func (s *Server) memberPotluckEvent(w http.ResponseWriter, r *http.Request) (*Event, *WebSession) {
+func (s *Server) memberFormEvent(w http.ResponseWriter, r *http.Request) (*Event, *WebSession) {
 	session := s.requireSession(w, r)
 	if session == nil {
 		return nil, nil
@@ -112,7 +113,7 @@ func potluckWebRefusal(err error) string {
 
 // handleWebMyPotluckAdd adds one thing the viewer will bring.
 func (s *Server) handleWebMyPotluckAdd(w http.ResponseWriter, r *http.Request) {
-	ev, session := s.memberPotluckEvent(w, r)
+	ev, session := s.memberFormEvent(w, r)
 	if ev == nil {
 		return
 	}
@@ -131,7 +132,7 @@ func (s *Server) handleWebMyPotluckAdd(w http.ResponseWriter, r *http.Request) {
 
 // handleWebMyPotluckNothing says the viewer is bringing nothing.
 func (s *Server) handleWebMyPotluckNothing(w http.ResponseWriter, r *http.Request) {
-	ev, session := s.memberPotluckEvent(w, r)
+	ev, session := s.memberFormEvent(w, r)
 	if ev == nil {
 		return
 	}
@@ -146,7 +147,7 @@ func (s *Server) handleWebMyPotluckNothing(w http.ResponseWriter, r *http.Reques
 // handleWebMyPotluckRemove takes one of the viewer's own items off, or
 // their "bringing nothing".
 func (s *Server) handleWebMyPotluckRemove(w http.ResponseWriter, r *http.Request) {
-	ev, session := s.memberPotluckEvent(w, r)
+	ev, session := s.memberFormEvent(w, r)
 	if ev == nil {
 		return
 	}

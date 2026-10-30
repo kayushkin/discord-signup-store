@@ -378,7 +378,7 @@ func (s *Server) handleWebPotluckRequestRemove(w http.ResponseWriter, r *http.Re
 // handleWebMyPotluckRequest takes a request for the viewer, from either
 // event page.
 func (s *Server) handleWebMyPotluckRequest(w http.ResponseWriter, r *http.Request) {
-	ev, session := s.memberPotluckEvent(w, r)
+	ev, session := s.memberFormEvent(w, r)
 	if ev == nil {
 		return
 	}
