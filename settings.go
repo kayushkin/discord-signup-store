@@ -41,6 +41,7 @@ const (
 	SettingGatewayDisabled                    = "gateway_disabled"
 	SettingFileStoreURL                       = "file_store_url"
 	SettingFileStoreServiceToken              = "file_store_service_token"
+	SettingMessageStoreURL                    = "message_store_url"
 )
 
 // DefaultListenAddress is where the service listens with nothing set. Loopback,
@@ -97,6 +98,8 @@ func SettingDefinitions() []servicesettings.Definition {
 			Description: "Where file-store keeps the photos people upload for their avatars until the drawing is approved. Unset, or with no token, turns avatar uploads off; everything else keeps working. Set in a host-local drop-in with the token."},
 		{Key: SettingFileStoreServiceToken, EnvironmentVariable: "FILE_STORE_SERVICE_TOKEN", Kind: msg.ServiceSettingKindSecret, ValueType: msg.ServiceSettingValueTypeString,
 			Description: "file-store's service token. It reads every file file-store holds, so it comes from ~/.config/file-store-tokens.env through a host-local drop-in, never the tracked unit."},
+		{Key: SettingMessageStoreURL, EnvironmentVariable: "MESSAGE_STORE_URL", Kind: msg.ServiceSettingKindWiring, ValueType: msg.ServiceSettingValueTypeString,
+			Description: "Where message-store answers. Each DM channel the bot opens or is written to in is filed there, so message-import-discord-bot can read it: Discord gives a bot no list of its DMs. Unset files nothing; everything else keeps working."},
 	}
 }
 

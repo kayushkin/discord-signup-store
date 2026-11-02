@@ -222,6 +222,9 @@ func (c *DiscordClient) SendDirectMessageRecorded(userID string, payload map[str
 	if err := json.Unmarshal(raw, &channel); err != nil {
 		return "", "", fmt.Errorf("decode dm channel: %w", err)
 	}
+	if c.onDirectMessageChannel != nil {
+		c.onDirectMessageChannel(channel.ID, userID)
+	}
 	raw, err = c.do(http.MethodPost, "/channels/"+escapePathSegment(channel.ID)+"/messages", payload)
 	if err != nil {
 		return "", "", err

@@ -29,6 +29,7 @@ Environment=DISCORD_SIGNUP_ADDR=127.0.0.1:8312
 Environment=DISCORD_APPLICATION_PUBLIC_KEY=
 
 Environment=AUTH_STORE_URL=http://127.0.0.1:8303
+Environment=MESSAGE_STORE_URL=http://127.0.0.1:8337
 # Which auth-store credential holds the bot token.
 Environment=DISCORD_CREDENTIAL_PROVIDER=discord
 Environment=DISCORD_CREDENTIAL_ACCOUNT=default

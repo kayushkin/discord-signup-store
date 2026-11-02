@@ -59,6 +59,11 @@ func main() {
 	)
 
 	srvAPI := discordsignup.NewServer(store, verifier, discord)
+	if messages := discordsignup.NewMessageStoreClient(settings.String(discordsignup.SettingMessageStoreURL)); messages != nil {
+		srvAPI.EnableMessageStore(messages)
+	} else {
+		log.Print("DM channels are not filed with message-store (MESSAGE_STORE_URL unset)")
+	}
 
 	// The zone a time typed into a Discord form is read in. One per deployment
 	// because a modal holds five fields and a timezone picker is not worth one

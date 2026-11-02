@@ -97,6 +97,7 @@ func (g *GatewayListener) onDirectMessage(_ *discordgo.Session, m *discordgo.Mes
 	if m.GuildID != "" || m.Author == nil || m.Author.Bot {
 		return
 	}
+	g.server.fileDirectMessageChannel(m.ChannelID, m.Author.ID)
 	repliedTo := ""
 	if m.MessageReference != nil {
 		repliedTo = m.MessageReference.MessageID

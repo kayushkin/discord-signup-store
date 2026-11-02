@@ -42,6 +42,10 @@ type DiscordClient struct {
 
 	mu     sync.Mutex
 	cached string
+
+	// onDirectMessageChannel, when set, hears of each DM channel opened, with
+	// the person it is with.
+	onDirectMessageChannel func(channelID, discordUserID string)
 }
 
 // TokenResolver hands back the bot token. It is a function rather than a string

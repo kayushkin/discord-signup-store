@@ -61,6 +61,8 @@ type Server struct {
 	// files keeps the photos people upload for their avatars. Nil until
 	// EnableAvatars; the avatar pages then say they are not set up.
 	files *FileStoreClient
+	// messages files DM channels with message-store; nil when it is not set up.
+	messages *MessageStoreClient
 }
 
 // ReportGatewayStatus makes /healthz report the gateway's state from status.
