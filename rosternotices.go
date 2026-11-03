@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Roster notices: an organiser can ask, on an event's page, to be told by DM
+// Roster notices: an organizer can ask, on an event's page, to be told by DM
 // when people join or leave it. A change is told only after the person has
 // left it alone for rosterNoticeGrace, so someone who presses Join by mistake
 // and then Leave is never reported. A minute's sweep, driven by the scheduler
@@ -30,7 +30,7 @@ const giveAPlaceActionPrefix = "give-place-"
 // maxNoticeButtons is Discord's limit on a message: five rows of five.
 const maxNoticeButtons = 25
 
-// RosterWatcher is one organiser watching one event's roster.
+// RosterWatcher is one organizer watching one event's roster.
 type RosterWatcher struct {
 	EventID         int64
 	DiscordUserID   string
@@ -40,7 +40,7 @@ type RosterWatcher struct {
 	LastError       string
 }
 
-// WatchRoster turns roster notices on for one organiser on one event. Turning
+// WatchRoster turns roster notices on for one organizer on one event. Turning
 // it on again keeps the row as it is.
 func (s *Store) WatchRoster(eventID int64, userID string) error {
 	ts := now()
@@ -61,7 +61,7 @@ func (s *Store) UnwatchRoster(eventID int64, userID string) error {
 	return nil
 }
 
-// RosterWatcherFor returns one organiser's watch on an event, or nil when
+// RosterWatcherFor returns one organizer's watch on an event, or nil when
 // they are not watching it.
 func (s *Store) RosterWatcherFor(eventID int64, userID string) (*RosterWatcher, error) {
 	var w RosterWatcher
@@ -147,8 +147,8 @@ func onTheRoster(state string) bool {
 }
 
 // ownChoiceActors are the actors that mean the person did it themselves. An
-// organiser's add or removal, a promotion, a date rolling over and a regular
-// put back on are not news to the organiser who is watching.
+// organizer's add or removal, a promotion, a date rolling over and a regular
+// put back on are not news to the organizer who is watching.
 var ownChoiceActors = map[string]bool{
 	ActorUser:       true,
 	ActorReaction:   true,
@@ -198,8 +198,8 @@ func settledRosterChanges(updates []SignupUpdate, after, through int64) []roster
 	return out
 }
 
-// SendRosterNotices tells each watching organiser the settled joins and
-// leaves since their last notice, one DM per organiser per event. Called
+// SendRosterNotices tells each watching organizer the settled joins and
+// leaves since their last notice, one DM per organizer per event. Called
 // every minute; calling it more often sends nothing twice, because each
 // watch records how far it has been told.
 func (s *Server) SendRosterNotices() (sent int, err error) {
@@ -224,7 +224,7 @@ func (s *Server) SendRosterNotices() (sent int, err error) {
 	return sent, nil
 }
 
-// sendRosterNotice tells one organiser what changed on one event up to
+// sendRosterNotice tells one organizer what changed on one event up to
 // through. An error leaves the watch where it was, so the next sweep tries
 // the same changes again; a DM Discord refuses is recorded on the watch and
 // shown on the page, and the changes are not tried again.
@@ -411,8 +411,8 @@ func (s *Server) mayEditEventAsMember(ev *Event, userID string) (bool, error) {
 	if ev.CreatedBy != "" && ev.CreatedBy == userID {
 		return true, nil
 	}
-	if organiser, err := s.store.IsEventOrganiser(ev.ID, userID); err != nil || organiser {
-		return organiser, err
+	if organizer, err := s.store.IsEventOrganiser(ev.ID, userID); err != nil || organizer {
+		return organizer, err
 	}
 	if s.discord == nil {
 		return false, errors.New("checking who may edit needs a Discord client")

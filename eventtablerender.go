@@ -30,7 +30,7 @@ const (
 
 	// eventTableCharBudget is the cap across every text block in one message.
 	// Held a little under Discord's 4000 so that a block measured here and
-	// serialised slightly differently there does not lose the whole message.
+	// serialized slightly differently there does not lose the whole message.
 	eventTableCharBudget = 3800
 )
 
@@ -293,7 +293,7 @@ func RenderEventTablePage(page []eventTableBlock, index, total int, leading, tra
 	return map[string]any{
 		"flags": messageFlagComponentsV2,
 		"components": []any{map[string]any{
-			"type": componentTypeContainer, "accent_color": panelAccentColour,
+			"type": componentTypeContainer, "accent_color": panelAccentColor,
 			"components": body,
 		}},
 		// Names are written as plain text, and this suppresses parsing as well,
@@ -346,7 +346,7 @@ func repeatButton(ev *Event) map[string]any {
 	return button
 }
 
-// managementButtons is the row on the management table: what an organiser
+// managementButtons is the row on the management table: what an organizer
 // does to an event, and nothing a member does.
 func managementButtons(ev *Event) []any {
 	buttons := []any{
@@ -355,7 +355,7 @@ func managementButtons(ev *Event) []any {
 		repeatButton(ev),
 	}
 	// One toggle whose label says which way it goes. Closed means nobody new
-	// can join while everyone on it stays; it is not cancelled. On a full
+	// can join while everyone on it stays; it is not canceled. On a full
 	// event the only way in is the waitlist, so the label names that.
 	switch ev.Status {
 	case StatusOpen:

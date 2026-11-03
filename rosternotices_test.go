@@ -35,7 +35,7 @@ func TestSettledRosterChanges(t *testing.T) {
 			[]string{"u1 -> waitlisted", "u1 -> withdrawn"}},
 		{"a leave to Maybe", []SignupUpdate{update("u1", StateAttending, StateMaybe, ActorUser, 100)}, 0, 200,
 			[]string{"u1 -> maybe"}},
-		{"an organiser's add is not told", []SignupUpdate{update("u1", "", StateAttending, "web:u-org", 100)}, 0, 200, nil},
+		{"an organizer's add is not told", []SignupUpdate{update("u1", "", StateAttending, "web:u-org", 100)}, 0, 200, nil},
 		{"a date rolling over is not told", []SignupUpdate{update("u1", StateAttending, StateWithdrawn, ActorRecurrence, 100)}, 0, 200, nil},
 		{"moving up off the waitlist is not a join", []SignupUpdate{update("u1", StateWaitlisted, StateAttending, ActorPromotion, 100)}, 0, 200, nil},
 		{"a change still growing is not told", []SignupUpdate{

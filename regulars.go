@@ -13,7 +13,7 @@ import (
 // roster is per date — when an occurrence ends, everyone on it is withdrawn —
 // so a regular would otherwise have to join again each week. Being a regular
 // puts them back on as going each time the date rolls over, past the limit if
-// it comes to that, as an organiser's Going does. The host becomes a regular
+// it comes to that, as an organizer's Going does. The host becomes a regular
 // the first time the event repeats, and can stop being one like anyone.
 //
 // Stored in event_pins, a name kept from when they were called pins; its
@@ -253,8 +253,8 @@ func renameStoredPinValues(db *sql.DB) error {
 }
 
 // handleWebRegular makes someone a regular or stops them being one
-// (regular=true or false). An organiser may do it for anyone; anyone else in
-// the server only for themselves. An organiser making someone a regular also
+// (regular=true or false). An organizer may do it for anyone; anyone else in
+// the server only for themselves. An organizer making someone a regular also
 // puts them on the current date as going, past the limit if need be; someone
 // making themselves one joins the current date as Join does.
 func (s *Server) handleWebRegular(w http.ResponseWriter, r *http.Request) {

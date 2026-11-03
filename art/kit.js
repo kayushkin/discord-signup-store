@@ -1,5 +1,5 @@
 // A small screen-print kit. A drawing lists parts back to front; the kit
-// prints them the way a riso does: one colour pass, one black pass laid
+// prints them the way a riso does: one color pass, one black pass laid
 // slightly out of register, and uneven ink. Plain canvas 2D, no libraries.
 
 // The page's own inks (templates/layout.html :root), plus skin and lip tones.
@@ -40,7 +40,7 @@ function ellipsePoints(cx, cy, rx, ry, steps = 24, rotation = 0) {
   });
 }
 
-// The two passes. Colour: flat fills and colour halftones. Black: outlines,
+// The two passes. Color: flat fills and color halftones. Black: outlines,
 // black patterns and black halftones. A part hides the black of the parts
 // behind it, so lines never show through something in front.
 let PARTS = [], TILT = null;
@@ -160,7 +160,7 @@ function printDrawing(canvas, drawing, paintOptions) {
     }
   }
   const out = canvas.getContext('2d');
-  // The colour drum sits a little out of register with the black one.
+  // The color drum sits a little out of register with the black one.
   const [dx, dy] = drawing.misregister ?? [3, 2];
   out.drawImage(colourLayer, dx, dy);
   out.drawImage(blackLayer, 0, 0);

@@ -25,7 +25,7 @@ Two numbers are **not** the roster and never feed a decision:
 
 - **Discord's own Interested count.** Discord will not tell us who is on it in a
   way we can act on, cannot cap it, and offers no endpoint to remove anyone.
-  It is stored for display and labelled as Discord's.
+  It is stored for display and labeled as Discord's.
 - **The `Attending` / `Waitlist` Discord roles.** Written when someone's state
   changes, never read back. They exist so channel permissions can key off them.
 
@@ -33,7 +33,7 @@ Two numbers are **not** the roster and never feed a decision:
 
 Seven. Six go through the same two store methods (`Join`, `Leave`), so the
 capacity rule and the waitlist order cannot differ between them; the web page's
-**Add now** is the organiser deciding instead of the rule, and goes through
+**Add now** is the organizer deciding instead of the rule, and goes through
 `PlaceOnList`.
 
 | # | how | joins | leaves | `joined_via` |
@@ -42,7 +42,7 @@ capacity rule and the waitlist order cannot differ between them; the web page's
 | 3 | **Join / Leave** on your My events view | press Join | press Leave | `button` |
 | 4 | **✅ on the forum post** | add the reaction | remove it | `reaction` |
 | 5 | **Interested on Discord's own event** | press Interested | un-press it | `interested` |
-| 6 | **The web page**, by an organiser | Pick them by name (or paste a user id), then **Add now** as going, maybe or waitlisted | Remove | `operator` |
+| 6 | **The web page**, by an organizer | Pick them by name (or paste a user id), then **Add now** as going, maybe or waitlisted | Remove | `operator` |
 | 7 | **The machine API** | `POST /api/events/{id}/signups` | `DELETE …/{userID}` | `operator` |
 | 8 | **Creating the event** | automatic | — | `organiser` |
 
@@ -56,7 +56,7 @@ Discord's Interested and the forum ✅ mean going, never Maybe.
 keeps one place for that person: it counts as taken for everyone else — nobody
 joins into it and the waitlist does not move up into it — and the person takes
 it by pressing Join, even when the event is otherwise full. Their DM then has
-a **Can't go** button. Maybe, Can't go, an organiser's **Release**, an invite
+a **Can't go** button. Maybe, Can't go, an organizer's **Release**, an invite
 Discord did not deliver, or the date rolling over gives the place back, and the
 next person waiting moves up into it. The limit itself never changes: an event
 of 8 with 5 going and 1 held has 2 free. A place is only held while one is free
@@ -66,7 +66,7 @@ and the event has a limit.
 it's full*: nothing is kept and nothing counts against the limit, but their
 Join takes them past it instead of onto the waitlist.
 
-**Regulars are on every date.** On a repeating event an organiser can make
+**Regulars are on every date.** On a repeating event an organizer can make
 someone a regular — from their row in Going, or with *Make regular* when adding
 them — and anyone in the server can make themselves one with *Be a regular* on
 the event's page, which also joins them to the current date as Join does.
@@ -74,7 +74,7 @@ When the date rolls over and the roster clears, every regular is put
 back on as going, past the limit if it comes to that. The host becomes a
 regular the first time the event repeats; if they stop being one, that stands.
 
-**Messaging the people on an event.** From the event page an organiser can
+**Messaging the people on an event.** From the event page an organizer can
 send a message to everyone going — and the waitlist and Maybe if they tick
 them — as a post in the event's forum thread that mentions each of them, which
 pings them, or as a DM to each. DMs are limited to two per event in any ten
@@ -86,50 +86,50 @@ you a member of the event's forum thread, as pressing Follow does, so a
 question asked there reaches everyone coming — the host too, from the moment
 the post opens. The waitlist and Maybe do not; moving up into a place does.
 Leaving, or dropping to Maybe, takes you off the post at once. A day after
-the event ends, or is cancelled, everyone is taken off; on a repeating event,
+the event ends, or is canceled, everyone is taken off; on a repeating event,
 a day after the date you were on rolls over, unless you are going again.
 Only people this service added are ever taken off (`forum_post_follows`), so
 someone who followed a post themselves stays, and posts of events that had
 ended before this began are left alone. Each add and each removal leaves a
 line in the post that nobody can delete.
 
-**An organiser can be told who joins and leaves.** A switch on the event
-page, *Tell me who joins and leaves*, which each organiser sets for
+**An organizer can be told who joins and leaves.** A switch on the event
+page, *Tell me who joins and leaves*, which each organizer sets for
 themselves. Once a person has left their join or leave alone for a minute,
-the organiser gets a DM saying who joined, who went on the waitlist and who
+the organizer gets a DM saying who joined, who went on the waitlist and who
 left, with the count now. Changes within that minute are one change: Join
 then Leave is nothing. Only what people do themselves is told — not an
-organiser's adds or removals, moving up off the waitlist, or a date rolling
+organizer's adds or removals, moving up off the waitlist, or a date rolling
 over. Under each person who joined the waitlist and is still on it is a
 **Give … a place** button, which does what the page's button does; the press
 is checked against who may edit the event, read from Discord. **Turn off**
-under it stops that organiser's notices for the event.
+under it stops that organizer's notices for the event.
 
 **Replies to the bot's DMs are shown on the event page.** Every DM sent
-about an event — an organiser's message, an invite, being put on a list or
-given a place — says replies reach the organisers, and is remembered with its
+about an event — an organizer's message, an invite, being put on a list or
+given a place — says replies reach the organizers, and is remembered with its
 event. Someone who writes back with Discord's Reply on one of those DMs is put
 with that DM's event; a plain message goes with the latest DM the bot sent
 them in the last two weeks, marked *best guess* on the page. The bot reacts 📨
 so they know it arrived. A DM about no recent event is left alone.
 
-**Add now is not an invite.** Add now puts someone on the list the organiser
+**Add now is not an invite.** Add now puts someone on the list the organizer
 picks — going even past the limit, maybe, or the waitlist while the event is
 full — and DMs them to say so; the history records it as `added` by the
-organiser. **Send invite** puts nobody anywhere: it DMs the person the event
+organizer. **Send invite** puts nobody anywhere: it DMs the person the event
 with its own Join and Maybe buttons, and their answer goes through the rules
 like anyone's. Invites are kept in `event_invites`, with whether Discord
 delivered the DM; whether they came is read from the roster, never stored.
 
 Rules that hold for all eight:
 
-- **Full means waitlisted, never refused** — unless the organiser turned the
+- **Full means waitlisted, never refused** — unless the organizer turned the
   waitlist off for that event. Then a Join on a full event is refused and the
   place goes to whoever presses Join after one opens. Anyone already waiting
   when it was turned off stays and still moves up first. You are told your
   number, or that it is full.
 - **Leaving promotes the longest-waiting person**, who is sent a DM — unless
-  an organiser had taken the event over its limit and it is still full
+  an organizer had taken the event over its limit and it is still full
   without them: 16/15 losing one is 15/15, and nobody moves up. If their
   DMs are shut, they are pinged in the channel instead — the one deliberate ping
   this service makes.
@@ -137,13 +137,13 @@ Rules that hold for all eight:
   order.
 - **Arrival order is ours.** Discord's own list sorts by account age, so a
   waitlist rebuilt from Discord would put the oldest accounts first.
-- **An organiser can reorder the waitlist** on the web page, with ↑ and ↓ on
+- **An organizer can reorder the waitlist** on the web page, with ↑ and ↓ on
   each person. The line then follows their order, not arrival; anyone joining
   afterwards waits behind all of them. Moving someone does not message them.
 
-**The potluck sheet** is an organiser's switch on the event page. With it
+**The potluck sheet** is an organizer's switch on the event page. With it
 on, the card carries the sheet — counts per category (food, drinks,
-supplies, other) against what the organiser asked for, what is still
+supplies, other) against what the organizer asked for, what is still
 needed, and who is bringing what — and a **What I'm bringing** button,
 which stays when signups close. Only people going can answer: an item in a
 category, or "not bringing anything". The waitlist and Maybe are never
@@ -151,27 +151,27 @@ asked. Someone who leaves drops off the sheet; what they said comes back if
 they rejoin. A day before, everyone going who has not answered gets one DM
 asking, once per date, unless they got their place in the last 30 minutes.
 Anyone in the server can also fill it in on the event's members' page. The
-organiser's page lists who has not answered, which nobody else sees, and
+organizer's page lists who has not answered, which nobody else sees, and
 **Nudge** buttons: one DMs them all and counts against the DM limit above;
 the other posts once in the event's forum thread with who is bringing what,
 pinging only those who have not said. Discord's own event carries the sheet
 in its description too — the counts, what is still needed, and who is
-bringing what by name — as much as fits after the organiser's words.
+bringing what by name — as much as fits after the organizer's words.
 **The event pages.** People show as name tags, in signup order or A to Z;
 pressing one opens what can be done with that person. Things brought show
 as tags too; pressing one shows who is bringing it, and its owner, or an
-organiser, can change its wording or remove it there. On a computer the
-organiser's settings and messages sit in a sidebar that stays in view; on a
+organizer, can change its wording or remove it there. On a computer the
+organizer's settings and messages sit in a sidebar that stays in view; on a
 phone they fold, as the rarely used sections do.
 
-**Organisers of one event.** Whoever may edit an event can make someone on
-it an organiser, from their row on the event page, and take it back. An
-organiser may do on that event whatever its creator may, and nothing on any
-other. The pages badge the host and the organisers.
+**Organizers of one event.** Whoever may edit an event can make someone on
+it an organizer, from their row on the event page, and take it back. An
+organizer may do on that event whatever its creator may, and nothing on any
+other. The pages badge the host and the organizers.
 
 **Getting a place points at the sheet and the roles.** On an event with a
 sheet or roles, the reply to Join, and the DM when someone moves up or an
-organiser puts them down as going, say it is a potluck, name the roles and
+organizer puts them down as going, say it is a potluck, name the roles and
 what is still asked for, and carry What I'm bringing (with a sheet), a
 button per role (with roles) and a link to the event page. A Join on the
 web lands on the event page. #events puts "Potluck list →" under the
@@ -179,7 +179,7 @@ event's name when it has a sheet, and "Sign up to Setup, Teardown →" when
 it has roles, each opening that part of the event page. Each person may bring up to ten things, and every
 surface says they can add another.
 
-**Asking for things.** An organiser can ask for specific things — ice, two
+**Asking for things.** An organizer can ask for specific things — ice, two
 people; a folding table, one — each in a category. Wherever someone says
 what they are bringing, the open requests come first: at the top of the
 What I'm bringing view with a menu to take one, as the example in each
@@ -189,7 +189,7 @@ reminder DMs and Discord's own event list what is still asked for.
 
 **Roles** are a switch of their own on the event page, apart from the
 potluck sheet, so an event can have either, both or neither. With roles on,
-an organiser can add up to five — setup, teardown, coming for part of it —
+an organizer can add up to five — setup, teardown, coming for part of it —
 each with an optional cap, and the card lists them under **🙋 Roles** with
 who is in each. Anyone going takes one, or leaves it, with its own button
 on the card, in the What I'm bringing view when there is a sheet, or on the
@@ -198,9 +198,9 @@ them and who took them. They are not Discord roles: nothing is granted on
 Discord.
 
 A repeating event's next date starts with an empty sheet and empty roles;
-what it needs, and the roles, carry over. The organiser's log has every change to the sheet: each thing
+what it needs, and the roles, carry over. The organizer's log has every change to the sheet: each thing
 someone said they would bring or took off, and who took it off — them, an
-organiser, the spreadsheet copy, or the date moving on — what the event
+organizer, the spreadsheet copy, or the date moving on — what the event
 wants, and each round of reminder DMs.
 
 ## 3. What updates, when
@@ -245,9 +245,9 @@ then it has a message of its own in **#new-events** — the same text as its
 #events entry with the title as a heading, without the buttons, so it can be
 forwarded whole — posted when
 the event is first published, edited in place as it changes, and deleted as
-the event's line arrives in past-events or it is cancelled. An event is in
+the event's line arrives in past-events or it is canceled. An event is in
 exactly one of the two.
-An organiser can finish one early with **End**, on the management table or the
+An organizer can finish one early with **End**, on the management table or the
 web page, once it has started; it takes the same path as the timer.
 
 **A recurring event does not finish; it rolls.** It is one row, like Discord's
@@ -266,14 +266,14 @@ because Discord has none to give.
 |---|---|---|
 | **Forum post** | everyone | The card again, plus discussion, in a channel that lists every event. |
 | **Event table** (`#events`) | everyone | Every upcoming event: its thread, its place, the live count and who is going, with Join / Maybe / Leave / Details. |
-| **Management table** (`#event-management`) | organisers | The same events with **Edit**, **Repeat**, **Close/Reopen signups** (it says *waitlist* while the event is full), **End** (once it has started) and **Cancel** on each row, and **Create an event** on the end, with **Advanced Settings** under it linking the web pages; a **Settings →** link by each event's name opens its page. Where anything about an event is changed. |
+| **Management table** (`#event-management`) | organizers | The same events with **Edit**, **Repeat**, **Close/Reopen signups** (it says *waitlist* while the event is full), **End** (once it has started) and **Cancel** on each row, and **Create an event** on the end, with **Advanced Settings** under it linking the web pages; a **Settings →** link by each event's name opens its page. Where anything about an event is changed. |
 | **Details** | just you | A private reply: the description, when and where, the host, and the full roster by name in sign-up order, read-only, with Join / Maybe / Leave under it while signups are open. A message rather than a modal: a modal's only read-only text was refused by Discord every time, and its text box opened a keyboard. Pings nobody. |
 | **My events** | just you | The events *you* are on, with Join / Leave in place. |
 | **Discord's own event** | everyone | Discord's native event, linked to a roster here. Its title carries the count. |
-| **Web — list** | anyone in the server | Banner cards: every event in your servers, live from the database, with **Join** or **Leave** on each while signups are open and at its head a picture of the people going, in a scene a model made from the event's description, moving in a short loop — everyone going with an avatar, and a faceless stand-in, plainly not anyone, for each of the rest. An event nobody going has an avatar for has no picture: a slimmer card topped by a thin strip of spot ink. When who is going changes, the old picture stays until the new one is painted, a few minutes later. Every card opens the event: an organiser gets the edit page, anyone else the members' page. |
-| **Web — members' page** | anyone in the server | One event as a member sees it: its time, place and description, **Join** or **Leave**, the picture of who is going, the potluck sheet — who is bringing what, with a form for someone going to add theirs, say they are bringing nothing, or remove their own — and who is going, waiting and maybe. Nothing an organiser alone sees: no log, replies, invites, or list of who has not answered the sheet. Someone with no avatar sees a tab peeking out from under the picture that asks them to make one. |
+| **Web — list** | anyone in the server | Banner cards: every event in your servers, live from the database, with **Join** or **Leave** on each while signups are open and at its head a picture of the people going, in a scene a model made from the event's description, moving in a short loop — everyone going with an avatar, and a faceless stand-in, plainly not anyone, for each of the rest. An event nobody going has an avatar for has no picture: a slimmer card topped by a thin strip of spot ink. When who is going changes, the old picture stays until the new one is painted, a few minutes later. Every card opens the event: an organizer gets the edit page, anyone else the members' page. |
+| **Web — members' page** | anyone in the server | One event as a member sees it: its time, place and description, **Join** or **Leave**, the picture of who is going, the potluck sheet — who is bringing what, with a form for someone going to add theirs, say they are bringing nothing, or remove their own — and who is going, waiting and maybe. Nothing an organizer alone sees: no log, replies, invites, or list of who has not answered the sheet. Someone with no avatar sees a tab peeking out from under the picture that asks them to make one. |
 | **Web — detail** | whoever may edit | One event, with its picture of who is going, a switch to turn pictures off (which hides it, keeping it to show again when switched on), and a comment box to change the scene or ask for a new one. Its fields are the edit form, with Open/Close signups, the waitlist switch, End and Cancel beside them; then the roster, **Add people** (Send invite, or Add now to a list), the invites and how each was answered, and one log of signups, edits and invites, newest first. People are shown by their short name, with their Discord name on hover or tap. |
-| **Web — form** | organisers | Create, with the fields a Discord form has no room for, whether to make a picture of who is going, and the people to invite or put on the event as it is made. Editing is on the detail page. |
+| **Web — form** | organizers | Create, with the fields a Discord form has no room for, whether to make a picture of who is going, and the people to invite or put on the event as it is made. Editing is on the detail page. |
 | **Web — names** | site admins, server owners | The short name each person is shown by, everywhere. A 404 for anyone else, and not linked for them. |
 | **Web — mascot** | everyone; set by server owners | Each server can have a mascot of its own, shown in the page header and on the home page while you have that server chosen, and on its event pages; a server with none, or no server chosen, shows the site's own, Maleeha. The header's mascot reacts to what you do, in its place and nowhere else: it waves hello when you first open the home page, hops when you join, shrugs when you land on the waitlist, sighs when you leave, spins when you create an event, and wobbles when you click it. Nothing moves if your browser asks for less motion. The server's owner (or a site admin) sets it on `/mascot`: a drawing made for the server — from a description, from a photo, or a change to one made before — or the avatar a member shows beside their name, which stops being the mascot if they delete it. |
 | **Web — your avatar** | just you | Upload a photo and a model draws the whole of you in the site's print style, part by part so pictures can pose you; your round portrait comes from the same drawing. Every drawing is kept; you choose which one shows beside your name, or none. Ask for more — from a new photo, from your photo again, or a change to one you have — each with a comment on how it should look; the page shows the drawing when it is done. Your photo is kept until you delete it. |

@@ -34,7 +34,7 @@ func TestAHeldPlaceIsTakenOnlyByTheOneItIsHeldFor(t *testing.T) {
 }
 
 // TestAHeldPlaceGivenBackGoesToTheNextPersonWaiting, whether the holder
-// says Maybe, says Can't go, or the organiser releases it.
+// says Maybe, says Can't go, or the organizer releases it.
 func TestAHeldPlaceGivenBackGoesToTheNextPersonWaiting(t *testing.T) {
 	store := testStore(t)
 	ev := publishedEvent(t, store, 2, "alice")

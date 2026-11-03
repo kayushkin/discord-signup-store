@@ -11,7 +11,7 @@ import (
 // id for a button, or a word — user, interested, reaction, promotion, api,
 // discord-event-screen, discord-event-sync —
 // for everything that is not one person. The ids are shown as that person's
-// name in the server, which is what an organiser recognises; the words are
+// name in the server, which is what an organizer recognizes; the words are
 // shown as they are.
 
 var snowflake = regexp.MustCompile(`^\d{15,21}$`)

@@ -29,13 +29,13 @@ var ErrNotFound = errors.New("not found")
 var ErrInvalidEvent = errors.New("invalid event")
 
 // ErrEventNotOpen is returned when someone tries to join an event that is
-// closed or cancelled. Distinct from ErrInvalidEvent because the request was
+// closed or canceled. Distinct from ErrInvalidEvent because the request was
 // well formed and the answer is about timing, which is what the person on the
 // other end needs to be told.
 var ErrEventNotOpen = errors.New("event is not open for signups")
 
 // ErrEventFull is returned when someone tries to join a full event whose
-// organiser turned its waitlist off. Distinct from ErrEventNotOpen because
+// organizer turned its waitlist off. Distinct from ErrEventNotOpen because
 // signups are open: a place freeing up lets the next person to press Join in.
 var ErrEventFull = errors.New("event is full and has no waitlist")
 
@@ -438,7 +438,7 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// Roles were part of the potluck sheet until 2026-10-30; see
 	// columnBackfills.
 	{"events", "roles_enabled", "INTEGER NOT NULL DEFAULT 0"},
-	// An organiser asking for an event's scene again, with a comment.
+	// An organizer asking for an event's scene again, with a comment.
 	{"event_scenes", "request_kind", "TEXT NOT NULL DEFAULT ''"},
 	{"event_scenes", "request_comment", "TEXT NOT NULL DEFAULT ''"},
 	{"event_scenes", "requested_at", "INTEGER NOT NULL DEFAULT 0"},
@@ -474,7 +474,7 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// fresh intent and put them straight back on a roster they chose to leave.
 	{"signups", "discord_interested", "INTEGER NOT NULL DEFAULT 0"},
 
-	// A place in the waitlist an organiser set by moving people up or down
+	// A place in the waitlist an organizer set by moving people up or down
 	// on the web page. 0 means none: the person waits by arrival, behind
 	// everyone who has one — they all arrived earlier, since a move ranks
 	// the whole line. See waitlistOrder.
@@ -487,7 +487,7 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// What a copied row's role columns said, apart from its item, so a
 	// change to one is not taken for a change to the other.
 	{"potluck_sheet_rows", "role_signature", "TEXT NOT NULL DEFAULT ''"},
-	// The organiser's request a potluck item answers; 0 for none. See
+	// The organizer's request a potluck item answers; 0 for none. See
 	// potluckrequests.go.
 	{"potluck_items", "request_id", "INTEGER NOT NULL DEFAULT 0"},
 }
@@ -1094,7 +1094,7 @@ type EventPatch struct {
 	DiscordInterestedCount  *int    `json:"discord_interested_count"`
 	ThreadID                *string `json:"thread_id"`
 	ForumPostID             *string `json:"forum_post_id"`
-	// CreatedBy hands an event to another organiser: who may edit it as its
+	// CreatedBy hands an event to another organizer: who may edit it as its
 	// creator. A Discord user id, never a name. Only the machine API sets it;
 	// neither the web form nor the Discord modal builds it.
 	CreatedBy *string `json:"created_by"`

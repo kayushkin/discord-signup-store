@@ -150,7 +150,7 @@ func (s *Store) MarkInterested(eventID int64, discordUserID, displayName string)
 	newState, action := StateAttending, ActionJoined
 	if !tookHeldPlace && capacity > 0 && attending+held >= capacity {
 		// Full with the waitlist off: as Join refuses, Interested puts nobody
-		// on. The organiser turned the line off.
+		// on. The organizer turned the line off.
 		if waitlistDisabled {
 			if err := tx.Commit(); err != nil {
 				return nil, fmt.Errorf("commit: %w", err)

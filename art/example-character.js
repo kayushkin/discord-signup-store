@@ -3,7 +3,7 @@
 // drawn in, each expression, open and closed hands, and a right side made by
 // mirroring the left.
 
-// Colours the page's inks lack, in the same muted print palette.
+// Colors the page's inks lack, in the same muted print palette.
 const HAIR = '#4a2e1f', SHIRT = INK.teal, JEANS = INK.blue, SHOE = INK.white;
 
 const PROPORTIONS = {
@@ -12,7 +12,7 @@ const PROPORTIONS = {
 };
 
 // The head's frame: the origin is where the chin meets the neck, and the head
-// runs up to y = -240, centred on x = 0.
+// runs up to y = -240, centered on x = 0.
 function head({ expression, look }) {
   const lx = look === 'left' ? -7 : look === 'right' ? 7 : 0;
   // Hair behind the face, then ears, then the face.

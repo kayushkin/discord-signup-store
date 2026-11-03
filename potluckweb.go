@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// The potluck sheet on the organiser's event page: how many of each category
+// The potluck sheet on the organizer's event page: how many of each category
 // the event wants, who is bringing what, who going has not answered, and the
 // Nudge button. The switch itself is the page's ordinary event edit
 // (potluck=on|off).
@@ -24,7 +24,7 @@ type potluckPage struct {
 	TakesAnswers bool
 	// ViewerGoing is whether the viewer may take a request.
 	ViewerGoing bool
-	// Requests are what an organiser asked for, with who is bringing each.
+	// Requests are what an organizer asked for, with who is bringing each.
 	Requests []potluckRequestPage
 	// Categories for the request form.
 	AllCategories []potluckCategory
@@ -52,8 +52,8 @@ type potluckPageUnanswered struct {
 
 // potluckPageOf builds the event page's sheet from the event and its people
 // going. Nil when the event has no sheet. Who has not answered, and who is
-// bringing nothing, are read only forOrganisers.
-func (s *Server) potluckPageOf(ev *Event, going []Signup, viewerID string, forOrganisers bool) (*potluckPage, error) {
+// bringing nothing, are read only forOrganizers.
+func (s *Server) potluckPageOf(ev *Event, going []Signup, viewerID string, forOrganizers bool) (*potluckPage, error) {
 	if ev.Potluck == nil {
 		return nil, nil
 	}
@@ -78,7 +78,7 @@ func (s *Server) potluckPageOf(ev *Event, going []Signup, viewerID string, forOr
 		pc.Have = len(pc.Items)
 		page.Categories = append(page.Categories, pc)
 	}
-	if !forOrganisers {
+	if !forOrganizers {
 		return page, nil
 	}
 	for _, id := range sheet.BringingNothing {
@@ -150,7 +150,7 @@ func (s *Server) handleWebPotluckNeeds(w http.ResponseWriter, r *http.Request) {
 	s.redirectWithNotice(w, r, ev.ID, "Saved what the potluck needs.")
 }
 
-// handleWebPotluckRemove takes one thing off the sheet, for an organiser.
+// handleWebPotluckRemove takes one thing off the sheet, for an organizer.
 func (s *Server) handleWebPotluckRemove(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {

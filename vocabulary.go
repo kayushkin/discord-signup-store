@@ -36,8 +36,8 @@ const (
 	ActionPromoted   = "promoted"   // moved off the waitlist into a freed place
 	ActionRejoined   = "rejoined"   // signed up again after withdrawing
 	ActionMaybe      = "maybe"      // put themselves down as Maybe
-	ActionAdded      = "added"      // put on a list by an organiser, who is the actor
-	ActionMoved      = "moved"      // moved within the waitlist by an organiser
+	ActionAdded      = "added"      // put on a list by an organizer, who is the actor
+	ActionMoved      = "moved"      // moved within the waitlist by an organizer
 )
 
 var validActions = map[string]bool{
@@ -80,7 +80,7 @@ var validStatuses = map[string]bool{
 // archivedStatuses are the ones the web page collapses out of the main list.
 //
 // Closed is deliberately NOT among them, and that is a confirmed decision
-// rather than an oversight. Cancelled and completed both mean the event is
+// rather than an oversight. Canceled and completed both mean the event is
 // over. Closed means signups are shut on one that has not happened yet — the
 // date is still coming, people still ask about it, and having it disappear into
 // an archive would be a worse surprise than seeing it with a pill that says the

@@ -87,7 +87,7 @@ func (s *Store) lastSignupUpdate(eventID int64, userID string) (*SignupUpdate, e
 
 // forumUnfollowDue says when someone this service made follow an event's
 // post comes off it: 0 while they are going to a live event, a day after the
-// event ended or was cancelled, a day after their date rolled over, and
+// event ended or was canceled, a day after their date rolled over, and
 // otherwise — they left, or went to the waitlist or Maybe — now.
 func forumUnfollowDue(ev *Event, state string, last *SignupUpdate, at int64) int64 {
 	grace := int64(forumFollowGrace / time.Second)

@@ -90,16 +90,16 @@ func TestEventWithNoEndTimeFinishesAfterTheAssumedRunTime(t *testing.T) {
 	}
 }
 
-// TestCancelledEventsAreNotRelabelledAsCompleted keeps the record honest. A
-// cancelled event did not happen, and saying it completed would be a lie that
+// TestCanceledEventsAreNotRelabeledAsCompleted keeps the record honest. A
+// canceled event did not happen, and saying it completed would be a lie that
 // outlives everyone who remembers otherwise.
-func TestCancelledEventsAreNotRelabelledAsCompleted(t *testing.T) {
+func TestCanceledEventsAreNotRelabeledAsCompleted(t *testing.T) {
 	store := testStore(t)
 	past := time.Now().Add(-10 * time.Hour).Unix()
 	ev := timedEvent(t, store, Event{StartsAt: past, EndsAt: past + 3600})
 
-	cancelled := StatusCancelled
-	if _, err := store.UpdateEvent(ev.ID, EventPatch{Status: &cancelled}); err != nil {
+	canceled := StatusCancelled
+	if _, err := store.UpdateEvent(ev.ID, EventPatch{Status: &canceled}); err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
 	if _, err := store.CompleteFinishedEvents(); err != nil {
@@ -110,7 +110,7 @@ func TestCancelledEventsAreNotRelabelledAsCompleted(t *testing.T) {
 		t.Errorf("status = %q, want %q — it did not happen", got.Status, StatusCancelled)
 	}
 	if !IsArchived(got.Status) {
-		t.Error("a cancelled event should still be archived")
+		t.Error("a canceled event should still be archived")
 	}
 }
 

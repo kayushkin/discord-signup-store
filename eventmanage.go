@@ -10,7 +10,7 @@ import (
 )
 
 // The management row's two actions beyond Edit: shutting signups, and
-// cancelling. Both check permission on the press, because Discord shows a
+// canceling. Both check permission on the press, because Discord shows a
 // button to everybody or nobody.
 
 // buttonStyleDanger is Discord's red button. Reserved for the one thing on
@@ -19,7 +19,7 @@ const buttonStyleDanger = 4
 
 // handleCloseToggle flips signups between open and closed.
 //
-// Closed is not cancelled: the event still happens, everyone on the roster
+// Closed is not canceled: the event still happens, everyone on the roster
 // keeps their place, and nobody new can join. The label on the button says
 // which way the press will go, so there is no confirm — it is reversible with
 // the same button.
@@ -47,7 +47,7 @@ func (s *Server) handleCloseToggle(w http.ResponseWriter, in *Interaction, event
 	s.replyEphemeral(w, said)
 }
 
-// errSignupsNotToggleable is a completed or cancelled event: it has no
+// errSignupsNotToggleable is a completed or canceled event: it has no
 // signups to open or close.
 var errSignupsNotToggleable = errors.New("only an open or closed event can have its signups opened or closed")
 
@@ -77,7 +77,7 @@ func (s *Server) toggleSignups(ev *Event, actor string) (string, error) {
 	return said, nil
 }
 
-// handleCancelButton opens the confirm. Cancelling deletes the native Discord
+// handleCancelButton opens the confirm. Canceling deletes the native Discord
 // event and cannot be undone, so the confirm is typing the event's name back —
 // the one gesture Discord offers that cannot be done by accident.
 func (s *Server) handleCancelButton(w http.ResponseWriter, in *Interaction, eventID int64) {
@@ -122,13 +122,13 @@ func (s *Server) applyCancelConfirm(w http.ResponseWriter, in *Interaction, even
 		return
 	}
 	if !strings.EqualFold(strings.TrimSpace(form.Name), strings.TrimSpace(ev.Name)) {
-		s.replyEphemeral(w, fmt.Sprintf("That did not match **%s** — nothing was cancelled.", ev.Name))
+		s.replyEphemeral(w, fmt.Sprintf("That did not match **%s** — nothing was canceled.", ev.Name))
 		return
 	}
 	userID, _ := in.actor()
-	if err := s.cancelEventEverywhere(ev, "cancelled by "+userID); err != nil {
+	if err := s.cancelEventEverywhere(ev, "canceled by "+userID); err != nil {
 		log.Printf("[discord-signup] cancel event %d: %v", ev.ID, err)
-		s.replyEphemeral(w, fmt.Sprintf("Something went wrong — **%s** is NOT cancelled.", ev.Name))
+		s.replyEphemeral(w, fmt.Sprintf("Something went wrong — **%s** is NOT canceled.", ev.Name))
 		return
 	}
 	// cancelEventEverywhere writes the status straight to the store rather
@@ -140,7 +140,7 @@ func (s *Server) applyCancelConfirm(w http.ResponseWriter, in *Interaction, even
 			log.Printf("[discord-signup] log cancel of event %d: %v", ev.ID, err)
 		}
 	}
-	s.replyEphemeral(w, fmt.Sprintf("**%s** is cancelled. Its Discord event is gone and nobody can join.", ev.Name))
+	s.replyEphemeral(w, fmt.Sprintf("**%s** is canceled. Its Discord event is gone and nobody can join.", ev.Name))
 }
 
 // handleRepeatButton opens the Repeat form: how often, and when it ends.

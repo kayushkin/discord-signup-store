@@ -11,7 +11,7 @@ import (
 // does — nobody else can join into it and the waitlist does not move up into
 // it — so an event of 8 with 5 going and 1 held has 2 places free. The
 // person holding it takes it by pressing Join, even if the event is otherwise
-// full; pressing Maybe or Can't go, an organiser releasing it, or the date
+// full; pressing Maybe or Can't go, an organizer releasing it, or the date
 // rolling over gives it back, and the next person waiting moves up into it.
 //
 // When no place is free, an invite can let them in past the limit instead
@@ -21,14 +21,14 @@ import (
 //
 // The limit itself is never changed. The hold lives on the invite row
 // (event_invites.holds_place, hold_ended_at, hold_outcome), so the number the
-// organiser set stays the number they set, and a hold that ends cannot leave
+// organizer set stays the number they set, and a hold that ends cannot leave
 // a limit one out.
 
 // Hold outcomes: how a held place stopped being held.
 const (
 	HoldOutcomeJoined      = "joined"      // they pressed Join and took it
 	HoldOutcomeDeclined    = "declined"    // they pressed Maybe or Can't go
-	HoldOutcomeReleased    = "released"    // an organiser gave it back
+	HoldOutcomeReleased    = "released"    // an organizer gave it back
 	HoldOutcomeUndelivered = "undelivered" // the invite's DM never arrived
 	HoldOutcomeExpired     = "expired"     // the date it was held for passed
 )
@@ -69,7 +69,7 @@ func endHoldTx(tx *sql.Tx, eventID int64, userID, outcome, actor string, ts int6
 
 // RecordInvite stores one invite. One that holds a place is checked and
 // written in one transaction with the count it depends on, as a Join is:
-// two organisers holding the last place at once cannot both get it.
+// two organizers holding the last place at once cannot both get it.
 func (s *Store) RecordInvite(inv EventInvite) (*EventInvite, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -165,7 +165,7 @@ func (s *Store) SetInviteDelivery(inviteID int64, delivery, deliveryError string
 }
 
 // GiveBackHeldPlace ends someone's held place — they said no, or an
-// organiser released it — and moves the next person waiting into the place
+// organizer released it — and moves the next person waiting into the place
 // it frees. ErrNotFound when they hold none.
 func (s *Store) GiveBackHeldPlace(eventID int64, userID, outcome, actor string) (*Signup, error) {
 	tx, err := s.db.Begin()

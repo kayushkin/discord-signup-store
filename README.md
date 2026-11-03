@@ -31,7 +31,7 @@ and they are why the button here belongs to this service:
    the 27 who were told last week they were waitlisted.
 
 So the roster lives here, the native scheduled event is demoted to an
-announcement, and the two numbers are labelled rather than reconciled.
+announcement, and the two numbers are labeled rather than reconciled.
 
 ## How it works
 
@@ -149,7 +149,7 @@ operation.
 7. Set the Interactions Endpoint URL in the Developer Portal to
    `https://YOUR_EXISTING_DOMAIN/discord/interactions`. Discord validates it on
    save by sending a PING and some deliberately bad signatures; `deploy.sh`
-   checks both behaviours before it reports success.
+   checks both behaviors before it reports success.
 8. **Per server.** Invite the bot with the OAuth2 URL from the Developer
    Portal (scopes `bot` and `applications.commands`). On joining it sets the
    server up by itself — an **Events** category with `#events`,

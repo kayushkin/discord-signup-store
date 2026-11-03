@@ -24,7 +24,7 @@ import (
 //	the import    Discord slid the native event's start forward past an
 //	              occurrence that had ended; the next date is Discord's
 //
-// Both land in rollOverOccurrence. An organiser moving a date that has not
+// Both land in rollOverOccurrence. An organizer moving a date that has not
 // happened yet is an edit, not a rollover, and resets nothing.
 
 // ActorRecurrence is the actor recorded when this service withdrew everyone
@@ -117,7 +117,7 @@ func (s *Store) RollOverOccurrence(eventID, nextStart, nextEnd int64) (withdrawn
 		return nil, nil, fmt.Errorf("expire held places: %w", err)
 	}
 	// What people said they would bring, the reminders asking them, and who
-	// took each role were for the date that ran. The organiser's list of
+	// took each role were for the date that ran. The organizer's list of
 	// what is wanted, and the roles, stay.
 	if err := clearPotluckAndRolesForNextDateTx(tx, eventID, ts); err != nil {
 		return nil, nil, err

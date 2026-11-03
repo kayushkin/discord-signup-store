@@ -43,7 +43,7 @@ import (
 //	                       reconcile re-check every live event for nothing and
 //	                       repair the one whose write was lost.
 
-// eventSyncQueue serialises Discord writes per event.
+// eventSyncQueue serializes Discord writes per event.
 type eventSyncQueue struct {
 	mu       sync.Mutex
 	inFlight map[int64]*eventSyncRun
@@ -364,7 +364,7 @@ func eventPublishSignature(ev *Event, roster []Signup) string {
 // mid-sync — and until now a failed write left that surface wrong until the
 // next time somebody happened to join. Nothing noticed and nothing retried.
 // This runs from the same ten-minute reconcile that already repairs missing
-// cards and cancelled events, and costs one query per event when everything
+// cards and canceled events, and costs one query per event when everything
 // agrees, which is almost always.
 func (s *Server) RepublishStaleEvents(guildID string) {
 	if s.discord == nil {

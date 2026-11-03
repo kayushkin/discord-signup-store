@@ -32,7 +32,7 @@ type Server struct {
 	oauth *OAuthConfig
 	// botID is the bot's own Discord user id, cached after the first SUCCESSFUL
 	// lookup. Needed to read which roles the bot holds, which is what decides
-	// what it can grant, and to recognise the bot's own reactions and events.
+	// what it can grant, and to recognize the bot's own reactions and events.
 	//
 	// Guarded by botIDMu rather than a sync.Once because a sync.Once runs its
 	// body once whether or not the body succeeded: one transient /users/@me
@@ -45,11 +45,11 @@ type Server struct {
 	// fields and a timezone picker is not worth one of them. Printed on the
 	// form's own label so nobody has to guess which zone they are typing in.
 	defaultTimezone string
-	// syncs serialises Discord writes per event. Without it, two roster
+	// syncs serializes Discord writes per event. Without it, two roster
 	// changes seconds apart raced and the older one could land last, leaving
 	// every public surface showing a count that was already wrong.
 	syncs *eventSyncQueue
-	// tableLocks serialises redraws of one guild's tables. A redraw reads
+	// tableLocks serializes redraws of one guild's tables. A redraw reads
 	// which messages it owns, posts any it lacks and records them; two at once
 	// both post the same page and one record overwrites the other, leaving a
 	// message nothing edits or deletes again. That happened on 2026-09-04.
@@ -234,7 +234,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/waitlist/move", s.handleWebWaitlistMove)
 	mux.HandleFunc("POST /events/{id}/holds/release", s.handleWebReleaseHold)
 	mux.HandleFunc("POST /events/{id}/regulars", s.handleWebRegular)
-	mux.HandleFunc("POST /events/{id}/organisers", s.handleWebEventOrganiser)
+	mux.HandleFunc("POST /events/{id}/organisers", s.handleWebEventOrganizer)
 	mux.HandleFunc("POST /events/{id}/roster-notices", s.handleWebRosterNotices)
 	mux.HandleFunc("POST /events/{id}/message", s.handleWebMessage)
 	mux.HandleFunc("POST /events/{id}/potluck/needs", s.handleWebPotluckNeeds)
@@ -485,7 +485,7 @@ func (s *Server) handleSendReminders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"sent": sent, "potluck_sent": potluckSent})
 }
 
-// handleSendRosterNotices DMs each watching organiser the joins and leaves
+// handleSendRosterNotices DMs each watching organizer the joins and leaves
 // that have settled. Called every minute.
 func (s *Server) handleSendRosterNotices(w http.ResponseWriter, r *http.Request) {
 	sent, err := s.SendRosterNotices()

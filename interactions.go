@@ -319,7 +319,7 @@ func (s *Server) handleJoin(w http.ResponseWriter, in *Interaction, eventID int6
 		return
 	}
 	if errors.Is(err, ErrEventFull) {
-		s.replyEphemeral(w, "This one is full, and its organiser turned the waitlist off. "+
+		s.replyEphemeral(w, "This one is full, and its organizer turned the waitlist off. "+
 			"If someone drops out, the next person to press Join gets the place.")
 		return
 	}
@@ -713,7 +713,7 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 		s.replyEphemeral(w, "This server has no board channel set up yet, so there is nowhere to post the event. An admin sets one with PUT /api/guilds/{id}/channels.")
 		return
 	}
-	ev, err := s.createEventAndJoinOrganiser(Event{
+	ev, err := s.createEventAndJoinOrganizer(Event{
 		GuildID:     in.GuildID,
 		ChannelID:   boardChannelID,
 		Name:        values.Name,

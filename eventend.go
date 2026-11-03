@@ -16,7 +16,7 @@ import (
 // this is a third way in, and it lands on the same finishing steps.
 
 // eventIsUnderway reports whether an event has started and is not yet over —
-// the only time End is offered. Before the start, ending would be cancelling
+// the only time End is offered. Before the start, ending would be canceling
 // under another name, and Cancel already exists for that.
 func eventIsUnderway(ev *Event) bool {
 	return !IsArchived(ev.Status) && ev.StartsAt > 0 && ev.StartsAt <= now()
@@ -53,7 +53,7 @@ func (s *Store) CompleteLiveEvent(id int64) (changed bool, err error) {
 // EndScheduledEvent moves a native event to COMPLETED.
 //
 // Discord only completes an ACTIVE event, so one it never started is started
-// first. One already completed, cancelled or deleted is left alone: it is
+// first. One already completed, canceled or deleted is left alone: it is
 // already over, which is all this was asked to make true.
 func (c *DiscordClient) EndScheduledEvent(guildID, eventID string) error {
 	native, exists, err := c.GetScheduledEvent(guildID, eventID)

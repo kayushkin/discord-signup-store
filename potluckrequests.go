@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// Requests on the potluck sheet: specific things an organiser asks for —
+// Requests on the potluck sheet: specific things an organizer asks for —
 // "Ice", wanted twice, in supplies — that someone going takes by bringing
 // it. Taking one adds an item in its category carrying the request's id, so
 // it counts on the sheet like any other item and comes off the open list
@@ -31,7 +31,7 @@ const (
 // person has already taken.
 var ErrRequestTaken = errors.New("that request is already taken")
 
-// PotluckRequest is one thing an organiser asked for, with the items of
+// PotluckRequest is one thing an organizer asked for, with the items of
 // people going that answer it.
 type PotluckRequest struct {
 	ID       int64         `json:"id"`
@@ -142,7 +142,7 @@ func (s *Store) readPotluckRequests(eventID int64, items []PotluckItem) ([]Potlu
 	return out, rows.Err()
 }
 
-// AddPotluckRequest adds something an organiser asks for.
+// AddPotluckRequest adds something an organizer asks for.
 func (s *Store) AddPotluckRequest(eventID int64, category, item string, wanted int, actor string) (*PotluckRequest, error) {
 	if _, ok := potluckCategoryOf(category); !ok {
 		return nil, fmt.Errorf("%w: category %q is not one of food, drinks, supplies, other", ErrInvalidPotluck, category)
@@ -311,7 +311,7 @@ func potluckRequestPages(sheet *PotluckSheet, going []Signup, viewerID string) [
 	return out
 }
 
-// handleWebPotluckRequestAdd adds a request, for an organiser.
+// handleWebPotluckRequestAdd adds a request, for an organizer.
 func (s *Server) handleWebPotluckRequestAdd(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {
@@ -343,7 +343,7 @@ func (s *Server) handleWebPotluckRequestAdd(w http.ResponseWriter, r *http.Reque
 	s.redirectWithNotice(w, r, ev.ID, "Asked for "+request.Item+".")
 }
 
-// handleWebPotluckRequestRemove takes a request off, for an organiser.
+// handleWebPotluckRequestRemove takes a request off, for an organizer.
 func (s *Server) handleWebPotluckRequestRemove(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {

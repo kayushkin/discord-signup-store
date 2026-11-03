@@ -20,16 +20,16 @@ func namesPageServer(t *testing.T) (*Store, *fakeDiscord, http.Handler, string) 
 }
 
 // TestOnlySiteAdminsAndServerOwnersSeeTheNamesPage: a short name holds in
-// every server, so an organiser with Manage Events gets a 404 and no link,
+// every server, so an organizer with Manage Events gets a 404 and no link,
 // and a server's owner gets the page.
 func TestOnlySiteAdminsAndServerOwnersSeeTheNamesPage(t *testing.T) {
-	_, store, _, mux, organiser := webTestServer(t)
+	_, store, _, mux, organizer := webTestServer(t)
 	recordBotGuild(t, store, "g1", "Games club", "owner")
-	if rec := getPage(t, mux, organiser, "/names"); rec.Code != http.StatusNotFound {
-		t.Errorf("an organiser opening /names got %d, want 404", rec.Code)
+	if rec := getPage(t, mux, organizer, "/names"); rec.Code != http.StatusNotFound {
+		t.Errorf("an organizer opening /names got %d, want 404", rec.Code)
 	}
-	if strings.Contains(getPage(t, mux, organiser, "/").Body.String(), `href="/names"`) {
-		t.Error("the home page links the names page for an organiser")
+	if strings.Contains(getPage(t, mux, organizer, "/").Body.String(), `href="/names"`) {
+		t.Error("the home page links the names page for an organizer")
 	}
 
 	owner, _ := store.CreateWebSession("owner", "Owner", "", map[string]uint64{"g1": permissionAdministrator})

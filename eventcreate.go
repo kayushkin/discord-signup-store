@@ -2,12 +2,12 @@ package discordsignup
 
 import "log"
 
-// createEventAndJoinOrganiser creates an event and puts whoever made it on its
+// createEventAndJoinOrganizer creates an event and puts whoever made it on its
 // roster.
 //
 // Somebody who fills in the form is going to their own event. Making them press
 // Join afterwards is a step that exists only because the software did not think
-// of it, and an organiser who forgets it leaves a card reading "0 places taken"
+// of it, and an organizer who forgets it leaves a card reading "0 places taken"
 // under an event they are running.
 //
 // The join is not allowed to fail the create. If it fails, the event still
@@ -20,7 +20,7 @@ import "log"
 // creator made a Discord event, not a roster, and putting them on a signup list
 // they never filled in is a different act. The machine API does not either —
 // `created_by` there is whatever a script sent, and a script is not going.
-func (s *Server) createEventAndJoinOrganiser(ev Event, displayName string) (*Event, error) {
+func (s *Server) createEventAndJoinOrganizer(ev Event, displayName string) (*Event, error) {
 	created, err := s.store.CreateEvent(ev)
 	if err != nil {
 		return nil, err
@@ -29,7 +29,7 @@ func (s *Server) createEventAndJoinOrganiser(ev Event, displayName string) (*Eve
 		return created, nil
 	}
 	if _, err := s.store.Join(created.ID, created.CreatedBy, displayName, JoinedViaOrganiser); err != nil {
-		log.Printf("[discord-signup] put organiser %s on their own new event %d: %v",
+		log.Printf("[discord-signup] put organizer %s on their own new event %d: %v",
 			created.CreatedBy, created.ID, err)
 		return created, nil
 	}

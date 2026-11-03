@@ -307,7 +307,7 @@ CREATE TABLE IF NOT EXISTS user_preferences (
     updated_at      INTEGER NOT NULL
 );
 
--- event_invites: an organiser asking someone to come, by DM with Join and
+-- event_invites: an organizer asking someone to come, by DM with Join and
 -- Maybe buttons. Append-only: a second invite to the same person is a second
 -- row. Whether they came is not stored here — it is their row in signups, read
 -- when the page is drawn. delivery says whether Discord took the DM: 'sent',
@@ -345,7 +345,7 @@ CREATE TABLE IF NOT EXISTS event_pins (
 
 CREATE INDEX IF NOT EXISTS idx_event_pins_event ON event_pins(event_id, unpinned_at);
 
--- event_messages: an organiser's message to the people on an event, from the
+-- event_messages: an organizer's message to the people on an event, from the
 -- web page — posted in its forum thread with each of them mentioned, or sent
 -- to each by DM. Kept for the event's log, and to limit how often: at most
 -- messageLimit in any messageWindow per event, counting every send that did
@@ -369,7 +369,7 @@ CREATE TABLE IF NOT EXISTS event_messages (
 CREATE INDEX IF NOT EXISTS idx_event_messages_event ON event_messages(event_id, at);
 
 -- event_dms: every DM this service sent a person about an event — an
--- organiser's message, an invite, being put on a list or given a place — so a
+-- organizer's message, an invite, being put on a list or given a place — so a
 -- reply in that DM can be traced to its event. summary is a short line saying
 -- what the DM was, shown beside a reply.
 CREATE TABLE IF NOT EXISTS event_dms (
@@ -403,8 +403,8 @@ CREATE TABLE IF NOT EXISTS event_dm_replies (
 
 CREATE INDEX IF NOT EXISTS idx_event_dm_replies_event ON event_dm_replies(event_id, at);
 
--- roster_watchers: organisers who asked, on an event's page, to be told by DM
--- when people join or leave it. One row per organiser per event; turning it
+-- roster_watchers: organizers who asked, on an event's page, to be told by DM
+-- when people join or leave it. One row per organizer per event; turning it
 -- off deletes the row. A join or leave is told only once the person has left
 -- it alone for a minute, so someone who presses Join and then Leave is not
 -- reported. reported_through is the time up to which changes have been
@@ -546,7 +546,7 @@ CREATE INDEX IF NOT EXISTS avatar_updates_by_person ON avatar_updates (discord_u
 -- scene that did not come out, and from which details, so a failing event is
 -- tried again an hour later rather than every minute; the scene already there
 -- stays in use meanwhile. request_kind, request_comment, requested_at and
--- requested_by are an organiser asking for the scene again: 'change' this
+-- requested_by are an organizer asking for the scene again: 'change' this
 -- one as the comment says, or a 'new' one with the comment to go by; '' when
 -- nothing is asked. A request that fails is cleared, and its failure shown.
 CREATE TABLE IF NOT EXISTS event_scenes (
@@ -687,10 +687,10 @@ CREATE TABLE IF NOT EXISTS auto_reactions (
 );
 CREATE INDEX IF NOT EXISTS auto_reactions_by_author ON auto_reactions (guild_id, discord_user_id) WHERE enabled = 1;
 
--- The potluck sheet: who is bringing what, on an event an organiser switched
+-- The potluck sheet: who is bringing what, on an event an organizer switched
 -- it on for (events.potluck_enabled). See potluck.go.
 --
--- potluck_needs is the organiser's list of how many of each category the
+-- potluck_needs is the organizer's list of how many of each category the
 -- event wants. It belongs to the event, not the date, so a repeating event
 -- keeps it from one date to the next.
 CREATE TABLE IF NOT EXISTS potluck_needs (
@@ -718,7 +718,7 @@ CREATE TABLE IF NOT EXISTS potluck_items (
 CREATE INDEX IF NOT EXISTS idx_potluck_items_event ON potluck_items(event_id, removed_at);
 
 -- potluck_reminders: each DM asking someone going what they are bringing,
--- sent by the 24-hour reminder ('automatic') or an organiser's nudge
+-- sent by the 24-hour reminder ('automatic') or an organizer's nudge
 -- ('nudge'). The automatic one goes once per person per date: the date
 -- rolling over stamps cleared_at, and an uncleared row means they have had it.
 CREATE TABLE IF NOT EXISTS potluck_reminders (
@@ -786,7 +786,7 @@ CREATE TABLE IF NOT EXISTS sheet_role_signups (
 CREATE INDEX IF NOT EXISTS idx_sheet_role_signups_role ON sheet_role_signups(role_id, left_at);
 CREATE INDEX IF NOT EXISTS idx_sheet_role_signups_event ON sheet_role_signups(event_id, left_at);
 
--- potluck_requests: specific things an organiser asked for on the potluck
+-- potluck_requests: specific things an organizer asked for on the potluck
 -- sheet, each in a category and wanted by how many people. Someone going
 -- takes one by bringing it: their potluck_items row carries the request's
 -- id. Never deleted; a removed request is stamped. See potluckrequests.go.
@@ -803,11 +803,11 @@ CREATE TABLE IF NOT EXISTS potluck_requests (
 );
 CREATE INDEX IF NOT EXISTS idx_potluck_requests_event ON potluck_requests(event_id, removed_at);
 
--- event_organisers: people an organiser of an event made organisers of it
+-- event_organisers: people an organizer of an event made organizers of it
 -- too. They may do whatever its creator may on that event, including making
--- others organisers. Never deleted; removing someone stamps removed_at. The
--- creator (events.created_by) and the server's own editors are organisers
--- without a row. See eventorganisers.go.
+-- others organizers. Never deleted; removing someone stamps removed_at. The
+-- creator (events.created_by) and the server's own editors are organizers
+-- without a row. See eventorganizers.go.
 CREATE TABLE IF NOT EXISTS event_organisers (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,

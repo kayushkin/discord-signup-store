@@ -29,9 +29,9 @@ const replyWindow = 14 * 24 * time.Hour
 
 // Kinds of DM sent about an event.
 const (
-	DMKindMessage  = "message"  // an organiser's message
+	DMKindMessage  = "message"  // an organizer's message
 	DMKindInvite   = "invite"   // an invite
-	DMKindPlaced   = "placed"   // an organiser put them on a list
+	DMKindPlaced   = "placed"   // an organizer put them on a list
 	DMKindPromoted = "promoted" // they were given a place
 	DMKindPotluck  = "potluck"  // asked what they are bringing
 )
@@ -44,7 +44,7 @@ const (
 
 // dmFooter goes under every DM about an event, so nobody writes back
 // thinking it is private to the bot.
-const dmFooter = "\n-# Replies here are passed to the organisers."
+const dmFooter = "\n-# Replies here are passed to the organizers."
 
 // RecordEventDM notes a DM sent about an event.
 func (s *Store) RecordEventDM(messageID, channelID string, eventID int64, userID, kind, summary string) error {
@@ -145,7 +145,7 @@ func (s *Store) DMReplies(eventID int64) ([]DMReply, error) {
 }
 
 // sendEventDM sends a DM about an event and records it, so a reply can be
-// traced back. The footer tells them replies reach the organisers.
+// traced back. The footer tells them replies reach the organizers.
 func (s *Server) sendEventDM(ev *Event, userID string, payload map[string]any, kind, summary string) error {
 	if content, ok := payload["content"].(string); ok {
 		payload["content"] = content + dmFooter
@@ -160,8 +160,8 @@ func (s *Server) sendEventDM(ev *Event, userID string, payload map[string]any, k
 	return nil
 }
 
-// summarise shortens a message body to one line for beside a reply.
-func summarise(body string) string {
+// summarize shortens a message body to one line for beside a reply.
+func summarize(body string) string {
 	line := strings.TrimSpace(strings.SplitN(body, "\n", 2)[0])
 	if r := []rune(line); len(r) > 80 {
 		line = string(r[:79]) + "…"

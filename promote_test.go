@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// TestAnOrganiserCanGiveAPlaceFromTheWaitlistOrMaybe, past the limit, and it
+// TestAnOrganizerCanGiveAPlaceFromTheWaitlistOrMaybe, past the limit, and it
 // is logged as theirs.
-func TestAnOrganiserCanGiveAPlaceFromTheWaitlistOrMaybe(t *testing.T) {
+func TestAnOrganizerCanGiveAPlaceFromTheWaitlistOrMaybe(t *testing.T) {
 	_, store, _, mux, token := webTestServer(t)
 	ev := publishedEvent(t, store, 1, "u-going", "u-waiting")
 	store.MarkMaybe(ev.ID, "u-maybe", "Maybe", JoinedViaButton)
@@ -25,14 +25,14 @@ func TestAnOrganiserCanGiveAPlaceFromTheWaitlistOrMaybe(t *testing.T) {
 		t.Errorf("going %d waiting %d, want 3 and 0", after.AttendingCount, after.WaitlistCount)
 	}
 	history, _ := store.History(ev.ID, 100)
-	byOrganiser := 0
+	byOrganizer := 0
 	for _, h := range history {
 		if h.Action == ActionPromoted && h.Actor == "web:manager" {
-			byOrganiser++
+			byOrganizer++
 		}
 	}
-	if byOrganiser != 2 {
-		t.Errorf("want two promotions by web:manager in the history, got %d", byOrganiser)
+	if byOrganizer != 2 {
+		t.Errorf("want two promotions by web:manager in the history, got %d", byOrganizer)
 	}
 	// Someone already going is not promotable.
 	rec = postForm(t, mux, token, path, url.Values{"discord_user_id": {"u-going"}})

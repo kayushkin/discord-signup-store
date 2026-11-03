@@ -187,7 +187,7 @@ func escapePathSegment(segment string) string {
 
 // do performs one authenticated request, retrying once on a rate limit.
 //
-// Discord answers 429 with retry_after in seconds. Honouring it once is enough
+// Discord answers 429 with retry_after in seconds. Honoring it once is enough
 // for this service's traffic — a handful of role writes per signup — and a
 // bounded single retry is better than an unbounded loop that hides a genuine
 // rate-limit problem instead of surfacing it.

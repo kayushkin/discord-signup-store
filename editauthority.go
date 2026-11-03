@@ -17,7 +17,7 @@ import (
 // replace the first half with a role of its own choosing — its editor role.
 // Then an event is edited by whoever created it, anyone holding that role, or
 // the server's owner, and Manage Events and Administrator no longer count
-// here: the server decided that organising events is a role, not a Discord
+// here: the server decided that organizing events is a role, not a Discord
 // permission. Separately, a server can let any member create events.
 
 // GuildEditingRule is one server's answer to those two questions. The zero
@@ -131,13 +131,13 @@ func (s *Server) mayEditAllEventsIn(actor editActor) (bool, error) {
 
 // mayEditEvent reports whether someone may edit one event: whoever created
 // it — matched on created_by, the Discord user id, never a name — someone
-// made an organiser of it, or anyone who may edit every event in its server.
+// made an organizer of it, or anyone who may edit every event in its server.
 func (s *Server) mayEditEvent(actor editActor, ev *Event) (bool, error) {
 	if ev.CreatedBy != "" && ev.CreatedBy == actor.UserID {
 		return true, nil
 	}
-	if organiser, err := s.store.IsEventOrganiser(ev.ID, actor.UserID); err != nil || organiser {
-		return organiser, err
+	if organizer, err := s.store.IsEventOrganiser(ev.ID, actor.UserID); err != nil || organizer {
+		return organizer, err
 	}
 	return s.mayEditAllEventsIn(actor)
 }
@@ -200,7 +200,7 @@ func (s *Server) handleGetGuildEditing(w http.ResponseWriter, r *http.Request) {
 
 // handleSetGuildEditing replaces a server's rule. The role is checked against
 // the server's roles first, so a mistyped id cannot quietly lock every
-// organiser out.
+// organizer out.
 func (s *Server) handleSetGuildEditing(w http.ResponseWriter, r *http.Request) {
 	guildID := r.PathValue("guildID")
 	var body struct {

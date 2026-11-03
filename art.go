@@ -12,7 +12,7 @@ import (
 //go:embed static/art/*.webp static/art/*.png static/art/favicon.ico
 var artFiles embed.FS
 
-// The web fonts, cut down by fonts/subset.sh, and their licences.
+// The web fonts, cut down by fonts/subset.sh, and their licenses.
 //
 //go:embed static/fonts/*.woff2 static/fonts/*.txt
 var fontFiles embed.FS

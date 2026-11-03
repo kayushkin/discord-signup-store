@@ -63,7 +63,7 @@ func patchesTo(fake *fakeDiscord, nativeID string) []recordedCall {
 	return out
 }
 
-// TestSyncPushesAnEditDiscordHasNotTaken: on 2026-09-24 an organiser moved an
+// TestSyncPushesAnEditDiscordHasNotTaken: on 2026-09-24 an organizer moved an
 // event a day later, Discord refused the push, and the sync copied Discord's
 // old start back over the edit. Discord still holding what we last wrote
 // means ours has not reached it — so ours goes out, and ours stays.
@@ -169,7 +169,7 @@ func TestADiscordEditAndAnUnsentOneBothSurvive(t *testing.T) {
 
 // TestSyncRecordsWhatItAgreesWith: an event from before the record existed,
 // where both sides agree, gets its record on the first sync — so the next
-// edit made in Discord is recognised as one.
+// edit made in Discord is recognized as one.
 func TestSyncRecordsWhatItAgreesWith(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)

@@ -13,7 +13,7 @@ import (
 
 // Roles: things people going can sign themselves up for — a job such as
 // setup or teardown, or coming for part of the event — each with an optional
-// cap. An organiser switches them on for an event (events.roles_enabled) and
+// cap. An organizer switches them on for an event (events.roles_enabled) and
 // adds them on the event page; anyone going takes or leaves one with its own
 // button on the event's card, in the What I'm bringing view when the event
 // also has a potluck sheet, or on the event page. They are not Discord
@@ -22,7 +22,7 @@ import (
 //
 // Roles have their own switch, apart from the potluck sheet's: either can be
 // on alone. Taking a role is open while roles are on and the event is
-// neither over nor cancelled, and is not an answer to what someone is
+// neither over nor canceled, and is not an answer to what someone is
 // bringing. The tables keep their sheet_ names from when roles were part of
 // the sheet.
 
@@ -42,14 +42,14 @@ var ErrSheetRoleFull = errors.New("that role is full")
 var ErrSheetRolesOff = errors.New("this event has no roles to sign up to")
 
 // ErrSheetRolesClosed is taking a role on an event that is over or
-// cancelled.
+// canceled.
 var ErrSheetRolesClosed = errors.New("this event is over, so its roles are closed")
 
 // ErrInvalidSheetRole is a role the event cannot take.
 var ErrInvalidSheetRole = errors.New("invalid role")
 
 // sheetRolesTakeAnswers says whether people may take or leave roles: roles
-// are on, and the event is neither over nor cancelled. Closing signups does
+// are on, and the event is neither over nor canceled. Closing signups does
 // not close them.
 func sheetRolesTakeAnswers(ev *Event) bool {
 	return ev.RolesEnabled && (ev.Status == StatusOpen || ev.Status == StatusClosed)
@@ -479,7 +479,7 @@ func sheetRolePages(roles []SheetRole, going []Signup, viewerID string) []sheetR
 	return out
 }
 
-// handleWebSheetRoleAdd adds a role, for an organiser.
+// handleWebSheetRoleAdd adds a role, for an organizer.
 func (s *Server) handleWebSheetRoleAdd(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {
@@ -513,7 +513,7 @@ func (s *Server) handleWebSheetRoleAdd(w http.ResponseWriter, r *http.Request) {
 	s.redirectWithNotice(w, r, ev.ID, "Added the role "+role.Name+".")
 }
 
-// handleWebSheetRoleRemove takes a role off, for an organiser.
+// handleWebSheetRoleRemove takes a role off, for an organizer.
 func (s *Server) handleWebSheetRoleRemove(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {

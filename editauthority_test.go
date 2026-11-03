@@ -145,7 +145,7 @@ func TestAServerCanLetAnyoneCreate(t *testing.T) {
 }
 
 // TestSettingTheRuleChecksTheRole: a mistyped role id would lock every
-// organiser out, so it is refused.
+// organizer out, so it is refused.
 func TestSettingTheRuleChecksTheRole(t *testing.T) {
 	fake := newFakeDiscord(t)
 	fake.on(http.MethodGet, "/guilds/g1/roles", func(w http.ResponseWriter, r *http.Request) {

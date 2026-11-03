@@ -76,7 +76,7 @@ type pageData struct {
 	// RegularIDs are a repeating event's regulars, and RegularsAway those of
 	// them not going on the current date.
 	RegularIDs   map[string]bool
-	// OrganiserIDs are the people made organisers of the event, and the
+	// OrganiserIDs are the people made organizers of the event, and the
 	// host, for the badge; the server's own editors carry none.
 	OrganiserIDs map[string]bool
 	RegularsAway []EventRegular
@@ -209,8 +209,8 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 	// nothing when they have none.
 	"avatar": avatarHTML,
 	// inkOf picks one of the four spot inks for an event's printed title
-	// panel, by its id, so neighbouring cards differ and one card never
-	// changes colour.
+	// panel, by its id, so neighboring cards differ and one card never
+	// changes color.
 	"inkOf": func(id int64) int64 { return id % 4 },
 	// toggleSubject is what the Open/Close button opens or closes: the
 	// waitlist, on a full event that has one, or signups.
@@ -353,7 +353,7 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 		data.MascotGuilds = guilds
 	}
 	// Every event in the viewer's servers, so anyone can see what is on,
-	// join from here, and open it: an organiser gets the event's edit page
+	// join from here, and open it: an organizer gets the event's edit page
 	// and everyone else the members' page.
 	var visible []Event
 	for guildID := range guildIDs {
@@ -536,7 +536,7 @@ func (s *Server) handleWebCreateEvent(w http.ResponseWriter, r *http.Request) {
 		s.renderFormError(w, session, nil, fmt.Errorf("%w: this server has no board channel set up yet", ErrInvalidEvent))
 		return
 	}
-	ev, err := s.createEventAndJoinOrganiser(Event{
+	ev, err := s.createEventAndJoinOrganizer(Event{
 		GuildID:         guildID,
 		ChannelID:       boardChannelID,
 		Name:            r.FormValue("name"),

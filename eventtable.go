@@ -325,7 +325,7 @@ func detailsMessage(ev *Event, roster []Signup) map[string]any {
 	return map[string]any{
 		"flags": messageFlagEphemeral | messageFlagComponentsV2,
 		"components": []any{map[string]any{
-			"type": componentTypeContainer, "accent_color": panelAccentColour,
+			"type": componentTypeContainer, "accent_color": panelAccentColor,
 			"components": body,
 		}},
 		// The host is a mention so Discord names them; nothing here pings.
@@ -337,8 +337,8 @@ func detailsMessage(ev *Event, roster []Signup) map[string]any {
 const (
 	componentTypeContainer = 17
 
-	// panelAccentColour is the bar down the left of each page.
-	panelAccentColour = 0x5865F2
+	// panelAccentColor is the bar down the left of each page.
+	panelAccentColor = 0x5865F2
 
 	// messageFlagComponentsV2 opts a message into the component system with
 	// containers in it. With the flag set the message must carry NO content

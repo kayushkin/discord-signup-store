@@ -11,14 +11,14 @@ import (
 
 // Messaging the people on an event, from the web page: a post in the
 // event's forum thread with each of them mentioned — the one place this
-// service pings on an organiser's say-so — or a DM to each. Going always;
-// the waitlist and Maybe if the organiser ticks them.
+// service pings on an organizer's say-so — or a DM to each. Going always;
+// the waitlist and Maybe if the organizer ticks them.
 //
 // Messages by DM are limited to messageLimit per event in any messageWindow,
 // whoever sends them, so the page cannot be used to fill people's DMs. A post
 // in the forum thread is not limited: it is one message, in a channel people
 // can mute. The limit is checked and the send recorded in one transaction, so
-// two organisers pressing Send at once cannot both slip under it.
+// two organizers pressing Send at once cannot both slip under it.
 
 const (
 	messageLimit  = 2
@@ -174,7 +174,7 @@ func audienceWords(lists []string) string {
 	return strings.Join(out[:len(out)-1], ", ") + " and " + out[len(out)-1]
 }
 
-// handleWebMessage sends an organiser's message to the people on the lists
+// handleWebMessage sends an organizer's message to the people on the lists
 // they picked, by a post in the forum thread or by DM.
 func (s *Server) handleWebMessage(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
@@ -308,7 +308,7 @@ func (s *Server) sendMessageByDM(ev *Event, session *WebSession, body string, pe
 		session.DisplayName, audienceWords(lists), ev.Name, body)
 	var closed, broken []string
 	for _, sg := range people {
-		err := s.sendEventDM(ev, sg.DiscordUserID, map[string]any{"content": content}, DMKindMessage, summarise(body))
+		err := s.sendEventDM(ev, sg.DiscordUserID, map[string]any{"content": content}, DMKindMessage, summarize(body))
 		switch {
 		case err == nil:
 			delivered++

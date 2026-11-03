@@ -24,7 +24,7 @@ func mapsURL(location string) string {
 
 // The event page's log: signups, edits and invites in one list, newest
 // first. Three tables, because they are three kinds of fact, and one list,
-// because an organiser asking "what happened" should not have to read three.
+// because an organizer asking "what happened" should not have to read three.
 // Everything is rendered from what the rows hold at the moment the page is
 // drawn; nothing here is stored.
 
@@ -248,12 +248,12 @@ type potluckLog struct {
 }
 
 
-func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventInvite, regulars []EventRegular, messages []EventMessage, potluck potluckLog, organisers []EventOrganiser, names eventLogNames) []eventLogEntry {
+func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventInvite, regulars []EventRegular, messages []EventMessage, potluck potluckLog, organizers []EventOrganiser, names eventLogNames) []eventLogEntry {
 	out := make([]eventLogEntry, 0, len(signups)+len(edits)+len(invites)+len(regulars)+len(messages)+len(potluck.rows))
 	out = append(out, potluckLogEntries(potluck, names)...)
 	out = append(out, sheetRoleLogEntries(potluck.roles, names)...)
 	out = append(out, potluckRequestLogEntries(potluck.requests, names)...)
-	out = append(out, organiserLogEntries(organisers, names)...)
+	out = append(out, organizerLogEntries(organizers, names)...)
 	for i, m := range messages {
 		how := "in the forum thread"
 		if m.Via == MessageViaDM {
@@ -408,7 +408,7 @@ func potluckLogEntries(potluck potluckLog, names eventLogNames) []eventLogEntry 
 		out = append(out, eventLogEntry{At: h.RemovedAt, order: 3_000_000 + i, Subject: subject, What: what, By: by})
 	}
 	// The reminder a day before goes to everyone due in one run; the run is
-	// one line. Nudges are an organiser's messages and are logged as those.
+	// one line. Nudges are an organizer's messages and are logged as those.
 	for i := 0; i < len(potluck.reminders); {
 		r := potluck.reminders[i]
 		if r.Kind != PotluckReminderAutomatic {

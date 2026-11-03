@@ -267,8 +267,8 @@ func TestDrawingsAreKeptAndThePersonChoosesWhichShows(t *testing.T) {
 	}
 
 	ev := publishedEvent(t, store, 5, "u-ann", "u-bob")
-	organiser, _ := store.CreateWebSession("u-org", "Org", "", map[string]uint64{"g1": permissionManageEvents})
-	page := getPage(t, mux, organiser.Token, fmt.Sprintf("/events/%d", ev.ID)).Body.String()
+	organizer, _ := store.CreateWebSession("u-org", "Org", "", map[string]uint64{"g1": permissionManageEvents})
+	page := getPage(t, mux, organizer.Token, fmt.Sprintf("/events/%d", ev.ID)).Body.String()
 	if !strings.Contains(page, `src="/avatars/u-ann.webp"`) || strings.Contains(page, `src="/avatars/u-bob.webp"`) {
 		t.Error("the event page shows the wrong avatars")
 	}

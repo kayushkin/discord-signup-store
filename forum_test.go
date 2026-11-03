@@ -297,7 +297,7 @@ func TestSurfacesLinkToTheForumPostExceptTheForumItself(t *testing.T) {
 }
 
 // TestAReopenedEventUnarchivesItsForumPost: Discord refuses any change to an
-// archived thread unless the same PATCH unarchives it, so a cancelled event
+// archived thread unless the same PATCH unarchives it, so a canceled event
 // that is reopened — or a live post Discord archived for inactivity — must
 // say archived:false or keep its old tag for good.
 func TestAReopenedEventUnarchivesItsForumPost(t *testing.T) {
@@ -310,8 +310,8 @@ func TestAReopenedEventUnarchivesItsForumPost(t *testing.T) {
 	if err := srv.refreshForumPost(ev, true); err != nil {
 		t.Fatalf("first post: %v", err)
 	}
-	cancelled := StatusCancelled
-	ev, _ = store.UpdateEvent(ev.ID, EventPatch{Status: &cancelled})
+	canceled := StatusCancelled
+	ev, _ = store.UpdateEvent(ev.ID, EventPatch{Status: &canceled})
 	if err := srv.refreshForumPost(ev, false); err != nil {
 		t.Fatalf("cancel: %v", err)
 	}

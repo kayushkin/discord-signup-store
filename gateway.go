@@ -195,7 +195,7 @@ func (g *GatewayListener) onReactionAdd(_ *discordgo.Session, e *discordgo.Messa
 	if errors.Is(err, ErrEventFull) {
 		// A reaction has no reply of its own, so the refusal goes by DM, as a
 		// waitlisted place does below.
-		body := fmt.Sprintf("**%s** is full, and its organiser turned the waitlist off, "+
+		body := fmt.Sprintf("**%s** is full, and its organizer turned the waitlist off, "+
 			"so your ✅ did not sign you up. If someone drops out, the next person to join gets the place.", ev.Name)
 		if err := g.server.discord.SendDirectMessage(e.UserID, body); err != nil {
 			log.Printf("[discord-signup] tell user=%s event=%d is full: %v", e.UserID, ev.ID, err)

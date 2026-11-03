@@ -52,7 +52,7 @@ func (s *Server) handlePotluckComponent(w http.ResponseWriter, in *Interaction, 
 			s.replyEphemeral(w, "Unknown potluck category.")
 			return
 		}
-		// The form's example is what the organiser asked for in this
+		// The form's example is what the organizer asked for in this
 		// category, while any of it is still open.
 		example := category.Example
 		if ev, err := s.store.GetEvent(eventID); err != nil {

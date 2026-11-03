@@ -10,14 +10,14 @@ import (
 // #new-events holds one message for every event that has not gone to past
 // events: posted when the event is first published, edited in place whenever
 // it changes, and deleted when its line goes to past events or it is
-// cancelled, so an event is in exactly one of the two channels.
+// canceled, so an event is in exactly one of the two channels.
 //
 // Each message is the event's #events text and nothing else — plain content,
 // no container and no buttons — so that forwarding it to somebody carries the
 // whole of it. Buttons do not work from a forwarded copy.
 
 // newEventsMessageBelongs reports whether an event should have a message in
-// #new-events: it has not finished and has not been cancelled.
+// #new-events: it has not finished and has not been canceled.
 func newEventsMessageBelongs(ev *Event) bool {
 	return ev.Status != StatusCompleted && ev.Status != StatusCancelled
 }

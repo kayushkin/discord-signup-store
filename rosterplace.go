@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// An organiser putting someone on a list by hand: going, maybe or the
+// An organizer putting someone on a list by hand: going, maybe or the
 // waitlist, their choice rather than the capacity rule's. Different from an
 // invite, which asks and lets the person decide, and from Join, which the
 // person presses themselves and which the limit decides.
@@ -26,9 +26,9 @@ type PlaceResult struct {
 }
 
 // PlaceOnList puts someone on an event's going, maybe or waitlist, on an
-// organiser's say-so.
+// organizer's say-so.
 //
-// Going ignores the limit, as GiveAPlace does: the organiser can take an
+// Going ignores the limit, as GiveAPlace does: the organizer can take an
 // event to 16/15. The waitlist is only offered while the event is full —
 // counting everyone going except this person — and has a waitlist, because a
 // line with a free place at its head would be promoted at once. Anyone moved
@@ -38,14 +38,14 @@ type PlaceResult struct {
 // Arrival order follows the same rules as everywhere else: someone new, or
 // back after withdrawing, is a new row at the back; moving to the waitlist is
 // joining its back; going or Maybe from a list they are already on keeps the
-// row. The history names the organiser as the actor.
+// row. The history names the organizer as the actor.
 func (s *Store) PlaceOnList(eventID int64, discordUserID, displayName, state, actor string) (*PlaceResult, error) {
 	discordUserID = strings.TrimSpace(discordUserID)
 	if discordUserID == "" {
 		return nil, fmt.Errorf("%w: discord_user_id is required", ErrInvalidEvent)
 	}
 	if state != StateAttending && state != StateMaybe && state != StateWaitlisted {
-		return nil, fmt.Errorf("%w: an organiser can put someone on %q, %q or %q, not %q",
+		return nil, fmt.Errorf("%w: an organizer can put someone on %q, %q or %q, not %q",
 			ErrInvalidEvent, StateAttending, StateMaybe, StateWaitlisted, state)
 	}
 	tx, err := s.db.Begin()
@@ -66,7 +66,7 @@ func (s *Store) PlaceOnList(eventID int64, discordUserID, displayName, state, ac
 		return nil, fmt.Errorf("load event: %w", err)
 	}
 	// Closed shuts the door on people signing themselves up, not on the
-	// organiser. Over is over.
+	// organizer. Over is over.
 	if IsArchived(status) {
 		return nil, fmt.Errorf("%w (status is %q)", ErrEventNotOpen, status)
 	}

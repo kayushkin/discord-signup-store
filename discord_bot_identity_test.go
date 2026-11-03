@@ -47,7 +47,7 @@ func usersMeFailingTimes(f *fakeDiscord, failures int, id string) {
 // transient /users/@me failure — a 500, a timeout, a token not yet resolved at
 // boot — left the bot's own id empty for the life of the process and nothing
 // ever looked again. What the id is used for makes that expensive: three of its
-// four call sites compare it against somebody else's id to recognise the bot's
+// four call sites compare it against somebody else's id to recognize the bot's
 // own work, and "" matches nobody, so each of those guards quietly fails open.
 //
 // The property is that a failure is not an answer. Only a successful lookup may
@@ -69,7 +69,7 @@ func TestBotUserIDIsLookedUpAgainAfterAFailure(t *testing.T) {
 }
 
 // TestBotUserIDIsLookedUpOnlyOnceOnceItIsKnown pins the half of the old
-// behaviour that was right. Retrying after a failure must not turn every call
+// behavior that was right. Retrying after a failure must not turn every call
 // into a round trip: the id is immutable for the life of the bot, and the
 // gateway asks for it on every single reaction.
 func TestBotUserIDIsLookedUpOnlyOnceOnceItIsKnown(t *testing.T) {

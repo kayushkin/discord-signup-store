@@ -160,7 +160,7 @@ func TestDiscordSlidingTheStartForwardIsARollover(t *testing.T) {
 	}
 }
 
-// TestADateMovedInDiscordIsAnEditNotARollover: an organiser moving next
+// TestADateMovedInDiscordIsAnEditNotARollover: an organizer moving next
 // week's game to Thursday in Discord's own event screen has edited it, not
 // ended anything, so the date is taken and nobody loses their place.
 func TestADateMovedInDiscordIsAnEditNotARollover(t *testing.T) {

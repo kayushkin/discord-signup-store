@@ -312,7 +312,7 @@ func (s *Server) patchForumThread(ev *Event, forum *GuildForum, title, tag strin
 	// Said both ways, every time. Discord refuses any change to an archived
 	// thread unless the same PATCH unarchives it, and a post gets archived
 	// two ways that are not the event ending: Discord's own inactivity
-	// timer, and an event that was cancelled and then reopened. Sending only
+	// timer, and an event that was canceled and then reopened. Sending only
 	// "true" left both stuck on their old tag for good.
 	patch["archived"] = IsArchived(ev.Status)
 	if err := s.discord.ModifyThread(ev.ForumPostID, patch); err != nil {

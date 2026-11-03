@@ -44,20 +44,20 @@ the event at all but the addresses of messages this service has written about it
 | `recurrence_rule` | TEXT | RFC 5545 RRULE. Encoded into Discord's `recurrence_rule` object on every publish since 2026-09-03 — before that it was stored and never sent. `''` means the event does not repeat, and sends `null`. A row with a rule is never completed by the sweep: when its occurrence ends, `starts_at`/`ends_at` move to the next date, the roster is withdrawn and the reminder stamps clear (`RollOverOccurrence`). |
 | `timezone` | TEXT | IANA zone name, never an offset — an offset cannot survive a daylight-saving change. Mandatory whenever `recurrence_rule` is set. |
 | `origin` | TEXT | `local` (made here) or `discord` (imported). **Not** derivable from `discord_scheduled_event_id`: a local event published to Discord also has one. This records where it came from, not who owns it: this service's row is the source of truth for both kinds. |
-| `discord_interested_count` | INTEGER | Discord's own Interested tally. Stored for display, labelled as Discord's, and **never** feeds a capacity decision. |
+| `discord_interested_count` | INTEGER | Discord's own Interested tally. Stored for display, labeled as Discord's, and **never** feeds a capacity decision. |
 | `discord_synced_at` | INTEGER | When the native event was last read. |
 | `created_by` | TEXT | Discord user id of whoever made it. Grants edit rights, and gets them a place on their own roster. |
 | `native_name_written`, `native_description_written`, `native_starts_at_written`, `native_ends_at_written`, `native_location_written` | TEXT / INTEGER | What this service last wrote into the native event, in its own terms (name without the count, description without the roster, end as sent). Each is set only when that field was sent. The sync compares Discord's copy with these to tell an edit made in Discord's event screen from a change of ours Discord has not taken yet. Bookkeeping, not logged. |
 | `native_written_at` | INTEGER | When the above were last recorded; `0` means never, and the sync then treats a difference as ours not yet sent. |
 | `waitlist_disabled` | INTEGER | `1` when a full event refuses a Join instead of waitlisting it; set on the web page. `0`, the default, is the ordinary waitlist. Turning it on removes nobody already waiting. Logged in `event_updates`. |
-| `new_events_message_id` | TEXT | The event's message in its guild's `#new-events`; `''` when it has none. Cleared when the message is deleted — as the event's line goes to past events, or on cancelling. Bookkeeping. |
+| `new_events_message_id` | TEXT | The event's message in its guild's `#new-events`; `''` when it has none. Cleared when the message is deleted — as the event's line goes to past events, or on canceling. Bookkeeping. |
 | `thread_id` | TEXT | A discussion thread from when cards existed; nothing writes it now. Old ones are still archived when their event finishes. |
 | `forum_post_id` | TEXT | The event's post in the forum channel. One id reaches both the post and the card inside it. |
 | `published_signature` | TEXT | Fingerprint of everything that feeds a Discord copy, written only when a publish fully succeeds. `''` means never published, or the last publish failed part way. The minute sweep republishes anything that does not match. |
 | `reminded_before_at` | INTEGER | When the hour-before reminder went out, **or** when it was written off as too late. `0` means still owed. |
 | `reminded_start_at` | INTEGER | The same for the starting reminder. |
-| `title_written_at` | INTEGER | When the titles were last renamed. A title is a rename, rate-limited to about two per ten minutes, so anything short of becoming Full or an organiser's rename waits ten; this is how the publisher knows whether one is due. |
-| `native_title_written` | TEXT | What the native event's name last said, e.g. `Games [3/8]` or `[Full] Games`. Compared to what it *should* say to spot a Full flip or an organiser's rename, both of which go at once. |
+| `title_written_at` | INTEGER | When the titles were last renamed. A title is a rename, rate-limited to about two per ten minutes, so anything short of becoming Full or an organizer's rename waits ten; this is how the publisher knows whether one is due. |
+| `native_title_written` | TEXT | What the native event's name last said, e.g. `Games [3/8]` or `[Full] Games`. Compared to what it *should* say to spot a Full flip or an organizer's rename, both of which go at once. |
 | `forum_title_written` | TEXT | The same for the forum post's title. |
 | `created_at` / `updated_at` | INTEGER | `updated_at` deliberately does **not** move when a publish signature or a reminder stamp is written — those are the service noting what it did, not somebody editing the event. |
 | `deleted_at` | INTEGER | Soft delete. `0` is live. |
@@ -86,7 +86,7 @@ computed at read time and never stored.
 | `signed_up_at` | INTEGER | Arrival, and **half the ordering key**: the roster is `ORDER BY signed_up_at, id`. Reset on a rejoin, which is what sends a rejoiner to the back. |
 | `state_changed_at` | INTEGER | Last move between states. |
 | `joined_via` | TEXT | How they got on: `button`, `interested`, `reaction`, `operator`, `organiser`, `regular` or `web` (the home page's Join). Not cosmetic — it is what makes an un-marked Interested readable as leaving rather than as noise. |
-| `waitlist_rank` | INTEGER | A place in the waitlist an organiser set, 1 at the front; `0` means none. A move ranks the whole line, so everyone with a rank arrived before everyone without one, and the line is `(waitlist_rank = 0), waitlist_rank, signed_up_at, id` — `waitlistOrder` in `waitlistorder.go`, the one ORDER BY every "who is next" query uses. A rejoin is a new row, so it starts at `0`. `signed_up_at` is never rewritten by a move. |
+| `waitlist_rank` | INTEGER | A place in the waitlist an organizer set, 1 at the front; `0` means none. A move ranks the whole line, so everyone with a rank arrived before everyone without one, and the line is `(waitlist_rank = 0), waitlist_rank, signed_up_at, id` — `waitlistOrder` in `waitlistorder.go`, the one ORDER BY every "who is next" query uses. A rejoin is a new row, so it starts at `0`. `signed_up_at` is never rewritten by a move. |
 | `discord_interested` | INTEGER | Whether Discord currently lists them as Interested. Recorded even when the roster does not move, because without it un-marking and re-marking is indistinguishable from a duplicate event. |
 
 **`UNIQUE(event_id, discord_user_id)`** — one row per person per event, enforced
@@ -97,7 +97,7 @@ by the database rather than by the code that inserts. Index
 as a number, which was a second copy of what `signed_up_at` already said and
 able to disagree with it; the rule that rejoining sends you to the back was
 written twice, bumping the position *and* resetting the timestamp. Order is now
-`(signed_up_at, id)` — and, for the waitlist, `waitlist_rank` ahead of it once an organiser has moved someone. Checked against every event in the live database before
+`(signed_up_at, id)` — and, for the waitlist, `waitlist_rank` ahead of it once an organizer has moved someone. Checked against every event in the live database before
 the column went: **15 events, 0 where the derived order differed from the stored
 one.**
 
@@ -120,7 +120,7 @@ Append-only. Never updated, never deleted except by cascade.
 | `id` | INTEGER PK | |
 | `event_id` | INTEGER | → `events(id)`, **ON DELETE CASCADE**. |
 | `discord_user_id` | TEXT | Who moved. |
-| `action` | TEXT | `joined`, `waitlisted`, `withdrew`, `promoted`, `rejoined`, `maybe`, and `added` — put on a list by an organiser from the web page, who is the `actor`. |
+| `action` | TEXT | `joined`, `waitlisted`, `withdrew`, `promoted`, `rejoined`, `maybe`, and `added` — put on a list by an organizer from the web page, who is the `actor`. |
 | `from_state` | TEXT | `''` when there was no prior row. |
 | `to_state` | TEXT | Where they landed. |
 | `actor` | TEXT | Who caused it: `user` for a press, `promotion` for an automatic move, `reaction`, or an operator's own id. Without this an automatic promotion and an admin's manual add are the same row. |
@@ -283,7 +283,7 @@ Each server's own mascot; a server with no row shows the site's own, Maleeha, bu
 
 ### `event_scenes` — the scene an event's picture is set in, new 2026-09-28
 
-`event_id` PK; `request_kind` (`change`, `new`, `''`), `request_comment`, `requested_at`, `requested_by`: an organiser asking for the scene again, cleared by the scene or failure that answers it; `details_signature`, the name, description, place, weekday and time, repeat rule and stages (from the limit) it was written from, and the scene format (`eventDetailsSignature`, `eventSceneFormat`: a new format asks every event for a new scene); `scene_code`, the scene in `art/SCENE.md`'s form, casting each person as a posed character; `failure`, `failed_details_signature` and `failed_at`, the last scene that did not come out and from which details, tried again an hour later; `updated_at`. A model writes it; a change to the details asks for a new one, a change to who is going does not.
+`event_id` PK; `request_kind` (`change`, `new`, `''`), `request_comment`, `requested_at`, `requested_by`: an organizer asking for the scene again, cleared by the scene or failure that answers it; `details_signature`, the name, description, place, weekday and time, repeat rule and stages (from the limit) it was written from, and the scene format (`eventDetailsSignature`, `eventSceneFormat`: a new format asks every event for a new scene); `scene_code`, the scene in `art/SCENE.md`'s form, casting each person as a posed character; `failure`, `failed_details_signature` and `failed_at`, the last scene that did not come out and from which details, tried again an hour later; `updated_at`. A model writes it; a change to the details asks for a new one, a change to who is going does not.
 
 ### `event_scene_history` — every scene an event had before its current one, new 2026-09-28
 
@@ -334,7 +334,7 @@ Indexed by `expires_at` (the sweep) and `discord_user_id`.
 
 ## `event_invites` — 8 columns · append-only, new 2026-09-25
 
-An organiser asking someone to come: a DM with the event's own Join and Maybe
+An organizer asking someone to come: a DM with the event's own Join and Maybe
 buttons, sent from the web page. A second invite to the same person is a second
 row. **Whether they came is not stored here** — it is their row in `signups`,
 joined when the page is drawn.
@@ -352,7 +352,7 @@ joined when the page is drawn.
 | `holds_place` | INTEGER | `1` when the invite keeps a place until they answer. |
 | `past_limit` | INTEGER | `1` when it keeps no place but lets their Join past the limit; it ends the same ways a hold does, and never counts against the limit. |
 | `hold_ended_at` | INTEGER | When a held place stopped being held; `0` while it is. A live hold counts against the limit like someone going, in every query that decides whether the event is full. |
-| `hold_outcome` | TEXT | `joined`, `declined` (Maybe or Can't go), `released` (an organiser, or a second invite replacing the first), `undelivered` (the DM bounced) or `expired` (the date rolled over). |
+| `hold_outcome` | TEXT | `joined`, `declined` (Maybe or Can't go), `released` (an organizer, or a second invite replacing the first), `undelivered` (the DM bounced) or `expired` (the date rolled over). |
 | `hold_ended_by` | TEXT | The actor that ended it, as elsewhere; `''` when the service did. |
 
 ## `event_pins` — regulars: people on every date of a repeating event, new 2026-09-25
@@ -371,7 +371,7 @@ regular. Values stored under the old name — `joined_via = pinned`, actor
 | `pinned_by` / `unpinned_by` | TEXT | Who made them a regular and who stopped it; `regular` when the service made the host one. |
 | `pinned_at` / `unpinned_at` | INTEGER | `unpinned_at` 0 is a current regular. At each rollover every current regular is seated as going (`joined_via = regular`, logged `added` by `regular`). The host is made one only if they never had a row, so stopping stands. |
 
-## `event_messages` — organisers' messages to the people on an event, new 2026-09-26
+## `event_messages` — organizers' messages to the people on an event, new 2026-09-26
 
 | column | type | description |
 |---|---|---|
@@ -399,10 +399,10 @@ count; the files stay in the DM), `replied_to` (our DM's id when they used
 Reply), `matched` (`reply`, or `latest` for a plain message put with the
 latest DM in the last 14 days), `at`.
 
-## `roster_watchers` — organisers told by DM who joins and leaves, new 2026-09-26
+## `roster_watchers` — organizers told by DM who joins and leaves, new 2026-09-26
 
-One row per organiser per event, from the switch on the event's page; turning
-it off deletes the row. `event_id`, `discord_user_id` (the organiser),
+One row per organizer per event, from the switch on the event's page; turning
+it off deletes the row. `event_id`, `discord_user_id` (the organizer),
 `watching_since` (nothing before it is told), `reported_through` (changes up to
 this time have been told), `last_sent_at`, and `last_error` (why the last DM
 was not sent, `''` when it was). Key `(event_id, discord_user_id)`.
@@ -469,7 +469,7 @@ See `potluck.go`. Only rows of people going are shown or counted, so someone who
 | `category` | TEXT | A category above, or `nothing` for "I am bringing nothing", which makes them count as answered. Adding an item ends their `nothing` row, and `nothing` ends their items. |
 | `item` | TEXT | What they typed, at most 100 characters; `''` for `nothing`. |
 | `added_at` | INTEGER | When. |
-| `removed_at` / `removed_by` | INTEGER / TEXT | Never deleted: taken off by `user`, an organiser (`web:<id>`), or the date rolling over (`recurrence`). 0 is on the sheet. |
+| `removed_at` / `removed_by` | INTEGER / TEXT | Never deleted: taken off by `user`, an organizer (`web:<id>`), or the date rolling over (`recurrence`). 0 is on the sheet. |
 
 ### `potluck_reminders` — DMs asking someone what they will bring
 
@@ -478,16 +478,16 @@ See `potluck.go`. Only rows of people going are shown or counted, so someone who
 | `id` | INTEGER PK | |
 | `event_id` | INTEGER | → `events(id)` ON DELETE CASCADE. |
 | `discord_user_id` | TEXT | Who. |
-| `kind` | TEXT | `automatic` (a day before, once per date) or `nudge` (an organiser's press). |
+| `kind` | TEXT | `automatic` (a day before, once per date) or `nudge` (an organizer's press). |
 | `outcome` | TEXT | `sent`, `dms-closed` or `failed`. |
 | `sent_at` | INTEGER | When. |
 | `cleared_at` | INTEGER | Set when the date rolls over; 0 is the current date. |
 
-### `event_organisers` — people made organisers of one event, new 2026-10-27
+### `event_organisers` — people made organizers of one event, new 2026-10-27
 
-`event_id`, `discord_user_id`, `added_at`/`added_by`, `removed_at`/`removed_by`. Never deleted. A live row lets that person edit that event — `mayEditEvent` checks it after the creator and before the server's editors — and make others organisers of it. Kept across a repeating event's dates.
+`event_id`, `discord_user_id`, `added_at`/`added_by`, `removed_at`/`removed_by`. Never deleted. A live row lets that person edit that event — `mayEditEvent` checks it after the creator and before the server's editors — and make others organizers of it. Kept across a repeating event's dates.
 
-### `potluck_requests` — things an organiser asked for, new 2026-10-26
+### `potluck_requests` — things an organizer asked for, new 2026-10-26
 
 `id`, `event_id`, `category`, `item`, `wanted` (how many people, 1–99), `created_at`/`created_by`, `removed_at`/`removed_by`. Never deleted; at most 25 live. Someone going takes one by bringing it: their `potluck_items` row carries `request_id` (0 for an item nobody asked for), and only items of people going count toward `wanted`. Removing a request leaves those items as they are.
 

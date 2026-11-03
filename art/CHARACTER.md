@@ -33,7 +33,7 @@ if the person stood straight, facing the viewer, arms hanging at their sides.
 - **pelvis**: origin between the hips; the waist and seat, a little below.
 - **neck**: origin at the top of the torso, running up to `y = -neck`.
 - **head**: origin where the chin meets the neck, running up to `y = -head`,
-  centred on `x = 0`. Hair, hat, face, ears.
+  centered on `x = 0`. Hair, hat, face, ears.
 - **upperArmL, forearmL, handL** and **thighL, shinL, footL**: each runs down
   from its joint along `+y` for its length. L is the limb on the viewer's left.
   A foot's sole is at `y = footHeight`; the left foot points to the viewer's
@@ -53,12 +53,12 @@ starts a little above the knee.
 - **handL** and **handR** get `{ open, hold }`: an open hand with fingers
   spread, a hand closed round something held, or a loose relaxed hand.
 - **badge** paints the round backdrop of their portrait, in an 800 by 800
-  square: a disc of radius about 390 at the middle, flat colour and something
+  square: a disc of radius about 390 at the middle, flat color and something
   of where their photo was taken. The kit then paints them standing, head and
   shoulders filling it.
 
 Paint only with the kit's functions and inks (`part`, `stroke`, `capsule`,
-`ellipsePoints`, `halftone`, `harlequin`, `mirrored` …); extra colours go in
+`ellipsePoints`, `halftone`, `harlequin`, `mirrored` …); extra colors go in
 constants of your own in the same muted print palette. No fetch, no images, no
 DOM beyond the canvas a `colourDetail` or `blackDetail` callback is handed.
 

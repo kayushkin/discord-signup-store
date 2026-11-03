@@ -145,7 +145,7 @@
 
   {{if not $ev.PicturesDisabled}}{{with .EventPicture}}
   {{/* The picture of who is going, as the home page shows it, and for an
-       organiser a way to ask for the scene again. */}}
+       organizer a way to ask for the scene again. */}}
   <section class="card event-picture">
     {{if .Signature}}
     <img class="event-picture-img" src="/events/{{$ev.ID}}/picture.webp?v={{.Signature}}"
@@ -192,16 +192,16 @@
     <ul class="people-tags" data-sortable>
       {{range $s := .Going}}{{$organiser := index $.OrganiserIDs $s.DiscordUserID}}{{$regular := index $.RegularIDs $s.DiscordUserID}}
       <li data-name="{{or $s.ReadableName $s.DisplayName}}"><details class="tag-menu">
-        <summary>{{avatar $.AvatarUserIDs $s.DiscordUserID}}<span class="tag-name">{{or $s.ReadableName $s.DisplayName}}</span>{{if eq $s.DiscordUserID $ev.CreatedBy}}<span class="tag-mark host-mark" title="Host">host</span>{{else if $organiser}}<span class="tag-mark organiser-mark" title="Organiser">★</span>{{end}}{{if $regular}}<span class="tag-mark" title="A regular">{{template "regular"}}</span>{{end}}</summary>
+        <summary>{{avatar $.AvatarUserIDs $s.DiscordUserID}}<span class="tag-name">{{or $s.ReadableName $s.DisplayName}}</span>{{if eq $s.DiscordUserID $ev.CreatedBy}}<span class="tag-mark host-mark" title="Host">host</span>{{else if $organiser}}<span class="tag-mark organiser-mark" title="Organizer">★</span>{{end}}{{if $regular}}<span class="tag-mark" title="A regular">{{template "regular"}}</span>{{end}}</summary>
         <div class="menu">
           <div class="menu-head">{{person $s.ReadableName $s.DisplayName $s.DiscordUserID}}<span class="muted small">going since {{shortTime $s.SignedUpAt}}</span></div>
           {{if $canManage}}
           {{if ne $s.DiscordUserID $ev.CreatedBy}}
           <form method="post" action="/events/{{$ev.ID}}/organisers" data-async{{if not $organiser}}
-                data-confirm="Make {{or $s.ReadableName $s.DisplayName}} an organiser of this event? They can edit it and its people, and make others organisers."{{end}}>
+                data-confirm="Make {{or $s.ReadableName $s.DisplayName}} an organizer of this event? They can edit it and its people, and make others organizers."{{end}}>
             <input type="hidden" name="discord_user_id" value="{{$s.DiscordUserID}}">
             <input type="hidden" name="organiser" value="{{if $organiser}}false{{else}}true{{end}}">
-            <button class="menu-item">★ {{if $organiser}}Stop being an organiser{{else}}Make organiser{{end}}</button></form>
+            <button class="menu-item">★ {{if $organiser}}Stop being an organizer{{else}}Make organizer{{end}}</button></form>
           {{end}}
           {{if $ev.RecurrenceRule}}
           <form method="post" action="/events/{{$ev.ID}}/regulars" data-async>

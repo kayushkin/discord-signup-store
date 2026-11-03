@@ -160,10 +160,10 @@ func TestAnOperatorSetsAnAvatarIntoTheGallery(t *testing.T) {
 	}
 }
 
-// TestAnOrganiserControlsTheEventsPicture: the event page shows it, a scene
+// TestAnOrganizerControlsTheEventsPicture: the event page shows it, a scene
 // can be asked for again with a comment, a request made while one is drawn
 // is not lost, and switching pictures off takes the picture and scene down.
-func TestAnOrganiserControlsTheEventsPicture(t *testing.T) {
+func TestAnOrganizerControlsTheEventsPicture(t *testing.T) {
 	_, store, _, mux, token := webTestServer(t)
 	ev := publishedEvent(t, store, 5, "ann")
 	store.SetAvatarByOperator("ann", newAvatarDrawing{Format: AvatarFormatPortrait, Code: "const DRAWING = {}", ImageWebP: testWebP}, "test")

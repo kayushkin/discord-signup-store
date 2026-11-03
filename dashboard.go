@@ -125,7 +125,7 @@ func (s *Server) renderMyEventsDashboard(in *Interaction) (map[string]any, error
 	return map[string]any{
 		"flags": messageFlagEphemeral | messageFlagComponentsV2,
 		"components": []any{map[string]any{
-			"type": componentTypeContainer, "accent_color": panelAccentColour,
+			"type": componentTypeContainer, "accent_color": panelAccentColor,
 			"components": body,
 		}},
 		"allowed_mentions": map[string]any{"parse": []string{}},
@@ -161,7 +161,7 @@ func (s *Server) handleDashboardAction(w http.ResponseWriter, in *Interaction, a
 	case "dash-join":
 		_, err := s.joinAsThemselves(eventID, userID, displayName, JoinedViaButton)
 		if errors.Is(err, ErrEventFull) {
-			s.replyEphemeral(w, "This one is full, and its organiser turned the waitlist off.")
+			s.replyEphemeral(w, "This one is full, and its organizer turned the waitlist off.")
 			return
 		}
 		if err != nil && !errors.Is(err, ErrEventNotOpen) {

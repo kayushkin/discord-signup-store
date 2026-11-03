@@ -77,7 +77,7 @@ func renderSignupMessage(ev *Event, roster []Signup) map[string]any {
 
 	switch {
 	case ev.Status == StatusCancelled:
-		b.WriteString("\n**Cancelled.**\n")
+		b.WriteString("\n**Canceled.**\n")
 	case ev.Status == StatusCompleted:
 		b.WriteString("\n**This event has finished.**\n")
 	case ev.Status == StatusClosed:
@@ -284,27 +284,27 @@ func (s *Server) notifyPromoted(ev *Event, promoted *Signup) {
 		"A place opened up for **%s** and you were next on the waitlist — you're in.", ev.Name))
 }
 
-// notifyGivenAPlace tells someone an organiser gave them a place — from the
+// notifyGivenAPlace tells someone an organizer gave them a place — from the
 // waitlist or the Maybe list — rather than one opening up in turn.
 func (s *Server) notifyGivenAPlace(ev *Event, promoted *Signup) {
 	s.tellTheyHaveAPlace(ev, promoted, fmt.Sprintf(
-		"An organiser gave you a place at **%s** — you're in.", ev.Name))
+		"An organizer gave you a place at **%s** — you're in.", ev.Name))
 }
 
-// notifyPlacedOnList tells someone an organiser put them on a list. Going is
+// notifyPlacedOnList tells someone an organizer put them on a list. Going is
 // news they must not miss, so it falls back to a channel mention as a
 // promotion does; the waitlist and Maybe go by DM alone.
 func (s *Server) notifyPlacedOnList(ev *Event, placed *Signup) {
 	var content string
 	switch placed.State {
 	case StateAttending:
-		s.tellTheyHaveAPlace(ev, placed, fmt.Sprintf("An organiser put you down as going to **%s** — you're in.", ev.Name))
+		s.tellTheyHaveAPlace(ev, placed, fmt.Sprintf("An organizer put you down as going to **%s** — you're in.", ev.Name))
 		return
 	case StateWaitlisted:
-		content = fmt.Sprintf("An organiser put you on the waitlist for **%s**, at number %d. "+
+		content = fmt.Sprintf("An organizer put you on the waitlist for **%s**, at number %d. "+
 			"If a place opens you move up automatically and I will message you.", ev.Name, placed.WaitlistPlace)
 	case StateMaybe:
-		content = fmt.Sprintf("An organiser put you down as Maybe for **%s**. It does not hold a place — "+
+		content = fmt.Sprintf("An organizer put you down as Maybe for **%s**. It does not hold a place — "+
 			"press Join on the event if you decide to go.", ev.Name)
 	default:
 		return

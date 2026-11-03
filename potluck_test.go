@@ -122,7 +122,7 @@ func TestPotluckNothingAndItemsReplaceEachOther(t *testing.T) {
 }
 
 // TestPotluckSaysWhatIsStillNeeded is the quick summary: counts against what
-// the organiser asked for, and what is missing.
+// the organizer asked for, and what is missing.
 func TestPotluckSaysWhatIsStillNeeded(t *testing.T) {
 	store := testStore(t)
 	ev := potluckEvent(t, store, "ann", "bo")
@@ -201,12 +201,12 @@ func TestPotluckSheetStaysOpenWhenSignupsClose(t *testing.T) {
 	if !strings.Contains(fmt.Sprint(renderSignupMessage(mustEvent(t, store, ev.ID), nil)["components"]), PotluckCustomID(ev.ID)) {
 		t.Fatal("closed event's card lost the What I'm bringing button")
 	}
-	cancelled := StatusCancelled
-	if _, err := store.UpdateEvent(ev.ID, EventPatch{Status: &cancelled}); err != nil {
+	canceled := StatusCancelled
+	if _, err := store.UpdateEvent(ev.ID, EventPatch{Status: &canceled}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.AddPotluckItem(ev.ID, "ann", PotluckFood, "Dip"); !errors.Is(err, ErrPotluckClosed) {
-		t.Fatalf("cancelled event: err = %v, want ErrPotluckClosed", err)
+		t.Fatalf("canceled event: err = %v, want ErrPotluckClosed", err)
 	}
 }
 
@@ -347,10 +347,10 @@ func TestPotluckReminderGoesOnceADayBefore(t *testing.T) {
 	}
 }
 
-// TestTheOrganiserTurnsThePotluckOnAndNudges: the switch, the needs form,
+// TestTheOrganizerTurnsThePotluckOnAndNudges: the switch, the needs form,
 // the list of who has not answered, and the Nudge button's DMs, which count
 // against the event's DM limit.
-func TestTheOrganiserTurnsThePotluckOnAndNudges(t *testing.T) {
+func TestTheOrganizerTurnsThePotluckOnAndNudges(t *testing.T) {
 	_, store, fake, mux, token := webTestServer(t)
 	ev := publishedEvent(t, store, 0, "alice", "bob", "cy")
 
@@ -450,7 +450,7 @@ func TestAMemberFillsInThePotluckFromTheEventPage(t *testing.T) {
 			t.Errorf("Kat's page lacks %q", want)
 		}
 	}
-	if strings.Contains(page, "t answered <span class=\"badge\">") || strings.Contains(page, "only organisers see") {
+	if strings.Contains(page, "t answered <span class=\"badge\">") || strings.Contains(page, "only organizers see") {
 		t.Error("the members' page says who has not answered")
 	}
 
@@ -569,11 +569,11 @@ func TestDiscordsOwnEventDescriptionCarriesTheSheet(t *testing.T) {
 		t.Error("the description mentions someone, which would ping on every rewrite")
 	}
 	if got := stripSignupPointer(description); got != ev.Description {
-		t.Errorf("read back = %q, want the organiser's own %q", got, ev.Description)
+		t.Errorf("read back = %q, want the organizer's own %q", got, ev.Description)
 	}
 
 	// A long description leaves less room: the list shortens, never the
-	// organiser's words, and it stays inside the limit.
+	// organizer's words, and it stays inside the limit.
 	long := strings.Repeat("Bring a costume. ", 52)
 	store.UpdateEvent(ev.ID, EventPatch{Description: &long})
 	for i := 0; i < 6; i++ {
@@ -582,13 +582,13 @@ func TestDiscordsOwnEventDescriptionCarriesTheSheet(t *testing.T) {
 	ev = mustEvent(t, store, ev.ID)
 	description = nativeEventDescription(ev, roster, "board")
 	if n := len([]rune(description)); n > nativeDescriptionLimit || !strings.HasPrefix(description, long) {
-		t.Fatalf("description is %d runes, or lost the organiser's words", n)
+		t.Fatalf("description is %d runes, or lost the organizer's words", n)
 	}
 }
 
 // TestThePotluckIsInTheEventLog: each thing brought, each taken off and by
 // whom, what the event wants, and the reminder a day before, on the
-// organiser's log.
+// organizer's log.
 func TestThePotluckIsInTheEventLog(t *testing.T) {
 	_, store, _, mux, token := webTestServer(t)
 	ev := publishedEvent(t, store, 0, "alice", "bob")
@@ -624,7 +624,7 @@ func TestThePotluckIsInTheEventLog(t *testing.T) {
 }
 
 // TestEditingAnItem: its owner may change what it says, someone else may
-// not, an organiser may change anyone's; each change is in the log as the
+// not, an organizer may change anyone's; each change is in the log as the
 // old wording off and the new on.
 func TestEditingAnItem(t *testing.T) {
 	_, store, _, mux, token := webTestServer(t)
@@ -646,12 +646,12 @@ func TestEditingAnItem(t *testing.T) {
 	}
 	postForm(t, mux, token, eventPath(ev)+"/potluck/edit", url.Values{"item_id": {fmt.Sprint(mine[0].ID)}, "item": {"Two pumpkin pies"}})
 	if got := mustSheet(t, store, ev.ID).ItemsOf("member"); got[0].Item != "Two pumpkin pies" {
-		t.Fatalf("the organiser's edit did not land: %+v", got)
+		t.Fatalf("the organizer's edit did not land: %+v", got)
 	}
 	page := getPage(t, mux, token, eventPath(ev)).Body.String()
 	for _, want := range []string{"potluck: took off 🍲 Pie", "potluck: bringing 🍲 Pumpkin pie", "potluck: bringing 🍲 Two pumpkin pies", `data-sort-mode="az"`} {
 		if !strings.Contains(page, want) {
-			t.Errorf("the organiser page lacks %q", want)
+			t.Errorf("the organizer page lacks %q", want)
 		}
 	}
 }

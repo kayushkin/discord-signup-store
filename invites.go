@@ -8,11 +8,11 @@ import (
 	"strings"
 )
 
-// Invites: an organiser asking someone to come. The invite is a DM with the
+// Invites: an organizer asking someone to come. The invite is a DM with the
 // event's Join and Maybe buttons, so the person decides and the usual rules
 // apply to their answer — the limit, the waitlist, closed signups. Nothing
 // is held for them. Adding someone to a list is the other tool, for when the
-// organiser decides; see PlaceOnList.
+// organizer decides; see PlaceOnList.
 
 // EventInvite is one invite sent.
 type EventInvite struct {
@@ -72,9 +72,9 @@ func (s *Store) Invites(eventID int64) ([]EventInvite, error) {
 
 // inviteMessage is the DM: who asked, what and when, how full it is, and the
 // event's own Join and Maybe buttons.
-func inviteMessage(ev *Event, organiserName, reserve string) map[string]any {
+func inviteMessage(ev *Event, organizerName, reserve string) map[string]any {
 	var b strings.Builder
-	fmt.Fprintf(&b, "**%s** invited you to **%s**.", organiserName, ev.Name)
+	fmt.Fprintf(&b, "**%s** invited you to **%s**.", organizerName, ev.Name)
 	switch reserve {
 	case reserveHold:
 		b.WriteString(" **A place is held for you.**")
@@ -92,7 +92,7 @@ func inviteMessage(ev *Event, organiserName, reserve string) map[string]any {
 	case reserve == reserveHold:
 		b.WriteString("\n\nPress Join to take it. Can't go gives it back so someone else can have it.")
 	case reserve == reservePastLimit:
-		b.WriteString("\n\nPress Join and you are in. Can't go lets the organiser know.")
+		b.WriteString("\n\nPress Join and you are in. Can't go lets the organizer know.")
 	case ev.Capacity == 0:
 		fmt.Fprintf(&b, "\n%d going.", ev.AttendingCount)
 	case !eventIsFull(ev):
@@ -124,10 +124,10 @@ func inviteMessage(ev *Event, organiserName, reserve string) map[string]any {
 }
 
 // handleWebInvite sends one invite and records it, whether or not Discord
-// delivered it: an invite that bounced is still something the organiser did
+// delivered it: an invite that bounced is still something the organizer did
 // and needs to see. There is no channel mention when DMs are closed, unlike
 // a promotion — an invite is not news they would miss out by not hearing, and
-// pinging someone in public to ask is the organiser's call, not the bot's.
+// pinging someone in public to ask is the organizer's call, not the bot's.
 func (s *Server) handleWebInvite(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {
@@ -242,7 +242,7 @@ func (s *Server) afterHeldPlaceFreed(ev *Event, promoted *Signup) {
 	s.inBackground(func() { s.syncAfterChange(ev.ID, changes) })
 }
 
-// handleWebReleaseHold gives back a place an invite held, on the organiser's
+// handleWebReleaseHold gives back a place an invite held, on the organizer's
 // say-so; the next person waiting takes it. The invite itself stands: they
 // can still press Join, as anyone can.
 func (s *Server) handleWebReleaseHold(w http.ResponseWriter, r *http.Request) {

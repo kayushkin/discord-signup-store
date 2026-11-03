@@ -159,10 +159,10 @@ func ParseEventTime(input, zone string) (int64, error) {
 // parseEventTimeIn is the parser with its clock injected, so the defaulting
 // rules can be tested without waiting for a particular Tuesday.
 func parseEventTimeIn(input string, loc *time.Location, now time.Time) (int64, error) {
-	normalised := strings.ToLower(strings.Join(strings.Fields(input), " "))
-	normalised = strings.ReplaceAll(normalised, ",", " ")
-	normalised = isoTimeSeparator.ReplaceAllString(normalised, "$1 $2")
-	fields := strings.Fields(normalised)
+	normalized := strings.ToLower(strings.Join(strings.Fields(input), " "))
+	normalized = strings.ReplaceAll(normalized, ",", " ")
+	normalized = isoTimeSeparator.ReplaceAllString(normalized, "$1 $2")
+	fields := strings.Fields(normalized)
 
 	// Every split of the words into a date half and a time half, longest date
 	// first: "sep 29" is a date, not the month of September at 29 o'clock.

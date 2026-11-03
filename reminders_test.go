@@ -151,19 +151,19 @@ func TestAnEventNobodyJoinedRemindsNobody(t *testing.T) {
 	}
 }
 
-// TestACancelledEventIsNotAnnounced.
-func TestACancelledEventIsNotAnnounced(t *testing.T) {
+// TestACanceledEventIsNotAnnounced.
+func TestACanceledEventIsNotAnnounced(t *testing.T) {
 	srv, store, fake := reminderServer(t)
 	ev := reminderEvent(t, store, 20*time.Minute, "alice")
-	cancelled := StatusCancelled
-	if _, err := store.UpdateEvent(ev.ID, EventPatch{Status: &cancelled}); err != nil {
+	canceled := StatusCancelled
+	if _, err := store.UpdateEvent(ev.ID, EventPatch{Status: &canceled}); err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
 	if sent, _ := srv.SendDueReminders(); sent != 0 {
-		t.Errorf("sent %d reminders about a cancelled event, want 0", sent)
+		t.Errorf("sent %d reminders about a canceled event, want 0", sent)
 	}
 	if n := len(posted(fake)); n != 0 {
-		t.Errorf("%d messages about a cancelled event, want 0", n)
+		t.Errorf("%d messages about a canceled event, want 0", n)
 	}
 }
 

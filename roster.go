@@ -496,7 +496,7 @@ func boolToInt(b bool) int {
 
 // promoteIfPlaceFreeTx promotes the next in line when a place has just come
 // free — someone going left, or a held place was given back. An event an
-// organiser took over its limit — 16/15 — is not freed by one person leaving:
+// organizer took over its limit — 16/15 — is not freed by one person leaving:
 // 15/15 is still full, and promoting would put it back to 16. Held places
 // count as taken. Nil when nobody moved.
 func promoteIfPlaceFreeTx(tx *sql.Tx, eventID int64, ts int64) (*Signup, error) {
@@ -701,10 +701,10 @@ func (s *Store) SignupState(eventID int64, discordUserID string) (string, error)
 }
 
 // GiveAPlace moves someone from the waitlist or the Maybe list to attending,
-// on an organiser's say-so. It does not check the limit: an organiser can
+// on an organizer's say-so. It does not check the limit: an organizer can
 // take an event over it, as lowering the limit already can, and the table
 // then reads 16/15. Anyone going, withdrawn or not on the roster is
-// ErrNotFound. actor names the organiser, for the history.
+// ErrNotFound. actor names the organizer, for the history.
 func (s *Store) GiveAPlace(eventID int64, discordUserID, actor string) (*Signup, string, error) {
 	tx, err := s.db.Begin()
 	if err != nil {

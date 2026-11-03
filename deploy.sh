@@ -31,7 +31,7 @@ export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUN
 step() { printf '\n==> %s\n' "$*"; }
 
 # The service refuses to start without the application public key, which is the
-# correct behaviour but produces a restart loop that is easy to misread as a
+# correct behavior but produces a restart loop that is easy to misread as a
 # build problem. Catch it here, where the message can say what to do.
 # A fresh clone has only the .example. Say so plainly rather than failing on a
 # missing file three lines later.

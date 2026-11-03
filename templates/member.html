@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$ev := .Event}}
 {{/* The members' page: what anyone in the server sees of an event they may
-     not edit. Nothing here is organiser-only — no log, replies, invites or
+     not edit. Nothing here is organizer-only — no log, replies, invites or
      list of who has not answered the potluck sheet. */}}
 <div class="member-event">
 
@@ -187,7 +187,7 @@
     {{if not .Going}}<p class="empty">Nobody yet.</p>{{end}}
     {{template "sortswitch"}}
     <ul class="name-cloud" data-sortable>
-      {{range .Going}}<li data-name="{{or .ReadableName .DisplayName}}">{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}{{if eq .DiscordUserID $ev.CreatedBy}} <span class="pill">host</span>{{else if index $.OrganiserIDs .DiscordUserID}} <span class="pill organiser-badge">organiser</span>{{end}}{{if index $.RegularIDs .DiscordUserID}} <span class="regular-mark" title="A regular">{{template "regular"}}</span>{{end}}</li>{{end}}
+      {{range .Going}}<li data-name="{{or .ReadableName .DisplayName}}">{{avatar $.AvatarUserIDs .DiscordUserID}}{{person .ReadableName .DisplayName .DiscordUserID}}{{if eq .DiscordUserID $ev.CreatedBy}} <span class="pill">host</span>{{else if index $.OrganiserIDs .DiscordUserID}} <span class="pill organiser-badge">organizer</span>{{end}}{{if index $.RegularIDs .DiscordUserID}} <span class="regular-mark" title="A regular">{{template "regular"}}</span>{{end}}</li>{{end}}
     </ul>
     {{if .Waiting}}
     <div class="card-head sub-head"><h3>Waitlist</h3><span class="badge">{{len .Waiting}}</span></div>

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestRaisingTheLimitPromotesInArrivalOrder is the behaviour that makes the
+// TestRaisingTheLimitPromotesInArrivalOrder is the behavior that makes the
 // limit control usable at all. Without it, raising a cap leaves people queued
 // in front of empty places until an attendee happens to drop out.
 func TestRaisingTheLimitPromotesInArrivalOrder(t *testing.T) {

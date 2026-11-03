@@ -152,9 +152,9 @@ type SyncResult struct {
 // because the users endpoint returns subscribers ordered by user id (account
 // age), which cannot reconstruct arrival order for a waitlist.
 //
-// An event that has VANISHED from Discord's list is left alone, not cancelled.
+// An event that has VANISHED from Discord's list is left alone, not canceled.
 // Discord drops COMPLETED events out of the list endpoint, so absence means
-// "not listed", never "deleted", and auto-cancelling on absence would quietly
+// "not listed", never "deleted", and auto-canceling on absence would quietly
 // kill every event the day after it happened.
 func (s *Server) SyncScheduledEvents(guildID string) (*SyncResult, error) {
 	boardChannelID := s.guildChannels(guildID).Board
@@ -183,9 +183,9 @@ func (s *Server) SyncScheduledEvents(guildID string) (*SyncResult, error) {
 			result.Unchanged++
 		}
 	}
-	published, cancelledCount, finishedCount, reconcileProblems := s.reconcileWithNative(guildID, remote)
+	published, canceledCount, finishedCount, reconcileProblems := s.reconcileWithNative(guildID, remote)
 	result.Published = published
-	result.Cancelled = cancelledCount
+	result.Cancelled = canceledCount
 	result.Finished = finishedCount
 	result.Problems = append(result.Problems, reconcileProblems...)
 	// Imported and edited events both change what the panel should say, and
@@ -367,7 +367,7 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 	}
 
 	// What Discord alone can know is still taken from it: that the event ran
-	// or was cancelled, and its own Interested count. Discord's "scheduled"
+	// or was canceled, and its own Interested count. Discord's "scheduled"
 	// and "active" both map to open and are never copied — a closed event is
 	// still scheduled as far as Discord knows, and reopening on that word used
 	// to silently reopen signups somebody had just shut.
@@ -396,7 +396,7 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 }
 
 // syncEventUpdateActor marks a change in event_updates that the sync copied
-// from Discord's own event: that it completed or was cancelled.
+// from Discord's own event: that it completed or was canceled.
 const syncEventUpdateActor = "discord-event-sync"
 
 // discordEventScreenActor marks an edit somebody made in Discord's own event
@@ -638,7 +638,7 @@ func (s *Server) PublishToDiscord(eventID int64) (*Event, error) {
 	}
 	// Written back immediately. Everything between the line above and this one
 	// is the window in which the gateway can see an event we own but cannot
-	// recognise, which is why syncOneScheduledEvent checks the creator.
+	// recognize, which is why syncOneScheduledEvent checks the creator.
 	if _, err := s.store.UpdateEvent(eventID, EventPatch{DiscordScheduledEventID: &created.ID}); err != nil {
 		return nil, err
 	}
@@ -778,7 +778,7 @@ func titleRenameDue(ev *Event, wantNative, wantForum string, at int64) bool {
 	case stripTitleDecorations(wantNative) != stripTitleDecorations(writtenNative):
 		return true
 	case !titleIsFull(writtenNative) && titleLimit(wantNative) != titleLimit(writtenNative):
-		// The limit changed, or a limit appeared or went: an organiser's edit,
+		// The limit changed, or a limit appeared or went: an organizer's edit,
 		// as rare as a rename and as deliberate. It used to wait its ten
 		// minutes like a signup, so a limit set on an uncapped event showed
 		// nothing in the title for ten minutes while the roster filled. Not
@@ -860,7 +860,7 @@ func stripSignupPointer(description string) string {
 		// Matched without the leading newlines as well: Discord trims leading
 		// whitespace, so a block appended to an EMPTY description comes back
 		// starting at the dash, the marker with its "\n\n" never matches, and
-		// the block is stored as the organiser's own text — after which every
+		// the block is stored as the organizer's own text — after which every
 		// publish appends a second copy. Measured 2026-09-04 on an imported
 		// event whose native description carried the block twice.
 		bare := strings.TrimLeft(marker, "\n")
@@ -1030,8 +1030,8 @@ func finishedBy(ev *Event) int64 {
 
 // CompleteFinishedEvents moves events whose time has passed to completed.
 //
-// Only touches open and closed events. A cancelled one is already archived and
-// must not be relabelled as having happened — it did not.
+// Only touches open and closed events. A canceled one is already archived and
+// must not be relabeled as having happened — it did not.
 //
 // Recurring events are not completed here: a rule means the event comes round
 // again, so an ended occurrence rolls the row forward instead — see
@@ -1244,9 +1244,9 @@ func (c *DiscordClient) DeleteScheduledEvent(guildID, eventID string) error {
 //	                                signups for nothing.
 //	local live, native CANCELED   → cancel locally
 //	local live, native COMPLETED  → leave to the time sweep, which owns that
-//	local CANCELLED, native alive → delete the native event, so cancelling on
+//	local CANCELED, native alive → delete the native event, so canceling on
 //	                                any surface cancels everywhere
-func (s *Server) reconcileWithNative(guildID string, remote []DiscordScheduledEvent) (published, cancelled, finished int, problems []string) {
+func (s *Server) reconcileWithNative(guildID string, remote []DiscordScheduledEvent) (published, canceled, finished int, problems []string) {
 	remoteByID := map[string]DiscordScheduledEvent{}
 	for _, r := range remote {
 		remoteByID[r.ID] = r
@@ -1304,7 +1304,7 @@ func (s *Server) reconcileWithNative(guildID string, remote []DiscordScheduledEv
 				problems = append(problems, fmt.Sprintf("cancel %q: %v", ev.Name, err))
 				continue
 			}
-			cancelled++
+			canceled++
 
 		case ev.Status == StatusCancelled && ev.DiscordScheduledEventID != "":
 			if _, listed := remoteByID[ev.DiscordScheduledEventID]; !listed {
@@ -1315,10 +1315,10 @@ func (s *Server) reconcileWithNative(guildID string, remote []DiscordScheduledEv
 			}
 		}
 	}
-	return published, cancelled, finished, problems
+	return published, canceled, finished, problems
 }
 
-// cancelEventEverywhere marks an event cancelled and pushes that fact onto
+// cancelEventEverywhere marks an event canceled and pushes that fact onto
 // every surface: the card loses its buttons, the table drops the row, the
 // forum post gets the cancelled tag and archives, the thread closes.
 func (s *Server) cancelEventEverywhere(ev *Event, why string) error {
@@ -1327,15 +1327,15 @@ func (s *Server) cancelEventEverywhere(ev *Event, why string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("[discord-signup] event %d (%q) cancelled: %s", ev.ID, ev.Name, why)
+	log.Printf("[discord-signup] event %d (%q) canceled: %s", ev.ID, ev.Name, why)
 	if err := s.removeNewEventsMessage(updated); err != nil {
-		log.Printf("[discord-signup] remove cancelled event %d from new events: %v", ev.ID, err)
+		log.Printf("[discord-signup] remove canceled event %d from new events: %v", ev.ID, err)
 	}
 	s.refreshTablesQuietly(ev.GuildID)
 	s.refreshForumPostQuietly(updated)
 	if updated.ThreadID != "" {
 		if err := s.discord.ArchiveThread(updated.ThreadID); err != nil {
-			log.Printf("[discord-signup] archive thread for cancelled %d: %v", ev.ID, err)
+			log.Printf("[discord-signup] archive thread for canceled %d: %v", ev.ID, err)
 		}
 	}
 	return nil

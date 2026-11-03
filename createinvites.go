@@ -7,7 +7,7 @@ import (
 )
 
 // People on the create form: the same picker as an event page's Add someone,
-// so an organiser can invite people, or put them on a list, as the event is
+// so an organizer can invite people, or put them on a list, as the event is
 // made. The event has no id while the form is open, so the search names the
 // server instead, and the people are handled once the event exists.
 

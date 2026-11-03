@@ -11,7 +11,7 @@ import (
 // The members' event page: what anyone in an event's server sees when they
 // open it and may not edit it. The event's details, who is going, Join or
 // Leave, and the potluck sheet, where someone going says what they will
-// bring. Built from its own template, so nothing an organiser sees — the
+// bring. Built from its own template, so nothing an organizer sees — the
 // log, DM replies, invites, who has not answered the sheet — can reach it.
 
 // renderMemberEventPage draws the members' page.
@@ -47,12 +47,12 @@ func (s *Server) renderMemberEventPage(w http.ResponseWriter, session *WebSessio
 		}
 	}
 	data.Going = hostFirst(data.Going, ev.CreatedBy)
-	organisers, err := s.store.EventOrganisers(ev.ID)
+	organizers, err := s.store.EventOrganisers(ev.ID)
 	if err != nil {
-		log.Printf("[discord-signup] organisers %d: %v", ev.ID, err)
-		problems = append(problems, "Could not read the organisers: "+err.Error())
+		log.Printf("[discord-signup] organizers %d: %v", ev.ID, err)
+		problems = append(problems, "Could not read the organizers: "+err.Error())
 	}
-	data.OrganiserIDs = organiserIDsOf(ev, organisers)
+	data.OrganiserIDs = organizerIDsOf(ev, organizers)
 	data.RegularIDs = map[string]bool{}
 	if ev.RecurrenceRule != "" {
 		regulars, err := s.store.Regulars(ev.ID)

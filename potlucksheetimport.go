@@ -17,7 +17,7 @@ import (
 
 // Copying an event's potluck sheet from a shared spreadsheet.
 //
-// A one-off, not a feature: an organiser who had already asked people to
+// A one-off, not a feature: an organizer who had already asked people to
 // fill in a spreadsheet gets it copied onto the event's sheet until the event
 // starts. It is switched on through the loopback API only, and no web page
 // or Discord surface offers it.

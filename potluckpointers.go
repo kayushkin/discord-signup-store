@@ -7,7 +7,7 @@ import (
 )
 
 // Pointing people at the potluck sheet and the roles when they get a place:
-// the reply to Join, the DM when they move up or an organiser puts them down
+// the reply to Join, the DM when they move up or an organizer puts them down
 // as going, and a Join on the web, which lands on the event page. And links
 // to the sheet and the roles beside the event's name in #events.
 

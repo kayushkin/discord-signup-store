@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// The waitlist's order: arrival, unless an organiser moved people. Arrival is
+// The waitlist's order: arrival, unless an organizer moved people. Arrival is
 // (signed_up_at, id) and cannot be recovered from anywhere else; a move does
 // not rewrite it — the roster still says when each person signed up — but
 // ranks the line in waitlist_rank, 1 at the front. Anyone joining the line
@@ -24,7 +24,7 @@ var ErrNotWaitlisted = errors.New("they are not on the waitlist")
 
 // MoveInWaitlist puts someone at a place in an event's waitlist, 1 at the
 // front, and ranks the whole line in its new order. A place past either end
-// is the end. actor names the organiser, for the history.
+// is the end. actor names the organizer, for the history.
 func (s *Store) MoveInWaitlist(eventID int64, discordUserID string, toPlace int, actor string) (int, error) {
 	tx, err := s.db.Begin()
 	if err != nil {

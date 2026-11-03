@@ -12,7 +12,7 @@ import (
 )
 
 // webEvent loads an event for whoever may edit it, or writes the response
-// and returns nil: anyone else gets a 404, so the organisers' routes do not
+// and returns nil: anyone else gets a 404, so the organizers' routes do not
 // say which ids are in use.
 func (s *Server) webEvent(w http.ResponseWriter, r *http.Request, session *WebSession) (*Event, bool) {
 	ev, canManage := s.webEventForMember(w, r, session)
@@ -158,10 +158,10 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		log.Printf("[discord-signup] potluck reminder history %d: %v", ev.ID, err)
 		problems = append(problems, "Could not read the potluck reminders: "+err.Error())
 	}
-	organisers, err := s.store.EventOrganisers(ev.ID)
+	organizers, err := s.store.EventOrganisers(ev.ID)
 	if err != nil {
-		log.Printf("[discord-signup] organisers %d: %v", ev.ID, err)
-		problems = append(problems, "Could not read the organisers: "+err.Error())
+		log.Printf("[discord-signup] organizers %d: %v", ev.ID, err)
+		problems = append(problems, "Could not read the organizers: "+err.Error())
 	}
 	requestHistory, err := s.store.PotluckRequestHistory(ev.ID)
 	if err != nil {
@@ -212,7 +212,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	for _, h := range requestHistory {
 		actors = append(actors, h.CreatedBy, h.RemovedBy)
 	}
-	for _, o := range organisers {
+	for _, o := range organizers {
 		actors = append(actors, o.AddedBy, o.RemovedBy)
 	}
 	avatars, avatarsErr := s.store.ChosenAvatarUserIDs()
@@ -242,7 +242,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		Title: ev.Name, Session: session, Event: ev, Roster: roster, Invites: invites,
 		EventLog: buildEventLog(signupUpdates, edits, invites, regulars, messages,
 			potluckLog{rows: potluckRows, reminders: potluckReminders, roles: roleHistory, requests: requestHistory},
-			organisers, names),
+			organizers, names),
 		CanManage:         canManage,
 		EventUnderway:     eventIsUnderway(ev),
 		EventFull:         eventIsFull(ev),
@@ -306,7 +306,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 			data.Maybes = append(data.Maybes, sg)
 		}
 	}
-	data.OrganiserIDs = organiserIDsOf(ev, organisers)
+	data.OrganiserIDs = organizerIDsOf(ev, organizers)
 	data.Roles = sheetRolesPageOf(ev, data.Going, session.DiscordUserID)
 	if data.Potluck, err = s.potluckPageOf(ev, data.Going, session.DiscordUserID, true); err != nil {
 		log.Printf("[discord-signup] potluck page %d: %v", ev.ID, err)
@@ -444,7 +444,7 @@ func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleWebWaitlistMove moves someone to a place in the waitlist, 1 at the
-// front, on the organiser's say-so.
+// front, on the organizer's say-so.
 func (s *Server) handleWebWaitlistMove(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {
@@ -576,13 +576,13 @@ func (s *Server) handleWebCancelEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !strings.EqualFold(strings.TrimSpace(r.FormValue("confirm_name")), strings.TrimSpace(ev.Name)) {
-		s.redirectWithNotice(w, r, ev.ID, "That did not match the event's name — nothing was cancelled.")
+		s.redirectWithNotice(w, r, ev.ID, "That did not match the event's name — nothing was canceled.")
 		return
 	}
 	actor := "web:" + session.DiscordUserID
-	if err := s.cancelEventEverywhere(ev, "cancelled by "+actor); err != nil {
+	if err := s.cancelEventEverywhere(ev, "canceled by "+actor); err != nil {
 		log.Printf("[discord-signup] web cancel event %d: %v", ev.ID, err)
-		s.redirectWithNotice(w, r, ev.ID, "It is NOT cancelled: "+err.Error())
+		s.redirectWithNotice(w, r, ev.ID, "It is NOT canceled: "+err.Error())
 		return
 	}
 	// cancelEventEverywhere writes the status straight to the store, as the
@@ -592,11 +592,11 @@ func (s *Server) handleWebCancelEvent(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[discord-signup] log cancel of event %d: %v", ev.ID, err)
 		}
 	}
-	s.redirectWithNotice(w, r, ev.ID, "Cancelled. Its Discord event is gone and nobody can join.")
+	s.redirectWithNotice(w, r, ev.ID, "Canceled. Its Discord event is gone and nobody can join.")
 }
 
 // handleWebRosterPromote gives someone on the waitlist or the Maybe list a
-// place, even past the limit — the organiser's call — and tells them.
+// place, even past the limit — the organizer's call — and tells them.
 func (s *Server) handleWebRosterPromote(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {
@@ -754,9 +754,9 @@ func (s *Server) handleWebMemberSearch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"members": out})
 }
 
-// handleWebRosterAdd puts someone on the list the organiser picks — going,
+// handleWebRosterAdd puts someone on the list the organizer picks — going,
 // maybe or the waitlist — by their Discord user id, and tells them. Going
-// can take the event past its limit; that is the organiser's call. The id
+// can take the event past its limit; that is the organizer's call. The id
 // comes from the name picked in the box, or is pasted in directly.
 //
 // The id is checked against the server before anyone is added: a typo in a
@@ -806,7 +806,7 @@ func (s *Server) handleWebRosterAdd(w http.ResponseWriter, r *http.Request) {
 	s.redirectWithNotice(w, r, ev.ID, strings.Join(lines, " "))
 }
 
-// placePerson puts one person on the list an organiser picked, tells them,
+// placePerson puts one person on the list an organizer picked, tells them,
 // and says what happened in a sentence.
 func (s *Server) placePerson(ev *Event, session *WebSession, userID, list string) string {
 	displayName := ""

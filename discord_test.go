@@ -105,7 +105,7 @@ func TestRoleCallsUseTheRightMethodAndPath(t *testing.T) {
 	}
 }
 
-func TestDirectMessageRefusalIsRecognised(t *testing.T) {
+func TestDirectMessageRefusalIsRecognized(t *testing.T) {
 	fake := newFakeDiscord(t)
 	fake.on(http.MethodPost, "/users/@me/channels", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
@@ -467,7 +467,7 @@ func TestAnOldSignupBlockIsStillStripped(t *testing.T) {
 	}
 }
 
-// TestALongRosterIsTrimmedAndTheDescriptionIsNot. The words are the organiser's
+// TestALongRosterIsTrimmedAndTheDescriptionIsNot. The words are the organizer's
 // and the block is ours, so ours is what gives way.
 func TestALongRosterIsTrimmedAndTheDescriptionIsNot(t *testing.T) {
 	var roster []Signup
@@ -487,7 +487,7 @@ func TestALongRosterIsTrimmedAndTheDescriptionIsNot(t *testing.T) {
 		t.Errorf("description is %d runes, over Discord's %d", n, nativeDescriptionLimit)
 	}
 	if !strings.HasPrefix(got, written) {
-		t.Error("the organiser's own words were trimmed to make room for ours")
+		t.Error("the organizer's own words were trimmed to make room for ours")
 	}
 	if !strings.Contains(got, "more") {
 		t.Errorf("description = %q, want the roster shortened rather than dropped", got)
@@ -582,12 +582,12 @@ func TestReconcilePublishesEventsThatMissedIt(t *testing.T) {
 		t.Fatalf("create past: %v", err)
 	}
 
-	published, cancelled, _, problems := srv.reconcileWithNative("g1", nil)
+	published, canceled, _, problems := srv.reconcileWithNative("g1", nil)
 	if len(problems) != 0 {
 		t.Fatalf("problems: %v", problems)
 	}
-	if published != 1 || cancelled != 0 {
-		t.Errorf("published=%d cancelled=%d, want 1 and 0", published, cancelled)
+	if published != 1 || canceled != 0 {
+		t.Errorf("published=%d cancelled=%d, want 1 and 0", published, canceled)
 	}
 	got, _ := store.GetEvent(ev.ID)
 	if got.DiscordScheduledEventID != "native-new" {
@@ -606,7 +606,7 @@ func TestReconcileCancelsWhenTheNativeEventIsGone(t *testing.T) {
 	store.SetGuildChannels("g1", GuildChannels{Board: "board"})
 
 	// deleted: direct GET answers 404. completedNative: direct GET still finds
-	// it, status COMPLETED — must NOT be cancelled, the time sweep owns it.
+	// it, status COMPLETED — must NOT be canceled, the time sweep owns it.
 	fake.on(http.MethodGet, "/guilds/g1/scheduled-events/gone", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprint(w, `{"code":10070,"message":"Unknown Guild Scheduled Event"}`)
@@ -627,19 +627,19 @@ func TestReconcileCancelsWhenTheNativeEventIsGone(t *testing.T) {
 	deleted := mk("Deleted natively", "gone")
 	completed := mk("Completed natively", "done")
 
-	published, cancelled, finished, problems := srv.reconcileWithNative("g1", nil)
+	published, canceled, finished, problems := srv.reconcileWithNative("g1", nil)
 	if len(problems) != 0 {
 		t.Fatalf("problems: %v", problems)
 	}
-	if cancelled != 1 || published != 0 {
-		t.Errorf("cancelled=%d published=%d, want 1 and 0", cancelled, published)
+	if canceled != 1 || published != 0 {
+		t.Errorf("cancelled=%d published=%d, want 1 and 0", canceled, published)
 	}
 	if got, _ := store.GetEvent(deleted.ID); got.Status != StatusCancelled {
-		t.Errorf("deleted-native event = %q, want cancelled", got.Status)
+		t.Errorf("deleted-native event = %q, want canceled", got.Status)
 	}
 
 	// This assertion used to read "want left for the time sweep", and that was
-	// the bug rather than the behaviour. Absence from the list is ambiguous —
+	// the bug rather than the behavior. Absence from the list is ambiguous —
 	// Discord drops COMPLETED events from it as well as deleted ones — and the
 	// old code, having asked directly and been told COMPLETED, decided to do
 	// nothing. Pressing End on a native event is an explicit act meaning NOW.
@@ -655,9 +655,9 @@ func TestReconcileCancelsWhenTheNativeEventIsGone(t *testing.T) {
 	}
 }
 
-// TestReconcileDeletesTheNativeEventWhenCancelledLocally: cancelling on any
+// TestReconcileDeletesTheNativeEventWhenCanceledLocally: canceling on any
 // surface cancels everywhere, including Discord's own list.
-func TestReconcileDeletesTheNativeEventWhenCancelledLocally(t *testing.T) {
+func TestReconcileDeletesTheNativeEventWhenCanceledLocally(t *testing.T) {
 	fake := newFakeDiscord(t)
 	store := testStore(t)
 	srv := NewServer(store, nil, fake.client())
@@ -681,7 +681,7 @@ func TestReconcileDeletesTheNativeEventWhenCancelledLocally(t *testing.T) {
 		}
 	}
 	if !deleted {
-		t.Errorf("the native event for cancelled %q was not deleted", ev.Name)
+		t.Errorf("the native event for canceled %q was not deleted", ev.Name)
 	}
 }
 
@@ -825,7 +825,7 @@ func TestACountRenameWaitsTenMinutesButFillingDoesNot(t *testing.T) {
 		{"count moved, 9m59s later", base(2), at + 599, false},
 		{"count moved, 10m later", base(2), at + 600, true},
 		{"became full, at once", base(4), at + 1, true},
-		{"renamed by the organiser, at once", renamed, at + 1, true},
+		{"renamed by the organizer, at once", renamed, at + 1, true},
 		{"date moved, waits its turn", moved, at + 1, false},
 		{"date moved, 10m later", moved, at + 600, true},
 		{"was full, someone left, waits its turn", wasFull, at + 1, false},
@@ -981,7 +981,7 @@ func TestASyncDoesNotReopenClosedSignups(t *testing.T) {
 
 // TestABlockAppendedToAnEmptyDescriptionIsStrippedOnTheWayBack: Discord trims
 // leading whitespace, so the block comes home without its "\n\n" and used to be
-// stored as the organiser's text, then appended to again on every publish.
+// stored as the organizer's text, then appended to again on every publish.
 func TestABlockAppendedToAnEmptyDescriptionIsStrippedOnTheWayBack(t *testing.T) {
 	ev := &Event{ID: 3, GuildID: "g1", Name: "Games", Capacity: 2, AttendingCount: 1}
 	written := nativeEventDescription(ev, []Signup{{DiscordUserID: "u1", DisplayName: "Slava", State: StateAttending}}, "board")
@@ -1029,7 +1029,7 @@ func TestAOneOffImportTakesTheDefaultTimezone(t *testing.T) {
 
 // TestFillTimezoneOnImportedEventsLeavesLocalEventsAlone: the backfill is for
 // imports the old code left without a zone. A local event's zone is whatever
-// its organiser chose, empty included.
+// its organizer chose, empty included.
 func TestFillTimezoneOnImportedEventsLeavesLocalEventsAlone(t *testing.T) {
 	store := testStore(t)
 	srv := NewServer(store, nil, nil)

@@ -13,7 +13,7 @@ import (
 //
 // Two ways, both by DM with the What I'm bringing button under it. A day
 // before the event, everyone going who has not answered gets one by itself,
-// once per date. And an organiser can nudge everyone not answered from the
+// once per date. And an organizer can nudge everyone not answered from the
 // event page at any time; a nudge counts against the event's DM limit
 // (eventmessages.go), since it is a message to many people on one press.
 
@@ -200,7 +200,7 @@ func (s *Server) sendPotluckReminder(ev *Event, userID, kind, opening string) bo
 }
 
 // handleWebPotluckNudge asks everyone going who has not answered the sheet,
-// on an organiser's press: by DM to each (via=dm), which goes through the
+// on an organizer's press: by DM to each (via=dm), which goes through the
 // same limit as any other message by DM, or by one post in the event's
 // forum thread (via=forum) that shows the sheet and pings them.
 func (s *Server) handleWebPotluckNudge(w http.ResponseWriter, r *http.Request) {
@@ -289,10 +289,10 @@ func (s *Server) handleWebPotluckNudge(w http.ResponseWriter, r *http.Request) {
 // told not to send one.
 // Over Discord's limit it is two posts — the sheet, then the pings — and the
 // buttons go under the last.
-func potluckForumNudge(ev *Event, organiser string, roster, unanswered []Signup) []string {
+func potluckForumNudge(ev *Event, organizer string, roster, unanswered []Signup) []string {
 	sheet := ev.Potluck
 	var head strings.Builder
-	fmt.Fprintf(&head, "🍲 **Potluck check-in from %s** — <t:%d:R>\n", organiser, ev.StartsAt)
+	fmt.Fprintf(&head, "🍲 **Potluck check-in from %s** — <t:%d:R>\n", organizer, ev.StartsAt)
 	head.WriteString(sheet.SummaryLine() + "\n")
 	if line := sheet.StillNeededLine(); line != "" {
 		head.WriteString("**" + line + "**\n")
@@ -354,7 +354,7 @@ func potluckForumNudge(ev *Event, organiser string, roster, unanswered []Signup)
 }
 
 // nudgeInForum posts the check-in in the event's forum thread and says what
-// happened. A forum post is not limited, as an organiser's other forum
+// happened. A forum post is not limited, as an organizer's other forum
 // messages are not; it is recorded with them.
 func (s *Server) nudgeInForum(ev *Event, session *WebSession, roster, people []Signup) string {
 	if ev.ForumPostID == "" {

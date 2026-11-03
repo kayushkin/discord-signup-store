@@ -10,11 +10,11 @@ import (
 
 // The potluck sheet: who is bringing what.
 //
-// An organiser switches it on for an event (events.potluck_enabled) and may
+// An organizer switches it on for an event (events.potluck_enabled) and may
 // say how many of each category the event wants (potluck_needs). Everyone
 // going says what they will bring, from the button on the event's card or the
 // reminder DM, or says they are bringing nothing. The card shows the whole
-// sheet to everyone and what is still wanted; the organiser's page also shows
+// sheet to everyone and what is still wanted; the organizer's page also shows
 // who going has not answered yet, and can nudge them. A DM goes by itself to
 // anyone still silent a day before (potluckreminders.go).
 //
@@ -65,7 +65,7 @@ const (
 	potluckItemLimit = 100
 	// potluckItemsPerPerson stops one person filling the sheet.
 	potluckItemsPerPerson = 10
-	// potluckWantedLimit is the most an organiser may ask for of one category.
+	// potluckWantedLimit is the most an organizer may ask for of one category.
 	potluckWantedLimit = 99
 )
 
@@ -73,7 +73,7 @@ const (
 var ErrPotluckOff = errors.New("this event has no potluck sheet")
 
 // ErrPotluckClosed is a change to the sheet of an event that is over or
-// cancelled.
+// canceled.
 var ErrPotluckClosed = errors.New("this event is over, so its potluck sheet is closed")
 
 // ErrNotGoing is someone who is not going trying to say what they will bring.
@@ -90,14 +90,14 @@ type PotluckItem struct {
 	Category      string `json:"category"`
 	Item          string `json:"item"`
 	AddedAt       int64  `json:"added_at"`
-	// RequestID is the organiser's request this answers, 0 for none.
+	// RequestID is the organizer's request this answers, 0 for none.
 	RequestID int64 `json:"request_id"`
 }
 
 // PotluckSheet is an event's sheet as it stands. Read from the rows each
 // time, like the roster's counts, so it cannot disagree with them.
 type PotluckSheet struct {
-	// Needs is how many of each category the organiser asked for; a
+	// Needs is how many of each category the organizer asked for; a
 	// category not in it has no number.
 	Needs map[string]int `json:"needs"`
 	// Items are the things people going will bring, in the order they said.
@@ -105,7 +105,7 @@ type PotluckSheet struct {
 	// BringingNothing are the Discord user ids of people going who said they
 	// are bringing nothing.
 	BringingNothing []string `json:"bringing_nothing"`
-	// Requests are the things an organiser asked for, with who is
+	// Requests are the things an organizer asked for, with who is
 	// bringing each. See potluckrequests.go.
 	Requests []PotluckRequest `json:"requests"`
 }
@@ -151,7 +151,7 @@ func (p *PotluckSheet) ItemsIn(category string) []PotluckItem {
 type PotluckCount struct {
 	Category potluckCategory
 	Have     int
-	// Wanted is 0 when the organiser asked for no number.
+	// Wanted is 0 when the organizer asked for no number.
 	Wanted int
 	Items  []PotluckItem
 }
@@ -188,7 +188,7 @@ func (p *PotluckSheet) SummaryLine() string {
 	return strings.Join(parts, " · ")
 }
 
-// StillNeededLine says what the organiser asked for that nobody has said
+// StillNeededLine says what the organizer asked for that nobody has said
 // they will bring yet, or "" when nothing is missing.
 func (p *PotluckSheet) StillNeededLine() string {
 	var parts []string
@@ -299,7 +299,7 @@ func (s *Store) AddPotluckItem(eventID int64, userID, category, item string) (*P
 	return s.addPotluckItem(eventID, userID, category, item, 0)
 }
 
-// addPotluckItem adds an item, answering the organiser's request requestID
+// addPotluckItem adds an item, answering the organizer's request requestID
 // when it is not 0: then the request must be on the sheet, not yet taken by
 // as many as want it, and not already taken by this person — all checked in
 // the transaction that writes the row.
@@ -394,7 +394,7 @@ func (s *Store) ClearPotluckAnswer(eventID int64, userID string) (int64, error) 
 	return n, tx.Commit()
 }
 
-// RemovePotluckItem takes one row off an event's sheet, for an organiser.
+// RemovePotluckItem takes one row off an event's sheet, for an organizer.
 func (s *Store) RemovePotluckItem(eventID, itemID int64, actor string) error {
 	res, err := s.db.Exec(`UPDATE potluck_items SET removed_at = ?, removed_by = ?
 		WHERE id = ? AND event_id = ? AND removed_at = 0`, now(), actor, itemID, eventID)
@@ -514,7 +514,7 @@ func writePotluckSection(b *strings.Builder, sheet *PotluckSheet, open, withItem
 }
 
 // potluckTakesAnswers says whether people may change the sheet: it is on,
-// and the event is neither over nor cancelled. Closing signups does not
+// and the event is neither over nor canceled. Closing signups does not
 // close the sheet.
 func potluckTakesAnswers(ev *Event) bool {
 	return ev.PotluckEnabled && (ev.Status == StatusOpen || ev.Status == StatusClosed)
@@ -634,10 +634,10 @@ func (s *Store) PotluckHistory(eventID int64) ([]PotluckHistoryRow, error) {
 }
 
 // EditPotluckItem changes what one item says. Only its owner may, unless
-// asOrganiser. Kept as history, as every change to the sheet is: the old row
+// asOrganizer. Kept as history, as every change to the sheet is: the old row
 // is taken off under actor and a new one, in the same category and answering
 // the same request, is added for the same person.
-func (s *Store) EditPotluckItem(eventID, itemID int64, text, editorID string, asOrganiser bool, actor string) (*PotluckItem, error) {
+func (s *Store) EditPotluckItem(eventID, itemID int64, text, editorID string, asOrganizer bool, actor string) (*PotluckItem, error) {
 	text = strings.Join(strings.Fields(text), " ")
 	if text == "" || len([]rune(text)) > potluckItemLimit {
 		return nil, fmt.Errorf("%w: say what it is, in at most %d characters", ErrInvalidPotluck, potluckItemLimit)
@@ -657,7 +657,7 @@ func (s *Store) EditPotluckItem(eventID, itemID int64, text, editorID string, as
 	if err != nil {
 		return nil, fmt.Errorf("read potluck item: %w", err)
 	}
-	if !asOrganiser && old.DiscordUserID != editorID {
+	if !asOrganizer && old.DiscordUserID != editorID {
 		return nil, ErrNotFound
 	}
 	if old.Item == text {

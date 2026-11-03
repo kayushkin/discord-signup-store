@@ -96,8 +96,8 @@ func TestRequestsArePutInFrontOfSomeoneAddingTheirs(t *testing.T) {
 	}
 }
 
-// TestAnOrganiserAsksAndAMemberTakesItOnTheWeb, with both in the log.
-func TestAnOrganiserAsksAndAMemberTakesItOnTheWeb(t *testing.T) {
+// TestAnOrganizerAsksAndAMemberTakesItOnTheWeb, with both in the log.
+func TestAnOrganizerAsksAndAMemberTakesItOnTheWeb(t *testing.T) {
 	_, store, _, mux, token := webTestServer(t)
 	ev := publishedEvent(t, store, 0, "alice", "member")
 	on := true
@@ -114,9 +114,9 @@ func TestAnOrganiserAsksAndAMemberTakesItOnTheWeb(t *testing.T) {
 	if items := mustSheet(t, store, ev.ID).ItemsOf("member"); len(items) != 1 || items[0].RequestID != request.ID {
 		t.Fatalf("member's items = %+v", items)
 	}
-	organiserPage := getPage(t, mux, token, eventPath(ev)).Body.String()
+	organizerPage := getPage(t, mux, token, eventPath(ev)).Body.String()
 	for _, want := range []string{"asked for ✨ Folding table", "potluck: bringing ✨ Folding table"} {
-		if !strings.Contains(organiserPage, want) {
+		if !strings.Contains(organizerPage, want) {
 			t.Errorf("the log lacks %q", want)
 		}
 	}

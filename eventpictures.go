@@ -92,12 +92,12 @@ type eventScene struct {
 	// written from.
 	FailedDetailsSignature string `json:"failed_details_signature,omitempty"`
 	FailedAt               int64  `json:"failed_at"`
-	// Request is an organiser asking for the scene again, nil when nobody is.
+	// Request is an organizer asking for the scene again, nil when nobody is.
 	Request   *eventSceneRequest `json:"request,omitempty"`
 	UpdatedAt int64              `json:"updated_at"`
 }
 
-// The ways an organiser can ask for a scene again.
+// The ways an organizer can ask for a scene again.
 const (
 	// EventSceneChange changes the scene there is as the comment says.
 	EventSceneChange = "change"
@@ -105,10 +105,10 @@ const (
 	EventSceneNew = "new"
 )
 
-// eventSceneCommentMaximumCharacters bounds what an organiser writes.
+// eventSceneCommentMaximumCharacters bounds what an organizer writes.
 const eventSceneCommentMaximumCharacters = 600
 
-// eventSceneRequest is an organiser asking for the scene again.
+// eventSceneRequest is an organizer asking for the scene again.
 type eventSceneRequest struct {
 	Kind        string `json:"kind"`
 	Comment     string `json:"comment"`
@@ -544,7 +544,7 @@ type eventPictureDue struct {
 	Stages           []int             `json:"stages"`
 	Details          eventSceneDetails `json:"details"`
 	DetailsSignature string            `json:"details_signature"`
-	// Request is an organiser asking for the scene again: with NeedsScene,
+	// Request is an organizer asking for the scene again: with NeedsScene,
 	// write it as the request says, and send its requested_at back.
 	Request *eventSceneRequest `json:"request,omitempty"`
 	// SceneCode is the scene to print the people into, when it needs no new
@@ -587,7 +587,7 @@ func (s *Server) handleEventPicturesDue(w http.ResponseWriter, r *http.Request) 
 		item := eventPictureDue{EventID: id, People: people, Details: sceneDetailsOf(ev), DetailsSignature: details,
 			Stages: eventPictureStages(ev.Capacity)}
 		if scene != nil && scene.Request != nil {
-			// An organiser asked: write it now, whatever else holds.
+			// An organizer asked: write it now, whatever else holds.
 			item.NeedsScene, item.Request = true, scene.Request
 			if scene.Request.Kind == EventSceneChange {
 				item.SceneCode = scene.SceneCode
@@ -782,7 +782,7 @@ func (s *Server) handleWebEventPicture(w http.ResponseWriter, r *http.Request) {
 	writeWebPImage(w, image, "private, max-age=86400")
 }
 
-// handleWebEventSceneRequest is an organiser asking for the event's scene
+// handleWebEventSceneRequest is an organizer asking for the event's scene
 // again: "change" it as the comment says, or a "new" one with the comment to
 // go by. The picture there stays up until the new one is painted.
 func (s *Server) handleWebEventSceneRequest(w http.ResponseWriter, r *http.Request) {

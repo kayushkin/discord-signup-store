@@ -12,7 +12,7 @@ import (
 // Discord and on these pages. Only site admins and a server's owner may open
 // it — anyone else gets a 404, and the home page does not link it. A short
 // name is one per person across every server, so it is the call of whoever
-// runs the bot, or owns the server, and not of every organiser. A site admin
+// runs the bot, or owns the server, and not of every organizer. A site admin
 // sees everyone on a list in every server; an owner, the people in theirs.
 
 // namedPerson is one row on the names page.

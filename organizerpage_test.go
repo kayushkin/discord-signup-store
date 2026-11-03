@@ -31,9 +31,9 @@ func TestAFullEventWithNoWaitlistRefusesAJoin(t *testing.T) {
 	}
 }
 
-// TestAnOrganiserPutsSomeoneOnTheListTheyPick: going past the limit, the
+// TestAnOrganizerPutsSomeoneOnTheListTheyPick: going past the limit, the
 // waitlist only when full, and Maybe from going gives the place away.
-func TestAnOrganiserPutsSomeoneOnTheListTheyPick(t *testing.T) {
+func TestAnOrganizerPutsSomeoneOnTheListTheyPick(t *testing.T) {
 	store := testStore(t)
 	ev := publishedEvent(t, store, 1, "alice")
 
@@ -42,7 +42,7 @@ func TestAnOrganiserPutsSomeoneOnTheListTheyPick(t *testing.T) {
 	}
 	after, _ := store.GetEvent(ev.ID)
 	if after.AttendingCount != 2 {
-		t.Errorf("going = %d, want 2: an organiser can take it past the limit", after.AttendingCount)
+		t.Errorf("going = %d, want 2: an organizer can take it past the limit", after.AttendingCount)
 	}
 	if _, err := store.PlaceOnList(ev.ID, "cy", "Cy", StateWaitlisted, "web:org"); err != nil {
 		t.Fatalf("waitlist on a full event: %v", err)
@@ -77,7 +77,7 @@ func TestAnOrganiserPutsSomeoneOnTheListTheyPick(t *testing.T) {
 	}
 }
 
-// TestTheEventPageIsTheEditForm: an organiser edits in place, the old edit
+// TestTheEventPageIsTheEditForm: an organizer edits in place, the old edit
 // link lands on the page, and the waitlist switch saves and is logged.
 func TestTheEventPageIsTheEditForm(t *testing.T) {
 	_, store, _, mux, token := webTestServer(t)
@@ -178,23 +178,23 @@ func TestTheRosterShowsShortNamesWithTheDiscordNameBehindThem(t *testing.T) {
 	}
 }
 
-// TestCancellingFromThePageNeedsTheName typed back.
-func TestCancellingFromThePageNeedsTheName(t *testing.T) {
+// TestCancelingFromThePageNeedsTheName typed back.
+func TestCancelingFromThePageNeedsTheName(t *testing.T) {
 	_, store, _, mux, token := webTestServer(t)
 	ev := publishedEvent(t, store, 4)
 	postForm(t, mux, token, eventPath(ev)+"/cancel", url.Values{"confirm_name": {"Chess"}})
 	if after, _ := store.GetEvent(ev.ID); after.Status != StatusOpen {
-		t.Fatalf("a wrong name cancelled it: %s", after.Status)
+		t.Fatalf("a wrong name canceled it: %s", after.Status)
 	}
 	postForm(t, mux, token, eventPath(ev)+"/cancel", url.Values{"confirm_name": {"games"}})
 	if after, _ := store.GetEvent(ev.ID); after.Status != StatusCancelled {
-		t.Errorf("status = %s, want cancelled", after.Status)
+		t.Errorf("status = %s, want canceled", after.Status)
 	}
 }
 
-// TestAnOrganiserReordersTheWaitlist, the next promotion follows the new
+// TestAnOrganizerReordersTheWaitlist, the next promotion follows the new
 // order, and someone joining later waits behind everyone moved.
-func TestAnOrganiserReordersTheWaitlist(t *testing.T) {
+func TestAnOrganizerReordersTheWaitlist(t *testing.T) {
 	_, store, _, mux, token := webTestServer(t)
 	ev := publishedEvent(t, store, 1, "alice", "w1", "w2", "w3")
 	postForm(t, mux, token, eventPath(ev)+"/waitlist/move", url.Values{"discord_user_id": {"w3"}, "to": {"1"}})
@@ -266,10 +266,10 @@ func TestLeavingAnEventOverItsLimitPromotesNobody(t *testing.T) {
 	}
 }
 
-// TestEveryoneOpensEveryEventButOnlyOrganisersGetTheEditPage: a member
+// TestEveryoneOpensEveryEventButOnlyOrganizersGetTheEditPage: a member
 // opens someone else's event and gets the members' page, with none of what
-// only organisers see, and the organisers' routes stay a 404 to them.
-func TestEveryoneOpensEveryEventButOnlyOrganisersGetTheEditPage(t *testing.T) {
+// only organizers see, and the organizers' routes stay a 404 to them.
+func TestEveryoneOpensEveryEventButOnlyOrganizersGetTheEditPage(t *testing.T) {
 	_, store, _, mux, _ := webTestServer(t)
 	mine, _ := store.CreateEvent(Event{GuildID: "g1", ChannelID: "c", Name: "My picnic", Status: StatusOpen,
 		StartsAt: 4102444800, CreatedBy: "member"})
@@ -297,9 +297,9 @@ func TestEveryoneOpensEveryEventButOnlyOrganisersGetTheEditPage(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(page, "Someone else&#39;s quiz") || !strings.Contains(page, `name="back" value="event"`) {
 		t.Errorf("someone else's event = %d, want the members' page with Join", rec.Code)
 	}
-	for _, organisersOnly := range []string{`name="name" required`, "Cancel event", `id="message"`, "Log", "/roster/remove"} {
-		if strings.Contains(page, organisersOnly) {
-			t.Errorf("the members' page shows %q", organisersOnly)
+	for _, organizersOnly := range []string{`name="name" required`, "Cancel event", `id="message"`, "Log", "/roster/remove"} {
+		if strings.Contains(page, organizersOnly) {
+			t.Errorf("the members' page shows %q", organizersOnly)
 		}
 	}
 	nudge := httptest.NewRequest(http.MethodPost, eventPath(theirs)+"/potluck/nudge", nil)

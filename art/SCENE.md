@@ -112,7 +112,7 @@ Rules:
   are used. The painter prints every stage full, and checks the counts.
 - Paint only with the kit's functions and inks (`part`, `stroke`, `capsule`,
   `ellipsePoints`, `halftone`, `harlequin`, `tilt`, `pushTransform`,
-  `translateBy`, `rotateBy`, `scaleBy`, `popTransform`, `INK` …). Extra colours
+  `translateBy`, `rotateBy`, `scaleBy`, `popTransform`, `INK` …). Extra colors
   go in a constant of your own, in the same muted print palette. No fetch, no
   images, no DOM beyond the canvas a `colourDetail` or `blackDetail` callback
   is handed. It runs in a page with no network and no files.

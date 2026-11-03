@@ -123,7 +123,7 @@ func TestCancelNeedsTheNameTypedBack(t *testing.T) {
 	srv.applyCancelConfirm(rec, adminInteraction(t, modalID, map[string]string{fieldName + "@" + modalID: "Board game"}),
 		ev.ID, EventForm{Name: "Board game"})
 	if got, _ := store.GetEvent(ev.ID); got.Status != StatusOpen {
-		t.Fatalf("a wrong name cancelled the event: status = %q", got.Status)
+		t.Fatalf("a wrong name canceled the event: status = %q", got.Status)
 	}
 	if !strings.Contains(replyText(rec), "did not match") {
 		t.Errorf("reply = %q, want a refusal", replyText(rec))
@@ -137,7 +137,7 @@ func TestCancelNeedsTheNameTypedBack(t *testing.T) {
 	}
 	updates, _ := store.EventUpdates(ev.ID)
 	if len(updates) != 1 || updates[0].ToValue != StatusCancelled || updates[0].Actor != "u-admin" {
-		t.Errorf("history = %+v, want one cancelled row by u-admin", updates)
+		t.Errorf("history = %+v, want one canceled row by u-admin", updates)
 	}
 }
 
@@ -158,7 +158,7 @@ func TestOnlyAnEditorCanCloseOrCancel(t *testing.T) {
 	rec = httptest.NewRecorder()
 	srv.applyCancelConfirm(rec, member, ev.ID, EventForm{Name: "Games"})
 	if got, _ := store.GetEvent(ev.ID); got.Status != StatusOpen {
-		t.Error("a member without Manage Events cancelled the event")
+		t.Error("a member without Manage Events canceled the event")
 	}
 }
 

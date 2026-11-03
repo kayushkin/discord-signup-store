@@ -121,7 +121,7 @@ func TestASpreadsheetColumnFillsTheRoleOfTheSameName(t *testing.T) {
 	}
 }
 
-// TestRolesOnTheEventPagesAndInTheLog: the organiser adds a role, a member
+// TestRolesOnTheEventPagesAndInTheLog: the organizer adds a role, a member
 // going takes it from the members' page, and the log has both.
 func TestRolesOnTheEventPagesAndInTheLog(t *testing.T) {
 	_, store, _, mux, token := webTestServer(t)
@@ -140,9 +140,9 @@ func TestRolesOnTheEventPagesAndInTheLog(t *testing.T) {
 	if r := mustEvent(t, store, ev.ID).Roles[0]; !r.Has("member") {
 		t.Fatal("the toggle did not put the member in the role")
 	}
-	organiserPage := getPage(t, mux, token, eventPath(ev)).Body.String()
+	organizerPage := getPage(t, mux, token, eventPath(ev)).Body.String()
 	for _, want := range []string{"added the role 🙋 Setup (6:00)", "took the role 🙋 Setup (6:00)"} {
-		if !strings.Contains(organiserPage, want) {
+		if !strings.Contains(organizerPage, want) {
 			t.Errorf("the log lacks %q", want)
 		}
 	}

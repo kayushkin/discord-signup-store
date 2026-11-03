@@ -8,10 +8,10 @@ import (
 	"time"
 )
 
-// TestTheOrganiserIsOnTheirOwnRoster covers the web create form. Somebody who
+// TestTheOrganizerIsOnTheirOwnRoster covers the web create form. Somebody who
 // fills in the form is going; making them press Join afterwards is a step that
 // only exists because the software forgot.
-func TestTheOrganiserIsOnTheirOwnRoster(t *testing.T) {
+func TestTheOrganizerIsOnTheirOwnRoster(t *testing.T) {
 	_, store, _, mux, token := webTestServer(t)
 
 	postForm(t, mux, token, "/events/new", url.Values{
@@ -28,7 +28,7 @@ func TestTheOrganiserIsOnTheirOwnRoster(t *testing.T) {
 	}
 	ev := events[0]
 	if ev.AttendingCount != 1 {
-		t.Fatalf("%d attending on a brand new event, want the organiser", ev.AttendingCount)
+		t.Fatalf("%d attending on a brand new event, want the organizer", ev.AttendingCount)
 	}
 	roster, err := store.Roster(ev.ID, false)
 	if err != nil {
@@ -90,11 +90,11 @@ func TestPeoplePickedOnTheCreateFormAreAddedOnceTheEventExists(t *testing.T) {
 	events, _ := store.ListEvents("g1", "", 10)
 	roster, _ := store.Roster(events[0].ID, false)
 	if len(roster) != 3 {
-		t.Errorf("roster has %d, want the organiser and the two picked", len(roster))
+		t.Errorf("roster has %d, want the organizer and the two picked", len(roster))
 	}
 
 	// The search looks in the server named on the form.
 	if rec := getPage(t, mux, token, "/events/new/members?guild_id=elsewhere&q=a"); rec.Code != http.StatusForbidden {
-		t.Errorf("search in a server the organiser is not in = %d, want 403", rec.Code)
+		t.Errorf("search in a server the organizer is not in = %d, want 403", rec.Code)
 	}
 }

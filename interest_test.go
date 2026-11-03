@@ -2,7 +2,7 @@ package discordsignup
 
 import "testing"
 
-// TestPressingLeaveBeatsALingeringInterested is the behaviour this whole file
+// TestPressingLeaveBeatsALingeringInterested is the behavior this whole file
 // exists for.
 //
 // Discord has no endpoint to remove a subscriber, so someone who marks
@@ -73,7 +73,7 @@ func TestUnmarkingThenRemarkingInterestedIsFreshIntent(t *testing.T) {
 // replaced an earlier, cleverer one.
 //
 // Interested and Join are presented as doing the same thing, so undoing either
-// has to do the same thing too. The previous behaviour left someone who
+// has to do the same thing too. The previous behavior left someone who
 // un-marked Interested still holding a place, with nothing anywhere telling
 // them so.
 func TestUnmarkingInterestedRemovesSomeoneWhoPressedJoin(t *testing.T) {

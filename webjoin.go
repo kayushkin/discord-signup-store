@@ -127,7 +127,7 @@ func (s *Server) handleWebJoin(w http.ResponseWriter, r *http.Request) {
 		signupPageRedirect(w, r, fmt.Sprintf("Signups for %s are closed.", ev.Name))
 		return
 	case errors.Is(err, ErrEventFull):
-		signupPageRedirect(w, r, fmt.Sprintf("%s is full, and its organiser turned the waitlist off.", ev.Name))
+		signupPageRedirect(w, r, fmt.Sprintf("%s is full, and its organizer turned the waitlist off.", ev.Name))
 		return
 	case err != nil:
 		log.Printf("[discord-signup] web join event=%d user=%s: %v", ev.ID, session.DiscordUserID, err)
