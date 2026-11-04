@@ -502,9 +502,26 @@
     <div class="card-head"><h3>🙋 Roles</h3></div>
     {{if not .Roles}}<p class="empty">No roles yet. Add one below — setup, teardown, coming for part of it.</p>{{end}}
     {{range .Roles}}
+    {{$role := .}}
     <div class="sheet-role">
       <div class="sheet-role-head">
-        <strong>{{.Emoji}} {{.Name}}</strong> <span class="badge">{{.Count}}</span>
+        <details class="role-pick">
+          <summary class="role-emoji-button" aria-label="Change {{.Name}}'s emoji" title="Change the emoji">{{.Emoji}}</summary>
+          <form method="post" action="/events/{{$ev.ID}}/roles/edit" data-async class="role-pop emoji-grid">
+            <input type="hidden" name="role_id" value="{{.ID}}"><input type="hidden" name="capacity" value="{{.Capacity}}">
+            {{range $.Roles.EmojiChoices}}<button name="emoji" value="{{.}}" class="emoji-choice{{if eq . $role.Emoji}} chosen{{end}}" aria-label="{{.}}"{{if eq . $role.Emoji}} aria-current="true"{{end}}>{{.}}</button>{{end}}
+          </form>
+        </details>
+        <strong>{{.Name}}</strong>
+        <details class="role-pick">
+          <summary class="badge role-cap-button" aria-label="Change how many people {{.Name}} takes" title="Change the cap">{{.Count}}</summary>
+          <form method="post" action="/events/{{$ev.ID}}/roles/edit" data-async class="role-pop role-cap-form">
+            <input type="hidden" name="role_id" value="{{.ID}}"><input type="hidden" name="emoji" value="{{.Emoji}}">
+            <label>Max people <input name="capacity" type="number" min="0" max="999" value="{{if .Capacity}}{{.Capacity}}{{end}}" placeholder="no cap"></label>
+            <button class="btn-sm">Save</button>
+            <p class="hint">Empty for no cap. Lowering it takes nobody out.</p>
+          </form>
+        </details>
         {{if .Mine}}<span class="role-mine">✓ You're in</span>
         {{else if and $.Roles.TakesAnswers $.Roles.ViewerGoing}}
         <form method="post" action="/events/{{$ev.ID}}/roles/toggle" data-async>
@@ -516,7 +533,6 @@
           <input type="hidden" name="role_id" value="{{.ID}}">
           <button class="btn-sm danger" aria-label="Remove the role {{.Name}}" title="Remove the role">{{template "cross"}}</button></form>
       </div>
-      {{$role := .}}
       {{if .People}}<ul class="name-cloud">{{range .People}}{{if eq .DiscordUserID $.Roles.ViewerID}}<li class="me">{{person .ReadableName .DisplayName .DiscordUserID}}<span class="me-label">you</span>{{if $.Roles.TakesAnswers}}
         <form method="post" action="/events/{{$ev.ID}}/roles/toggle" data-async class="role-take-out"{{if $role.Full}}
           data-confirm="Leave {{$role.Name}}? It's full, so someone else can take your place."{{end}}>
@@ -536,18 +552,6 @@
         <button class="btn-sm">Put in</button>
       </form>
       {{end}}
-      <details class="fold role-edit">
-        <summary>Edit {{.Name}}</summary>
-        <form method="post" action="/events/{{$ev.ID}}/roles/edit" data-async class="role-edit-form">
-          <input type="hidden" name="role_id" value="{{.ID}}">
-          <fieldset class="emoji-choices"><legend>Emoji</legend>
-            {{range $.Roles.EmojiChoices}}<label class="emoji-choice"><input type="radio" name="emoji" value="{{.}}"{{if eq . $role.Emoji}} checked{{end}}><span>{{.}}</span></label>{{end}}
-          </fieldset>
-          <label class="role-cap">Max people <input name="capacity" type="number" min="0" max="999" value="{{if .Capacity}}{{.Capacity}}{{end}}" placeholder="no cap" class="narrow-number"></label>
-          <p class="hint">Lowering it takes nobody out.</p>
-          <button class="btn-sm">Save</button>
-        </form>
-      </details>
     </div>
     {{end}}
     <details class="fold" id="roles-setup" data-remember{{if not .Roles}} open{{end}}>
