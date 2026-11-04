@@ -511,9 +511,11 @@
         <strong>{{.Name}}</strong>
         <form method="post" action="/events/{{$ev.ID}}/roles/edit" data-async class="role-cap-inline">
           <input type="hidden" name="role_id" value="{{.ID}}"><input type="hidden" name="emoji" value="{{.Emoji}}">
-          <label class="badge role-count" title="Click the number to change how many people {{.Name}} takes. Empty for no cap; lowering it takes nobody out.">{{len .Members}}/<input
-            name="capacity" type="number" min="0" max="999" inputmode="numeric" value="{{if .Capacity}}{{.Capacity}}{{end}}" placeholder="∞"
-            data-saved="{{if .Capacity}}{{.Capacity}}{{end}}" aria-label="Most people {{.Name}} takes; empty for no cap"><span class="cap-edit-mark" aria-hidden="true"><svg viewBox="0 0 16 16" width="9" height="9"><path d="M10.5 2.5l3 3L6 13H3v-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span></label>
+          <label class="badge role-count" title="Click the number to change how many people {{.Name}} takes. Empty for no cap; lowering it takes nobody out.">
+            <span class="role-count-taken">{{len .Members}}</span><span class="role-count-slash" aria-hidden="true">/</span>
+            <span class="cap-field"><input name="capacity" type="number" min="0" max="999" inputmode="numeric" value="{{if .Capacity}}{{.Capacity}}{{end}}" placeholder="∞"
+              data-saved="{{if .Capacity}}{{.Capacity}}{{end}}" aria-label="Most people {{.Name}} takes; empty for no cap"><svg class="cap-edit-mark" aria-hidden="true" viewBox="0 0 16 16" width="10" height="10"><path d="M10.5 2.5l3 3L6 13H3v-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+          </label>
         </form>
         {{if .Mine}}<span class="role-mine">✓ You're in</span>
         {{else if and $.Roles.TakesAnswers $.Roles.ViewerGoing}}

@@ -723,20 +723,24 @@ img.custom-emoji{width:1.25em;height:1.25em;vertical-align:-0.25em;object-fit:co
   border-radius:4px;box-shadow:none;color:inherit;transform:none}
 .emoji-grid button.emoji-choice:hover,.emoji-grid button.emoji-choice:focus-visible{border-color:var(--ink);background:var(--paper)}
 .emoji-grid button.emoji-choice.chosen{border-color:var(--ink);background:var(--paper-deep)}
-/* A role's count on the organizer's page: the number after the slash is a
-   box to type the cap into, underlined with dashes and marked with a pencil
-   so it reads as editable; it turns paper-white while being typed in. */
+/* A role's count on the organizer's page: how many are in it, a light
+   slash, then the cap in a paper box inside the badge, as wide as its number
+   and carrying a pencil, so it reads as a field to type into. */
 .role-cap-inline{display:inline-flex;margin:0}
-label.badge.role-count{display:inline-flex;align-items:center;gap:1px;margin:0;cursor:text;text-transform:none;letter-spacing:normal;
-  font-size:inherit;font-weight:inherit;color:var(--paper-light)}
-.role-count input{width:3.2ch;min-width:0;margin:0 0 0 1px;padding:0 1px;border:0;border-bottom:1.5px dashed var(--paper-light);border-radius:0;
-  background:transparent;color:inherit;font:inherit;text-align:center;box-shadow:none;-moz-appearance:textfield;appearance:textfield}
-.role-count input::-webkit-outer-spin-button,.role-count input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.role-count input::placeholder{color:var(--paper-light);opacity:.8}
-.role-count:hover input{border-bottom-style:solid}
-.role-count input:focus{outline:none;background:var(--paper-light);color:var(--ink);border-bottom-color:var(--accent)}
-.cap-edit-mark{display:inline-flex;margin-left:4px;opacity:.75}
-.role-count:hover .cap-edit-mark,.role-count:focus-within .cap-edit-mark{opacity:1;color:var(--accent)}
+label.badge.role-count{display:inline-flex;align-items:center;gap:5px;margin:0;padding:3px 3px 3px 9px;cursor:text;
+  text-transform:none;letter-spacing:normal;font-family:inherit;font-weight:700;font-size:14px;line-height:1;color:var(--paper-light)}
+.role-count-slash{font-family:system-ui,sans-serif;font-weight:400;opacity:.6}
+.cap-field{display:inline-flex;align-items:center;gap:3px;padding:3px 5px 3px 6px;border-radius:2px;background:var(--paper-light);color:var(--ink)}
+.cap-field input{width:2.4ch;min-width:1ch;max-width:4ch;margin:0;padding:0;border:0;border-radius:0;background:none;
+  color:inherit;font:inherit;line-height:1;text-align:center;box-shadow:none;-moz-appearance:textfield;appearance:textfield}
+@supports (field-sizing:content){.cap-field input{field-sizing:content;width:auto}}
+.cap-field input::-webkit-outer-spin-button,.cap-field input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.cap-field input::placeholder{color:var(--ink);opacity:.7}
+.cap-field input:focus{outline:none}
+.cap-edit-mark{flex:none;color:var(--dim)}
+.role-count:hover .cap-field{box-shadow:inset 0 0 0 1.5px var(--accent)}
+.role-count:hover .cap-edit-mark,.role-count:focus-within .cap-edit-mark{color:var(--accent)}
+.role-count:focus-within .cap-field{box-shadow:inset 0 0 0 2px var(--accent)}
 .member-event{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
 /* The organizer page's narrow-screen order names .event-head; the members'
    page keeps the order it is written in. */
