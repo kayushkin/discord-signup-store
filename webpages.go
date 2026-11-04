@@ -115,6 +115,9 @@ type pageData struct {
 	MySaidNothing bool
 	// Roles is the event's roles section; nil when roles are off.
 	Roles *sheetRolesPage
+	// RoleEmojiPicker is the one emoji picker the organizer's page moves
+	// into whichever role's emoji is pressed; nil without roles.
+	RoleEmojiPicker *roleEmojiPicker
 	// IAmRegular is whether the viewer is a current regular of a repeating
 	// event, for the members' page.
 	IAmRegular bool
@@ -199,6 +202,9 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 	// person shows someone by their short name with their Discord name
 	// behind it.
 	"person": personHTML,
+	// roleEmoji shows a role's emoji: a standard one as text, one of the
+	// server's own as Discord's picture of it.
+	"roleEmoji": roleEmojiHTML,
 	// tile pairs a drawing with whether it is the one shown, for the avatar
 	// page's gallery.
 	"tile": func(d AvatarDrawing, chosen bool) avatarTile { return avatarTile{Drawing: d, Chosen: chosen} },

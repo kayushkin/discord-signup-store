@@ -308,6 +308,9 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	}
 	data.OrganiserIDs = organizerIDsOf(ev, organizers)
 	data.Roles = sheetRolesPageOf(ev, data.Going, session.DiscordUserID)
+	if data.Roles != nil && len(data.Roles.Roles) > 0 {
+		data.RoleEmojiPicker = s.roleEmojiPickerFor(ev.GuildID)
+	}
 	if data.Potluck, err = s.potluckPageOf(ev, data.Going, session.DiscordUserID, true); err != nil {
 		log.Printf("[discord-signup] potluck page %d: %v", ev.ID, err)
 		data.Error = strings.TrimSpace(data.Error + " Could not read the potluck sheet: " + err.Error())

@@ -702,7 +702,14 @@ details.role-pick>summary::-webkit-details-marker{display:none}
 .role-cap-button:hover,details.role-pick[open]>.role-cap-button{background:var(--accent)}
 .role-pop{position:absolute;left:0;top:calc(100% + 6px);z-index:20;background:var(--paper-light);border:2px solid var(--ink);
   border-radius:2px;padding:8px;box-shadow:var(--shadow)}
-.emoji-grid{display:grid;grid-template-columns:repeat(8,32px);gap:2px}
+.emoji-picker{width:min(340px,calc(100vw - 48px));padding:8px}
+.emoji-search{width:100%;margin:0 0 6px}
+.emoji-scroll{max-height:300px;overflow:auto}
+.emoji-section{position:sticky;top:0;margin:6px 0 2px;padding:2px 0;font-size:12px;font-weight:700;color:var(--dim);background:var(--paper-light)}
+.emoji-grid{display:grid;grid-template-columns:repeat(auto-fill,32px);gap:2px}
+.emoji-grid[hidden],.emoji-choice[hidden],.emoji-section[hidden]{display:none}
+img.custom-emoji{width:1.25em;height:1.25em;vertical-align:-0.25em;object-fit:contain}
+.emoji-grid img.custom-emoji{width:22px;height:22px;vertical-align:middle}
 .emoji-grid button.emoji-choice{width:32px;height:32px;padding:0;font-size:19px;line-height:1;background:none;border:1.5px solid transparent;
   border-radius:4px;box-shadow:none;color:inherit;transform:none}
 .emoji-grid button.emoji-choice:hover,.emoji-grid button.emoji-choice:focus-visible{border-color:var(--ink);background:var(--paper)}

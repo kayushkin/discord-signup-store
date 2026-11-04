@@ -37,20 +37,10 @@ const (
 	sheetRoleEmoji = "🙋"
 )
 
-// sheetRoleEmojiChoices are the emojis an organizer can give a role: plain
-// Unicode emoji with no variation selector, which Discord takes on a button.
-// The first sheetRolesPerEvent are the defaults, given in this order to the
-// roles of an event as they are added.
-var sheetRoleEmojiChoices = []string{
-	"🎯", "⭐", "🎉", "🎁", "🎨",
-	"🙋", "🎤", "🎮", "🎲", "🎬", "🎭", "🎵", "🎸", "🏆", "👑", "💃", "🕺", "👀",
-	"🍿", "📣", "📸", "🧠", "💡", "🔥", "🌟", "🎈", "🍕", "🍻", "🧹", "🔧",
-	"🚗", "🛒", "🍳", "🧊", "🃏", "🧩", "⚽", "🏀", "🐶", "🦀", "🤖", "👋", "😎", "🤠",
-}
-
-// sheetRoleEmojiDefaults are the first few choices, in the order new roles
-// take them.
-func sheetRoleEmojiDefaults() []string { return sheetRoleEmojiChoices[:sheetRolesPerEvent] }
+// sheetRoleEmojiDefaults are the emojis new roles take, in this order: the
+// first no live role on the event has. An organizer can pick any of the
+// server's emojis or the standard ones instead (roleemoji.go).
+func sheetRoleEmojiDefaults() []string { return []string{"🎯", "⭐", "🎉", "🎁", "🎨"} }
 
 // nextSheetRoleEmoji is the first default no live role on the event has, or
 // the first default when every one is taken.
@@ -79,15 +69,6 @@ func sheetRoleEmojiBackfill() string {
 		WHERE x.id = sheet_roles.id) WHERE emoji = ''`
 }
 
-// isSheetRoleEmojiChoice says whether an emoji is one a role may have.
-func isSheetRoleEmojiChoice(emoji string) bool {
-	for _, e := range sheetRoleEmojiChoices {
-		if e == emoji {
-			return true
-		}
-	}
-	return false
-}
 
 // ErrSheetRoleFull is taking a role that has no room.
 var ErrSheetRoleFull = errors.New("that role is full")
@@ -150,7 +131,7 @@ func sheetRolesLine(roles []SheetRole) string {
 	}
 	parts := make([]string, len(roles))
 	for i, r := range roles {
-		parts[i] = r.Emoji + " " + r.Name + " " + r.Count()
+		parts[i] = roleEmojiPlainText(r.Emoji) + " " + r.Name + " " + r.Count()
 	}
 	return strings.Join(parts, " · ")
 }
@@ -303,7 +284,7 @@ func (s *Store) RemoveSheetRole(eventID, roleID int64, actor string) error {
 // its cap until people leave, as an event over its limit is. Returns which
 // fields changed.
 func (s *Store) EditSheetRole(eventID, roleID int64, emoji string, capacity int, actor string) ([]string, error) {
-	if !isSheetRoleEmojiChoice(emoji) {
+	if !isRoleEmojiForm(emoji) {
 		return nil, fmt.Errorf("%w: pick one of the emojis offered", ErrInvalidSheetRole)
 	}
 	if capacity < 0 || capacity > sheetRoleCapLimit {
@@ -539,7 +520,7 @@ func sheetRoleButtons(ev *Event, prefix, viewerID string) []any {
 		}
 		buttons = append(buttons, map[string]any{
 			"type": componentTypeButton, "style": style, "label": truncate(label, 80),
-			"emoji": map[string]any{"name": r.Emoji}, "custom_id": sheetRoleCustomID(prefix, ev.ID, r.ID),
+			"emoji": roleEmojiButton(r.Emoji), "custom_id": sheetRoleCustomID(prefix, ev.ID, r.ID),
 		})
 	}
 	return buttons
@@ -621,8 +602,6 @@ type sheetRolesPage struct {
 	// ViewerID marks the viewer's own name tag, which carries their way
 	// out of the role.
 	ViewerID string
-	// EmojiChoices are the emojis an organizer may give a role.
-	EmojiChoices []string
 }
 
 // sheetRolesPageOf builds the roles section; nil when roles are off.
@@ -630,8 +609,7 @@ func sheetRolesPageOf(ev *Event, going []Signup, viewerID string) *sheetRolesPag
 	if !ev.RolesEnabled {
 		return nil
 	}
-	page := &sheetRolesPage{Roles: sheetRolePages(ev.Roles, going, viewerID), TakesAnswers: sheetRolesTakeAnswers(ev), ViewerID: viewerID,
-		EmojiChoices: sheetRoleEmojiChoices}
+	page := &sheetRolesPage{Roles: sheetRolePages(ev.Roles, going, viewerID), TakesAnswers: sheetRolesTakeAnswers(ev), ViewerID: viewerID}
 	for _, sg := range going {
 		if sg.DiscordUserID == viewerID {
 			page.ViewerGoing = true
@@ -753,7 +731,17 @@ func (s *Server) handleWebEditSheetRole(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	changed, err := s.store.EditSheetRole(ev.ID, roleID, r.FormValue("emoji"), capacity, "web:"+session.DiscordUserID)
+	emoji, err := s.checkRoleEmoji(ev.GuildID, r.FormValue("emoji"))
+	if err != nil {
+		if !errors.Is(err, ErrInvalidSheetRole) {
+			log.Printf("[discord-signup] check role emoji for %d: %v", ev.ID, err)
+			s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: could not check that emoji against the server's: "+err.Error())
+			return
+		}
+		s.redirectWithNotice(w, r, ev.ID, sheetRoleRefusal(err))
+		return
+	}
+	changed, err := s.store.EditSheetRole(ev.ID, roleID, emoji, capacity, "web:"+session.DiscordUserID)
 	if err != nil {
 		if !errors.Is(err, ErrInvalidSheetRole) && !errors.Is(err, ErrNotFound) {
 			log.Printf("[discord-signup] edit role %d of %d: %v", roleID, ev.ID, err)
@@ -937,11 +925,10 @@ func sheetRoleLogEntries(history []SheetRoleHistoryRow, names eventLogNames) []e
 	var out []eventLogEntry
 	for i, h := range history {
 		role := func(name string) template.HTML {
-			return template.HTML(template.HTMLEscapeString(h.RoleEmoji + " " + name))
+			return roleEmojiHTML(h.RoleEmoji) + " " + template.HTML(template.HTMLEscapeString(name))
 		}
 		if h.Field != "" {
-			what := "changed " + role(h.RoleName) + "'s emoji from " + template.HTML(template.HTMLEscapeString(h.FromValue)) +
-				" to " + template.HTML(template.HTMLEscapeString(h.ToValue))
+			what := "changed " + role(h.RoleName) + "'s emoji from " + roleEmojiHTML(h.FromValue) + " to " + roleEmojiHTML(h.ToValue)
 			if h.Field == "capacity" {
 				what = "changed " + role(h.RoleName) + "'s cap from " + sheetRoleCapWords(h.FromValue) + " to " + sheetRoleCapWords(h.ToValue)
 			}

@@ -55,6 +55,10 @@ type Server struct {
 	// message nothing edits or deletes again. That happened on 2026-09-04.
 	tableLocks   map[string]*sync.Mutex
 	tableLocksMu sync.Mutex
+
+	// emojiCache keeps each server's custom emoji list a few minutes, for
+	// the role emoji picker (roleemoji.go).
+	emojiCache guildEmojiCache
 	// gatewayStatus reads the gateway supervisor's state for /healthz. Nil
 	// means no supervisor was started, which /healthz reports as "disabled".
 	gatewayStatus func() GatewayStatus

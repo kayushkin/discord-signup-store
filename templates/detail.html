@@ -505,12 +505,8 @@
     {{$role := .}}
     <div class="sheet-role">
       <div class="sheet-role-head">
-        <details class="role-pick">
-          <summary class="role-emoji-button" aria-label="Change {{.Name}}'s emoji" title="Change the emoji">{{.Emoji}}</summary>
-          <form method="post" action="/events/{{$ev.ID}}/roles/edit" data-async class="role-pop emoji-grid">
-            <input type="hidden" name="role_id" value="{{.ID}}"><input type="hidden" name="capacity" value="{{.Capacity}}">
-            {{range $.Roles.EmojiChoices}}<button name="emoji" value="{{.}}" class="emoji-choice{{if eq . $role.Emoji}} chosen{{end}}" aria-label="{{.}}"{{if eq . $role.Emoji}} aria-current="true"{{end}}>{{.}}</button>{{end}}
-          </form>
+        <details class="role-pick role-emoji-pick" data-role-id="{{.ID}}" data-capacity="{{.Capacity}}" data-emoji="{{.Emoji}}">
+          <summary class="role-emoji-button" aria-label="Change {{.Name}}'s emoji" title="Change the emoji">{{roleEmoji .Emoji}}</summary>
         </details>
         <strong>{{.Name}}</strong>
         <details class="role-pick">
@@ -546,12 +542,77 @@
           <summary aria-label="Put someone in {{.Name}}" title="Put someone in {{.Name}}">+ Add someone</summary>
           <form method="post" action="/events/{{$ev.ID}}/roles/put-in" data-async class="role-pop role-add-list">
             <input type="hidden" name="role_id" value="{{.ID}}">
-            <p class="role-add-head">Put in {{.Emoji}} {{.Name}}</p>
+            <p class="role-add-head">Put in {{roleEmoji .Emoji}} {{.Name}}</p>
             {{range .Others}}<button name="discord_user_id" value="{{.DiscordUserID}}">{{if .ReadableName}}{{.ReadableName}}{{else if .DisplayName}}{{.DisplayName}}{{else}}{{.DiscordUserID}}{{end}}</button>{{end}}
           </form>
         </details></li>{{end}}</ul>
       {{else}}<p class="empty">Nobody yet.</p>{{end}}
     </div>
+    {{end}}
+    {{with $.RoleEmojiPicker}}
+    <form method="post" action="/events/{{$ev.ID}}/roles/edit" data-async class="role-pop emoji-picker" id="role-emoji-picker" hidden>
+      <input type="hidden" name="role_id" value=""><input type="hidden" name="capacity" value="">
+      <input type="search" class="emoji-search" placeholder="Search emojis" aria-label="Search emojis" autocomplete="off">
+      <div class="emoji-scroll">
+        <p class="emoji-section">This server</p>
+        {{if .ServerError}}<p class="error small">Could not read the server's emojis: {{.ServerError}}</p>
+        {{else if not .Server}}<p class="muted small">The server has no emojis of its own.</p>{{end}}
+        <div class="emoji-grid">{{range .Server}}<button name="emoji" value="{{.Value}}" class="emoji-choice" data-search="{{.Search}}" title="{{.Search}}">{{.Shown}}</button>{{end}}</div>
+        {{range .Standard}}<p class="emoji-section">{{.Name}}</p>
+        <div class="emoji-grid">{{range .Emojis}}<button name="emoji" value="{{.Value}}" class="emoji-choice" data-search="{{.Search}}" title="{{.Search}}">{{.Shown}}</button>{{end}}</div>{{end}}
+        <p class="muted small emoji-none" hidden>No emoji matches.</p>
+      </div>
+    </form>
+    <script>
+    // One picker serves every role: pressing a role's emoji moves it into that
+    // role's box, with the role's id and cap, and marks its emoji. Picking one
+    // sends the form, which saves and redraws the page.
+    (function () {
+      var picker = document.getElementById("role-emoji-picker");
+      if (!picker) return;
+      var search = picker.querySelector(".emoji-search");
+      var none = picker.querySelector(".emoji-none");
+      function filter() {
+        var q = search.value.trim().toLowerCase();
+        var shown = 0;
+        picker.querySelectorAll(".emoji-grid").forEach(function (grid) {
+          var inGrid = 0;
+          grid.querySelectorAll(".emoji-choice").forEach(function (b) {
+            var match = !q || b.getAttribute("data-search").indexOf(q) >= 0;
+            b.hidden = !match;
+            if (match) inGrid++;
+          });
+          grid.hidden = inGrid === 0;
+          var head = grid.previousElementSibling;
+          while (head && !head.classList.contains("emoji-section")) head = head.previousElementSibling;
+          if (head) head.hidden = inGrid === 0 && q !== "";
+          shown += inGrid;
+        });
+        none.hidden = shown > 0;
+      }
+      search.addEventListener("input", filter);
+      search.addEventListener("keydown", function (e) { if (e.key === "Enter") e.preventDefault(); });
+      document.querySelectorAll("details.role-emoji-pick").forEach(function (d) {
+        d.addEventListener("toggle", function () {
+          if (!d.open) return;
+          document.querySelectorAll("details.role-emoji-pick[open]").forEach(function (other) {
+            if (other !== d) other.open = false;
+          });
+          picker.elements.role_id.value = d.getAttribute("data-role-id");
+          picker.elements.capacity.value = d.getAttribute("data-capacity");
+          var current = d.getAttribute("data-emoji");
+          picker.querySelectorAll(".emoji-choice").forEach(function (b) {
+            b.classList.toggle("chosen", b.value === current);
+          });
+          d.appendChild(picker);
+          picker.hidden = false;
+          search.value = "";
+          filter();
+          search.focus();
+        });
+      });
+    })();
+    </script>
     {{end}}
     <details class="fold" id="roles-setup" data-remember{{if not .Roles}} open{{end}}>
       <summary>Add a role</summary>
