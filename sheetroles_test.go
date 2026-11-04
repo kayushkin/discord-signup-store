@@ -141,6 +141,16 @@ func TestRolesOnTheEventPagesAndInTheLog(t *testing.T) {
 	if r := mustEvent(t, store, ev.ID).Roles[0]; !r.Has("member") {
 		t.Fatal("the toggle did not put the member in the role")
 	}
+	page = getPage(t, mux, member.Token, eventPath(ev)).Body.String()
+	if !strings.Contains(page, "You're in") || !strings.Contains(page, `<li class="me">`) ||
+		!strings.Contains(page, `aria-label="Leave Setup (6:00)"`) {
+		t.Fatal("the members' page does not mark the member's own tag with a way out of the role")
+	}
+	postForm(t, mux, member.Token, eventPath(ev)+"/roles/toggle", url.Values{"role_id": {fmt.Sprint(role.ID)}})
+	if r := mustEvent(t, store, ev.ID).Roles[0]; r.Has("member") {
+		t.Fatal("the cross on the member's own tag did not take them out of the role")
+	}
+	postForm(t, mux, member.Token, eventPath(ev)+"/roles/toggle", url.Values{"role_id": {fmt.Sprint(role.ID)}})
 	organizerPage := getPage(t, mux, token, eventPath(ev)).Body.String()
 	for _, want := range []string{"added the role 🙋 Setup (6:00)", "took the role 🙋 Setup (6:00)"} {
 		if !strings.Contains(organizerPage, want) {

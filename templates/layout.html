@@ -664,8 +664,23 @@ ol.name-cloud li::before{counter-increment:place;content:counter(place) ".";font
 .name-cloud li .small{margin-left:4px}
 /* An organizer's cross beside a name in a role: takes them out of it. */
 .role-take-out{display:inline-flex;margin:0 0 0 5px}
-.role-take-out button{display:inline-flex;align-items:center;padding:2px;border:0;background:none;color:var(--dim);cursor:pointer}
-.role-take-out button:hover,.role-take-out button:focus-visible{color:var(--ink)}
+.role-take-out button{display:inline-flex;align-items:center;padding:3px;border:0;background:none;color:var(--dim);cursor:pointer;
+  box-shadow:none;min-height:0}
+.role-take-out button:hover,.role-take-out button:focus-visible,.role-take-out button:active{color:var(--ink);transform:none;box-shadow:none}
+/* An organizer's "put someone in" row under a role: the list as wide as its
+   names, the button beside it. */
+.role-put-in{display:flex;align-items:center;gap:8px;margin:8px 0 0}
+.role-put-in select{width:auto;min-width:0;max-width:28em;flex:0 1 auto}
+.role-put-in button{flex:none}
+/* Removing the role sits apart from the viewer's own state, at the far end. */
+.sheet-role-head .role-remove{margin-left:auto}
+/* The viewer's own tag in a role: filled in, marked "you", and its cross
+   takes them out of the role. */
+.name-cloud li.me{background:var(--ink);color:var(--paper-light);border-color:var(--ink)}
+.name-cloud li.me .me-label{margin-left:6px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+.name-cloud li.me .role-take-out button{color:var(--paper-light);opacity:.75}
+.name-cloud li.me .role-take-out button:hover,.name-cloud li.me .role-take-out button:focus-visible{opacity:1;color:var(--paper-light)}
+.role-mine{font-size:13px;font-weight:700;color:var(--ok)}
 .member-event{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
 /* The organizer page's narrow-screen order names .event-head; the members'
    page keeps the order it is written in. */

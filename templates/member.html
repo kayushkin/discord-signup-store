@@ -167,14 +167,20 @@
     <div class="sheet-role">
       <div class="sheet-role-head">
         <strong>{{.Name}}</strong> <span class="badge">{{.Count}}</span>
-        {{if and $.Roles.TakesAnswers $.Roles.ViewerGoing}}
+        {{if .Mine}}<span class="role-mine">✓ You're in</span>
+        {{else if and $.Roles.TakesAnswers $.Roles.ViewerGoing}}
         <form method="post" action="/events/{{$ev.ID}}/roles/toggle">
           <input type="hidden" name="role_id" value="{{.ID}}">
-          {{if .Mine}}<button class="btn-sm ghost">Leave</button>{{else if .Full}}<button class="btn-sm" disabled>Full</button>{{else}}<button class="btn-sm">Count me in</button>{{end}}
+          {{if .Full}}<button class="btn-sm" disabled>Full</button>{{else}}<button class="btn-sm">Count me in</button>{{end}}
         </form>
         {{end}}
       </div>
-      {{if .People}}<ul class="name-cloud">{{range .People}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}</li>{{end}}</ul>
+      {{$role := .}}
+      {{if .People}}<ul class="name-cloud">{{range .People}}{{if eq .DiscordUserID $.Roles.ViewerID}}<li class="me">{{person .ReadableName .DisplayName .DiscordUserID}}<span class="me-label">you</span>{{if $.Roles.TakesAnswers}}
+        <form method="post" action="/events/{{$ev.ID}}/roles/toggle" class="role-take-out"{{if $role.Full}}
+          data-confirm="Leave {{$role.Name}}? It's full, so someone else can take your place."{{end}}>
+          <input type="hidden" name="role_id" value="{{$role.ID}}">
+          <button aria-label="Leave {{$role.Name}}" title="Leave {{$role.Name}}">{{template "cross"}}</button></form>{{end}}</li>{{else}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}</li>{{end}}{{end}}</ul>
       {{else}}<p class="empty">Nobody yet.</p>{{end}}
     </div>
     {{end}}

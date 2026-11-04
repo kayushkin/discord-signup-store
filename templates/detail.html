@@ -505,24 +505,29 @@
     <div class="sheet-role">
       <div class="sheet-role-head">
         <strong>{{.Name}}</strong> <span class="badge">{{.Count}}</span>
-        {{if and $.Roles.TakesAnswers $.Roles.ViewerGoing}}
+        {{if .Mine}}<span class="role-mine">✓ You're in</span>
+        {{else if and $.Roles.TakesAnswers $.Roles.ViewerGoing}}
         <form method="post" action="/events/{{$ev.ID}}/roles/toggle" data-async>
           <input type="hidden" name="role_id" value="{{.ID}}">
-          {{if .Mine}}<button class="btn-sm ghost">Leave</button>{{else if .Full}}<button class="btn-sm" disabled>Full</button>{{else}}<button class="btn-sm">Count me in</button>{{end}}
+          {{if .Full}}<button class="btn-sm" disabled>Full</button>{{else}}<button class="btn-sm">Count me in</button>{{end}}
         </form>
         {{end}}
-        <form method="post" action="/events/{{$ev.ID}}/roles/remove" data-async data-confirm="Take the role {{.Name}} off the event? Who was in it stays in the log.">
+        <form method="post" action="/events/{{$ev.ID}}/roles/remove" data-async class="role-remove" data-confirm="Take the role {{.Name}} off the event? Who was in it stays in the log.">
           <input type="hidden" name="role_id" value="{{.ID}}">
           <button class="btn-sm danger" aria-label="Remove the role {{.Name}}" title="Remove the role">{{template "cross"}}</button></form>
       </div>
       {{$role := .}}
-      {{if .People}}<ul class="name-cloud">{{range .People}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}
+      {{if .People}}<ul class="name-cloud">{{range .People}}{{if eq .DiscordUserID $.Roles.ViewerID}}<li class="me">{{person .ReadableName .DisplayName .DiscordUserID}}<span class="me-label">you</span>{{if $.Roles.TakesAnswers}}
+        <form method="post" action="/events/{{$ev.ID}}/roles/toggle" data-async class="role-take-out"{{if $role.Full}}
+          data-confirm="Leave {{$role.Name}}? It's full, so someone else can take your place."{{end}}>
+          <input type="hidden" name="role_id" value="{{$role.ID}}">
+          <button aria-label="Leave {{$role.Name}}" title="Leave {{$role.Name}}">{{template "cross"}}</button></form>{{end}}</li>{{else}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}
         <form method="post" action="/events/{{$ev.ID}}/roles/take-out" data-async class="role-take-out">
           <input type="hidden" name="role_id" value="{{$role.ID}}"><input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
-          <button aria-label="Take them out of {{$role.Name}}" title="Take out of {{$role.Name}}">{{template "cross"}}</button></form></li>{{end}}</ul>
+          <button aria-label="Take them out of {{$role.Name}}" title="Take out of {{$role.Name}}">{{template "cross"}}</button></form></li>{{end}}{{end}}</ul>
       {{else}}<p class="empty">Nobody yet.</p>{{end}}
       {{if and $.Roles.TakesAnswers .Others (not .Full)}}
-      <form method="post" action="/events/{{$ev.ID}}/roles/put-in" data-async class="potluck-add">
+      <form method="post" action="/events/{{$ev.ID}}/roles/put-in" data-async class="role-put-in">
         <input type="hidden" name="role_id" value="{{.ID}}">
         <select name="discord_user_id" aria-label="Someone going to put in {{.Name}}" required>
           <option value="">Put someone in {{.Name}}…</option>

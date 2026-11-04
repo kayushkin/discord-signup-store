@@ -193,7 +193,10 @@ an organizer can add up to five — setup, teardown, coming for part of it —
 each with an optional cap, and the card lists them under **🙋 Roles** with
 who is in each. Anyone going takes one, or leaves it, with its own button
 on the card, in the What I'm bringing view when there is a sheet, or on the
-event page; a full role refuses. On the event page an organizer can also
+event page; a full role refuses. On the event page a role you are in says
+*You're in*, and your own name tag in it is filled in and marked *you*; the
+cross on it takes you out, asking first when the role is full, since someone
+else can then take your place. On the event page an organizer can also
 put anyone going into a role, from a list under it, and take anyone out with
 the cross beside their name; the cap holds for them too, so to swap who has a
 full role they take one person out and put the other in. Nobody is messaged,

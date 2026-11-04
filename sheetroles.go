@@ -506,6 +506,9 @@ type sheetRolesPage struct {
 	// ViewerGoing whether the viewer is going and so may.
 	TakesAnswers bool
 	ViewerGoing  bool
+	// ViewerID marks the viewer's own name tag, which carries their way
+	// out of the role.
+	ViewerID string
 }
 
 // sheetRolesPageOf builds the roles section; nil when roles are off.
@@ -513,7 +516,7 @@ func sheetRolesPageOf(ev *Event, going []Signup, viewerID string) *sheetRolesPag
 	if !ev.RolesEnabled {
 		return nil
 	}
-	page := &sheetRolesPage{Roles: sheetRolePages(ev.Roles, going, viewerID), TakesAnswers: sheetRolesTakeAnswers(ev)}
+	page := &sheetRolesPage{Roles: sheetRolePages(ev.Roles, going, viewerID), TakesAnswers: sheetRolesTakeAnswers(ev), ViewerID: viewerID}
 	for _, sg := range going {
 		if sg.DiscordUserID == viewerID {
 			page.ViewerGoing = true
