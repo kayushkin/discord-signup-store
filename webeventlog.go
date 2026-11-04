@@ -152,6 +152,7 @@ var eventUpdateFieldWords = map[string]string{
 	"starts_at":         "start",
 	"ends_at":           "end",
 	"location":          "place",
+	"entity_type":       "kind",
 	"timezone":          "timezone",
 	"recurrence_rule":   "repeats",
 	"attending_role_id": "attending role",

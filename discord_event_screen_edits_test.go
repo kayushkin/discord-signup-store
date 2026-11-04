@@ -270,3 +270,52 @@ func TestApiEditMovingTheStartMovesTheEnd(t *testing.T) {
 }
 
 func ptrInt64(v int64) *int64 { return &v }
+
+// TestSyncTakesAVoiceChannelChosenInDiscord: on 2026-11-03 an event made
+// here as external was moved to a voice channel in Discord's screen. The
+// sync must take the kind, so the next push sends no place — Discord refuses
+// one on a voice event — and say so in the history.
+func TestSyncTakesAVoiceChannelChosenInDiscord(t *testing.T) {
+	fake := newFakeDiscord(t)
+	store := testStore(t)
+	srv := NewServer(store, nil, fake.client())
+	t.Cleanup(srv.WaitForBackgroundWork)
+	start := time.Now().Add(6 * time.Hour).Unix()
+	ev, err := store.CreateEvent(Event{
+		GuildID: "g1", ChannelID: "board", Name: "Orange Juice", Location: "Voice Chat",
+		StartsAt: start, DiscordScheduledEventID: "native-87",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	recordWrittenAsOurs(t, store, ev.ID)
+
+	native := nativeEventAt("native-87", "Orange Juice", start, start+assumedRunTimeWithoutEndTime)
+	native.EntityType = 2
+	native.ChannelID = "voice-1"
+	if _, _, err := srv.syncOneScheduledEvent(native, "board"); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	after, _ := store.GetEvent(ev.ID)
+	if after.EntityType != "voice" {
+		t.Fatalf("entity type = %q, want voice", after.EntityType)
+	}
+	roster, _ := store.Roster(ev.ID, false)
+	if err := srv.PushEditToDiscord(after, roster, false); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	patches := patchesTo(fake, "native-87")
+	if len(patches) == 0 {
+		t.Fatal("nothing was pushed")
+	}
+	if _, has := patches[len(patches)-1].Body["entity_metadata"]; has {
+		t.Errorf("the push to a voice event carried a place: %v", patches[len(patches)-1].Body)
+	}
+	updates, _ := store.EventUpdates(ev.ID)
+	for _, u := range updates {
+		if u.Field == "entity_type" && u.ToValue == "voice" && u.Actor == discordEventScreenActor {
+			return
+		}
+	}
+	t.Errorf("history = %+v, want an entity_type row by %q", updates, discordEventScreenActor)
+}

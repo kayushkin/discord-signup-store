@@ -35,6 +35,9 @@ var loggedEventFields = []struct {
 	{"starts_at", func(e *Event) string { return strconv.FormatInt(e.StartsAt, 10) }},
 	{"ends_at", func(e *Event) string { return strconv.FormatInt(e.EndsAt, 10) }},
 	{"location", func(e *Event) string { return e.Location }},
+	// Only Discord's screen changes the kind, and a change of kind decides
+	// whether the place is sent at all, so it is worth a line.
+	{"entity_type", func(e *Event) string { return e.EntityType }},
 	{"timezone", func(e *Event) string { return e.Timezone }},
 	{"recurrence_rule", func(e *Event) string { return e.RecurrenceRule }},
 	{"attending_role_id", func(e *Event) string { return e.AttendingRoleID }},

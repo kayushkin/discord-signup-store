@@ -141,7 +141,7 @@ place and limit could all change and the only trace was the new value.
 |---|---|---|
 | `id` | INTEGER PK | |
 | `event_id` | INTEGER | → `events(id)` ON DELETE CASCADE. |
-| `field` | TEXT | Which one changed: `name`, `description`, `capacity`, `status`, `starts_at`, `ends_at`, `location`, `timezone`, `recurrence_rule`, `attending_role_id`, `waitlist_role_id`, `waitlist_disabled`, `created_by`. |
+| `field` | TEXT | Which one changed: `name`, `description`, `capacity`, `status`, `starts_at`, `ends_at`, `location`, `entity_type` (only Discord's screen changes it), `timezone`, `recurrence_rule`, `attending_role_id`, `waitlist_role_id`, `waitlist_disabled`, `created_by`. |
 | `from_value` | TEXT | The old value, raw — a time as the integer it is stored as, not a rendering of it. Presentation belongs at the edge. |
 | `to_value` | TEXT | The new one. |
 | `actor` | TEXT | `web:<discord id>` from the web page, `discord:<discord id>` from a Discord form, `api`, `discord-event-screen` for an edit made in Discord's own event screen, or `discord-event-sync` for a completion or cancellation copied from Discord. |

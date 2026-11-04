@@ -337,6 +337,18 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 	// but ours has moved on, ours has not reached Discord yet, and goes out.
 	// Copying Discord's stale copy in used to undo edits: on 2026-09-24
 	// Discord refused a moved date and the sync put the old date back twice.
+	// The kind of event — out somewhere, or in a voice or stage channel — is
+	// Discord's alone: nothing here edits it after the event is made. So it
+	// is taken first, before the place is compared, because only an external
+	// event has a place and Discord refuses one on any other kind. On
+	// 2026-11-03 an event made here as external at "Voice Chat" was switched
+	// to a voice channel in Discord's screen; the sync took the cleared place
+	// but kept the kind, and every push after that sent a place and was
+	// refused (GUILD_SCHEDULED_EVENT_ENTITY_METADATA_UNSUPPORTED), every
+	// minute, so the native event stopped showing who was going.
+	if existing, err = s.takeDiscordEntityType(existing, r); err != nil {
+		return false, false, err
+	}
 	roster, err := s.store.Roster(existing.ID, false)
 	if err != nil {
 		return false, false, err
@@ -393,6 +405,30 @@ func (s *Server) syncOneScheduledEvent(r DiscordScheduledEvent, boardChannelID s
 		return false, false, fmt.Errorf("log sync changes to event %d: %w", existing.ID, err)
 	}
 	return true, false, nil
+}
+
+// takeDiscordEntityType copies the native event's kind onto ours when they
+// differ, logged as an edit made in Discord's screen. Ours being "" counts as
+// external, which is what this service creates. An entity type Discord has
+// that this store has no name for is left alone.
+func (s *Server) takeDiscordEntityType(existing *Event, r DiscordScheduledEvent) (*Event, error) {
+	theirs, known := discordEntityTypeNames[r.EntityType]
+	ours := existing.EntityType
+	if ours == "" {
+		ours = "external"
+	}
+	if !known || theirs == ours {
+		return existing, nil
+	}
+	after, err := s.store.UpdateEvent(existing.ID, EventPatch{EntityType: &theirs})
+	if err != nil {
+		return nil, fmt.Errorf("take discord's kind of event %d: %w", existing.ID, err)
+	}
+	if err := s.store.LogEventUpdates(existing, after, discordEventScreenActor); err != nil {
+		return nil, fmt.Errorf("log discord's kind of event %d: %w", existing.ID, err)
+	}
+	log.Printf("[discord-signup] sync: event %d is now a %s event in Discord (was %q)", existing.ID, theirs, existing.EntityType)
+	return after, nil
 }
 
 // syncEventUpdateActor marks a change in event_updates that the sync copied
