@@ -84,7 +84,7 @@ func (s *Server) handlePotluckComponent(w http.ResponseWriter, in *Interaction, 
 	case action == potluckTakeRequestAction:
 		s.handleTakeRequestMenu(w, in, eventID, userID)
 	case strings.HasPrefix(action, sheetRoleCardPrefix), strings.HasPrefix(action, sheetRolePanelPrefix):
-		s.handleSheetRoleButton(w, action, eventID, userID)
+		s.handleSheetRoleButton(w, in, action, eventID, userID)
 	case action == potluckClearAction:
 		note := "Cleared: you're off the sheet until you add something."
 		if _, err := s.store.ClearPotluckAnswer(eventID, userID); err != nil {

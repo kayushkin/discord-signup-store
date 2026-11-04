@@ -496,6 +496,12 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// Each role's emoji, which an organizer can change; a new role takes the
 	// next default. See sheetroles.go.
 	{"sheet_roles", "emoji", "TEXT NOT NULL DEFAULT ''"},
+	// Whether a role is part of the event or apart from its main list; every
+	// role before 2026-11-04 was part of it. See sheetroles.go.
+	{"sheet_roles", "takes_place", "INTEGER NOT NULL DEFAULT 1"},
+	// Discord's name for someone when they took a role, for a role apart from
+	// the main list, whose people may not be on the roster.
+	{"sheet_role_signups", "display_name", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // ensureColumns applies every ALTER that a pre-existing database is missing.

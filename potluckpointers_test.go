@@ -17,7 +17,7 @@ func TestJoiningAPotluckSaysToBringSomething(t *testing.T) {
 	srv, priv, store := testServer(t)
 	ev := potluckEvent(t, store)
 	switchRolesOn(t, store, ev.ID)
-	store.AddSheetRole(ev.ID, "Setup", 0, "test")
+	store.AddSheetRole(ev.ID, "Setup", 0, true, "test")
 	store.AddPotluckRequest(ev.ID, PotluckSupplies, "Ice", 1, "test")
 	plain := testEvent(t, store, 0)
 	join := func(eventID int64) map[string]any {
@@ -81,15 +81,15 @@ func TestAWebJoinToAPotluckLandsOnItsPage(t *testing.T) {
 	linker := NewServer(store, nil, nil)
 	linker.EnableWeb(&OAuthConfig{RedirectURL: "https://events.example/auth/callback"})
 	store.UpdateEvent(ev.ID, EventPatch{RolesEnabled: &on})
-	store.AddSheetRole(ev.ID, "Setup (6:00)", 0, "test")
-	store.AddSheetRole(ev.ID, "Teardown", 0, "test")
-	host, _ := store.AddSheetRole(ev.ID, "Host", 1, "test")
+	store.AddSheetRole(ev.ID, "Setup (6:00)", 0, true, "test")
+	store.AddSheetRole(ev.ID, "Teardown", 0, true, "test")
+	host, _ := store.AddSheetRole(ev.ID, "Host", 1, true, "test")
 	want := fmt.Sprintf("\n[Potluck list →](https://events.example%[1]s#potluck)\n[Pick a role: Setup, Teardown or Host →](https://events.example%[1]s#roles)", eventPath(ev))
 	if link := linker.potluckAndRolesLinks(mustEvent(t, store, ev.ID)); link != want {
 		t.Errorf("#events link = %q", link)
 	}
 	// A full role is not offered.
-	if _, err := store.ToggleSheetRole(ev.ID, host.ID, "alice"); err != nil {
+	if _, err := store.ToggleSheetRole(ev.ID, host.ID, "alice", ""); err != nil {
 		t.Fatal(err)
 	}
 	want = fmt.Sprintf("\n[Potluck list →](https://events.example%[1]s#potluck)\n[Pick a role: Setup or Teardown →](https://events.example%[1]s#roles)", eventPath(ev))

@@ -24,7 +24,7 @@
     </div>
     <div class="ec-foot">
       <span class="ec-faces" aria-hidden="true">{{range .Faces}}<img src="/avatars/{{.}}.webp" alt="" width="28" height="28" loading="lazy">{{end}}{{range .Blanks}}<span></span>{{end}}</span>
-      <span class="ec-count"><strong>{{.AttendingCount}}</strong>{{if .Capacity}}<span class="muted">/{{.Capacity}}</span>{{end}} going{{if .WaitlistCount}} · {{.WaitlistCount}} waiting{{end}}{{if .HeldCount}} · {{.HeldCount}} held{{end}}</span>
+      <span class="ec-count"><strong>{{.AttendingCount}}</strong>{{if .Capacity}}<span class="muted">/{{.Capacity}}</span>{{end}} going{{if .WaitlistCount}} · {{.WaitlistCount}} waiting{{end}}{{if .HeldCount}} · {{.HeldCount}} held{{end}}{{range .SeparateRoles}} · {{roleEmoji .Emoji}} {{.Name}} {{.Count}}{{end}}</span>
       {{if .MayJoin}}
       <form method="post" class="ec-join" action="/events/{{.ID}}/{{if .MyState}}leave{{else}}join{{end}}">
         {{if .MyState}}<button class="ghost">Leave</button>

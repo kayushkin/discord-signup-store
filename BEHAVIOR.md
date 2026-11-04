@@ -213,6 +213,19 @@ and the log names the organizer. Switching roles off hides them and keeps
 them and who took them. They are not Discord roles: nothing is granted on
 Discord.
 
+**Roles that count toward Going, and roles apart from it.** Each role is
+one or the other, chosen when it is added and switched on the event page
+by pressing its *counts toward Going* or *separate from Going* label. A role
+that counts toward Going is part of the event: only people going take it,
+and they take places as anyone going does. A separate role — an audience,
+the hosts — stands apart from the main list: anyone in the server takes it
+without joining, nobody in it is put on Going or takes a place, and only
+its own cap holds. An organizer can put in anyone going, waiting or on
+Maybe. Every count shows the main places and then each separate role's:
+"10/12 places taken · 🎤 Audience 3/6 · 🎉 Hosts 2/2". Switching a role's
+kind moves nobody; while a role counts toward Going, only its people who
+are going show in it.
+
 A repeating event's next date starts with an empty sheet and empty roles;
 what it needs, and the roles, carry over. The organizer's log has every change to the sheet: each thing
 someone said they would bring or took off, and who took it off — them, an

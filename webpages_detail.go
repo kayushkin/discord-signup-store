@@ -307,7 +307,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		}
 	}
 	data.OrganiserIDs = organizerIDsOf(ev, organizers)
-	data.Roles = sheetRolesPageOf(ev, data.Going, session.DiscordUserID)
+	data.Roles = sheetRolesPageOf(ev, data.Going, append(append([]Signup{}, data.Waiting...), data.Maybes...), session.DiscordUserID)
 	if data.Roles != nil && len(data.Roles.Roles) > 0 {
 		data.RoleEmojiPicker = s.roleEmojiPickerFor(ev.GuildID)
 	}

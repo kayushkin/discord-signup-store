@@ -75,7 +75,7 @@ func (s *Server) renderMemberEventPage(w http.ResponseWriter, session *WebSessio
 		log.Printf("[discord-signup] potluck page %d: %v", ev.ID, err)
 		problems = append(problems, "Could not read the potluck sheet: "+err.Error())
 	}
-	data.Roles = sheetRolesPageOf(ev, data.Going, session.DiscordUserID)
+	data.Roles = sheetRolesPageOf(ev, data.Going, append(append([]Signup{}, data.Waiting...), data.Maybes...), session.DiscordUserID)
 	if ev.Potluck != nil {
 		data.MyPotluck = ev.Potluck.ItemsOf(session.DiscordUserID)
 		data.MySaidNothing = ev.Potluck.SaidNothing(session.DiscordUserID)

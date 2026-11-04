@@ -69,7 +69,6 @@ func sheetRoleEmojiBackfill() string {
 		WHERE x.id = sheet_roles.id) WHERE emoji = ''`
 }
 
-
 // ErrSheetRoleFull is taking a role that has no room.
 var ErrSheetRoleFull = errors.New("that role is full")
 
@@ -97,9 +96,26 @@ type SheetRole struct {
 	Name     string `json:"name"`
 	Emoji    string `json:"emoji"`
 	Capacity int    `json:"capacity"`
-	// Members are the Discord user ids of the people going in it, in the
-	// order they took it.
+	// TakesPlace is whether the role is part of the event: only people going
+	// may take it, and they count toward the event's limit as anyone going
+	// does. A role that does not take a place — an audience, say — is apart
+	// from the main list: anyone in the server takes it without joining, and
+	// only its own cap holds.
+	TakesPlace bool `json:"takes_place"`
+	// Members are the Discord user ids of the people in it, in the order they
+	// took it: for a role that takes a place, only those going.
 	Members []string `json:"members"`
+	// People are the same people with the names to show them by.
+	People []SheetRoleMember `json:"people"`
+}
+
+// SheetRoleMember is someone in a role, with their names: their name on the
+// roster when they are on it, else the one Discord gave when they took the
+// role, and their short name if they have one.
+type SheetRoleMember struct {
+	DiscordUserID string `json:"discord_user_id"`
+	DisplayName   string `json:"display_name"`
+	ReadableName  string `json:"readable_name,omitempty"`
 }
 
 // Has says whether someone is in the role.
@@ -134,6 +150,36 @@ func sheetRolesLine(roles []SheetRole) string {
 		parts[i] = roleEmojiPlainText(r.Emoji) + " " + r.Name + " " + r.Count()
 	}
 	return strings.Join(parts, " · ")
+}
+
+// SeparateRoles are the event's roles apart from its main list, which carry
+// counts of their own beside its places; none while roles are off.
+func (ev *Event) SeparateRoles() []SheetRole {
+	if !ev.RolesEnabled {
+		return nil
+	}
+	var out []SheetRole
+	for _, r := range ev.Roles {
+		if !r.TakesPlace {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// separateRoleCounts is each separate role's count after the event's own:
+// " · 🎤 Audience 3/6 · 🎉 Hosts 2", or "" with none. plain writes a custom
+// emoji as :name:, for text Discord does not render as markdown.
+func separateRoleCounts(ev *Event, plain bool) string {
+	out := ""
+	for _, r := range ev.SeparateRoles() {
+		emoji := r.Emoji
+		if plain {
+			emoji = roleEmojiPlainText(emoji)
+		}
+		out += " · " + emoji + " " + r.Name + " " + r.Count()
+	}
+	return out
 }
 
 // sheetRoleOf finds one role by id.
@@ -188,7 +234,7 @@ func sheetRoleRefusal(err error) string {
 
 // readSheetRoles reads an event's live roles and the people going in each.
 func (s *Store) readSheetRoles(eventID int64) ([]SheetRole, error) {
-	rows, err := s.db.Query(`SELECT id, event_id, name, emoji, capacity FROM sheet_roles
+	rows, err := s.db.Query(`SELECT id, event_id, name, emoji, capacity, takes_place FROM sheet_roles
 		WHERE event_id = ? AND removed_at = 0 ORDER BY id`, eventID)
 	if err != nil {
 		return nil, fmt.Errorf("read sheet roles: %w", err)
@@ -197,11 +243,12 @@ func (s *Store) readSheetRoles(eventID int64) ([]SheetRole, error) {
 	index := map[int64]int{}
 	for rows.Next() {
 		var r SheetRole
-		if err := rows.Scan(&r.ID, &r.EventID, &r.Name, &r.Emoji, &r.Capacity); err != nil {
+		if err := rows.Scan(&r.ID, &r.EventID, &r.Name, &r.Emoji, &r.Capacity, &r.TakesPlace); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("scan sheet role: %w", err)
 		}
 		r.Members = []string{}
+		r.People = []SheetRoleMember{}
 		index[r.ID] = len(roles)
 		roles = append(roles, r)
 	}
@@ -210,9 +257,12 @@ func (s *Store) readSheetRoles(eventID int64) ([]SheetRole, error) {
 		return nil, fmt.Errorf("iterate sheet roles: %w", err)
 	}
 	members, err := s.db.Query(`
-		SELECT m.role_id, m.discord_user_id FROM sheet_role_signups m
-		JOIN signups s ON s.event_id = m.event_id AND s.discord_user_id = m.discord_user_id
-		WHERE m.event_id = ? AND m.left_at = 0 AND s.state = ?
+		SELECT m.role_id, m.discord_user_id, COALESCE(NULLIF(s.display_name, ''), m.display_name), COALESCE(n.readable_name, '')
+		FROM sheet_role_signups m
+		JOIN sheet_roles r ON r.id = m.role_id
+		LEFT JOIN signups s ON s.event_id = m.event_id AND s.discord_user_id = m.discord_user_id
+		LEFT JOIN readable_names n ON n.discord_user_id = m.discord_user_id
+		WHERE m.event_id = ? AND m.left_at = 0 AND (r.takes_place = 0 OR s.state = ?)
 		ORDER BY m.joined_at, m.id`, eventID, StateAttending)
 	if err != nil {
 		return nil, fmt.Errorf("read sheet role members: %w", err)
@@ -220,19 +270,21 @@ func (s *Store) readSheetRoles(eventID int64) ([]SheetRole, error) {
 	defer members.Close()
 	for members.Next() {
 		var roleID int64
-		var userID string
-		if err := members.Scan(&roleID, &userID); err != nil {
+		var person SheetRoleMember
+		if err := members.Scan(&roleID, &person.DiscordUserID, &person.DisplayName, &person.ReadableName); err != nil {
 			return nil, fmt.Errorf("scan sheet role member: %w", err)
 		}
 		if i, ok := index[roleID]; ok {
-			roles[i].Members = append(roles[i].Members, userID)
+			roles[i].Members = append(roles[i].Members, person.DiscordUserID)
+			roles[i].People = append(roles[i].People, person)
 		}
 	}
 	return roles, members.Err()
 }
 
-// AddSheetRole adds a role to an event's sheet.
-func (s *Store) AddSheetRole(eventID int64, name string, capacity int, actor string) (*SheetRole, error) {
+// AddSheetRole adds a role to an event's sheet. takesPlace says whether it
+// is part of the event (see SheetRole.TakesPlace).
+func (s *Store) AddSheetRole(eventID int64, name string, capacity int, takesPlace bool, actor string) (*SheetRole, error) {
 	name = strings.Join(strings.Fields(name), " ")
 	if name == "" || len([]rune(name)) > sheetRoleNameLimit {
 		return nil, fmt.Errorf("%w: a role's name is 1 to %d characters", ErrInvalidSheetRole, sheetRoleNameLimit)
@@ -253,8 +305,8 @@ func (s *Store) AddSheetRole(eventID int64, name string, capacity int, actor str
 		}
 	}
 	emoji := nextSheetRoleEmoji(roles)
-	res, err := s.db.Exec(`INSERT INTO sheet_roles (event_id, name, emoji, capacity, created_at, created_by) VALUES (?,?,?,?,?,?)`,
-		eventID, name, emoji, capacity, now(), actor)
+	res, err := s.db.Exec(`INSERT INTO sheet_roles (event_id, name, emoji, capacity, takes_place, created_at, created_by) VALUES (?,?,?,?,?,?,?)`,
+		eventID, name, emoji, capacity, takesPlace, now(), actor)
 	if err != nil {
 		return nil, fmt.Errorf("add sheet role: %w", err)
 	}
@@ -262,7 +314,8 @@ func (s *Store) AddSheetRole(eventID int64, name string, capacity int, actor str
 	if err != nil {
 		return nil, fmt.Errorf("read sheet role id: %w", err)
 	}
-	return &SheetRole{ID: id, EventID: eventID, Name: name, Emoji: emoji, Capacity: capacity, Members: []string{}}, nil
+	return &SheetRole{ID: id, EventID: eventID, Name: name, Emoji: emoji, Capacity: capacity, TakesPlace: takesPlace,
+		Members: []string{}, People: []SheetRoleMember{}}, nil
 }
 
 // RemoveSheetRole takes a role off an event's sheet. Who was in it stays in
@@ -279,15 +332,25 @@ func (s *Store) RemoveSheetRole(eventID, roleID int64, actor string) error {
 	return nil
 }
 
-// EditSheetRole changes a role's emoji and cap, recording each change in
+// SheetRoleEdit is an organizer's change to a role: each field that is set
+// changes, and a field left nil stays as it is.
+type SheetRoleEdit struct {
+	Emoji      *string
+	Capacity   *int
+	TakesPlace *bool
+}
+
+// EditSheetRole changes what an edit sets, recording each change in
 // sheet_role_updates. Lowering the cap takes nobody out: the role is over
-// its cap until people leave, as an event over its limit is. Returns which
-// fields changed.
-func (s *Store) EditSheetRole(eventID, roleID int64, emoji string, capacity int, actor string) ([]string, error) {
-	if !isRoleEmojiForm(emoji) {
+// its cap until people leave, as an event over its limit is. Switching a
+// role between taking a place and not moves nobody either: people in it who
+// are not going stop being shown in it while it takes a place, and show
+// again if it stops. Returns which fields changed.
+func (s *Store) EditSheetRole(eventID, roleID int64, edit SheetRoleEdit, actor string) ([]string, error) {
+	if edit.Emoji != nil && !isRoleEmojiForm(*edit.Emoji) {
 		return nil, fmt.Errorf("%w: pick one of the emojis offered", ErrInvalidSheetRole)
 	}
-	if capacity < 0 || capacity > sheetRoleCapLimit {
+	if edit.Capacity != nil && (*edit.Capacity < 0 || *edit.Capacity > sheetRoleCapLimit) {
 		return nil, fmt.Errorf("%w: a role's cap is 0, for none, to %d", ErrInvalidSheetRole, sheetRoleCapLimit)
 	}
 	tx, err := s.db.Begin()
@@ -297,8 +360,9 @@ func (s *Store) EditSheetRole(eventID, roleID int64, emoji string, capacity int,
 	defer tx.Rollback()
 	var oldEmoji string
 	var oldCapacity int
-	err = tx.QueryRow(`SELECT emoji, capacity FROM sheet_roles WHERE id = ? AND event_id = ? AND removed_at = 0`,
-		roleID, eventID).Scan(&oldEmoji, &oldCapacity)
+	var oldTakesPlace bool
+	err = tx.QueryRow(`SELECT emoji, capacity, takes_place FROM sheet_roles WHERE id = ? AND event_id = ? AND removed_at = 0`,
+		roleID, eventID).Scan(&oldEmoji, &oldCapacity, &oldTakesPlace)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -307,52 +371,53 @@ func (s *Store) EditSheetRole(eventID, roleID int64, emoji string, capacity int,
 	}
 	ts := now()
 	var changed []string
-	record := func(field, from, to string) error {
-		_, err := tx.Exec(`INSERT INTO sheet_role_updates (role_id, event_id, field, from_value, to_value, actor, at)
-			VALUES (?,?,?,?,?,?,?)`, roleID, eventID, field, from, to, actor, ts)
-		if err != nil {
+	change := func(field, column, from, to string, value any) error {
+		if from == to {
+			return nil
+		}
+		if _, err := tx.Exec(`INSERT INTO sheet_role_updates (role_id, event_id, field, from_value, to_value, actor, at)
+			VALUES (?,?,?,?,?,?,?)`, roleID, eventID, field, from, to, actor, ts); err != nil {
 			return fmt.Errorf("record sheet role %s change: %w", field, err)
+		}
+		if _, err := tx.Exec(`UPDATE sheet_roles SET `+column+` = ? WHERE id = ?`, value, roleID); err != nil {
+			return fmt.Errorf("edit sheet role %s: %w", field, err)
 		}
 		changed = append(changed, field)
 		return nil
 	}
-	if emoji != oldEmoji {
-		if err := record("emoji", oldEmoji, emoji); err != nil {
+	if edit.Emoji != nil {
+		if err := change("emoji", "emoji", oldEmoji, *edit.Emoji, *edit.Emoji); err != nil {
 			return nil, err
 		}
 	}
-	if capacity != oldCapacity {
-		if err := record("capacity", strconv.Itoa(oldCapacity), strconv.Itoa(capacity)); err != nil {
+	if edit.Capacity != nil {
+		if err := change("capacity", "capacity", strconv.Itoa(oldCapacity), strconv.Itoa(*edit.Capacity), *edit.Capacity); err != nil {
+			return nil, err
+		}
+	}
+	if edit.TakesPlace != nil {
+		if err := change("takes_place", "takes_place", strconv.FormatBool(oldTakesPlace), strconv.FormatBool(*edit.TakesPlace), *edit.TakesPlace); err != nil {
 			return nil, err
 		}
 	}
 	if len(changed) == 0 {
 		return nil, nil
 	}
-	if _, err := tx.Exec(`UPDATE sheet_roles SET emoji = ?, capacity = ? WHERE id = ?`, emoji, capacity, roleID); err != nil {
-		return nil, fmt.Errorf("edit sheet role: %w", err)
-	}
 	return changed, tx.Commit()
 }
 
-// ToggleSheetRole puts someone going into a role, or takes them out of it if
-// they are in it. The cap is checked in the same transaction that writes the
-// row, as a Join's is. Returns whether they are in it now.
-func (s *Store) ToggleSheetRole(eventID, roleID int64, userID string) (bool, error) {
-	tx, err := s.beginSheetRoleChange(eventID, userID)
+// ToggleSheetRole puts someone into a role, or takes them out of it if they
+// are in it. A role that takes a place is for people going; any other role
+// is open to anyone, who stays off the main list. displayName is the name
+// Discord gives them now, kept with the row for someone not on the roster.
+// The cap is checked in the same transaction that writes the row, as a
+// Join's is. Returns whether they are in it now.
+func (s *Store) ToggleSheetRole(eventID, roleID int64, userID, displayName string) (bool, error) {
+	tx, role, err := s.beginSheetRoleChange(eventID, roleID, userID)
 	if err != nil {
 		return false, err
 	}
 	defer tx.Rollback()
-	var capacity int
-	err = tx.QueryRow(`SELECT capacity FROM sheet_roles WHERE id = ? AND event_id = ? AND removed_at = 0`,
-		roleID, eventID).Scan(&capacity)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, ErrNotFound
-	}
-	if err != nil {
-		return false, fmt.Errorf("read sheet role: %w", err)
-	}
 	ts := now()
 	res, err := tx.Exec(`UPDATE sheet_role_signups SET left_at = ?, left_by = ?
 		WHERE role_id = ? AND discord_user_id = ? AND left_at = 0`, ts, ActorUser, roleID, userID)
@@ -362,7 +427,10 @@ func (s *Store) ToggleSheetRole(eventID, roleID int64, userID string) (bool, err
 	if n, _ := res.RowsAffected(); n > 0 {
 		return false, tx.Commit()
 	}
-	if err := joinSheetRoleTx(tx, eventID, roleID, capacity, userID, "", "", ts); err != nil {
+	if err := role.mayJoin(tx, userID); err != nil {
+		return false, err
+	}
+	if err := joinSheetRoleTx(tx, eventID, role.id, role.capacity, role.takesPlace, userID, displayName, "", "", ts); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()
@@ -374,24 +442,16 @@ var ErrAlreadyInSheetRole = errors.New("they are already in that role")
 // ErrNotInSheetRole is taking someone out of a role they are not in.
 var ErrNotInSheetRole = errors.New("they are not in that role")
 
-// PutInSheetRole puts someone going into a role on an organizer's say-so.
+// PutInSheetRole puts someone into a role on an organizer's say-so: someone
+// going, for a role that takes a place, or anyone, for one that does not.
 // The cap holds, as it does for people taking a role themselves: to swap
 // someone into a full role, take someone out first. actor is "web:<id>".
-func (s *Store) PutInSheetRole(eventID, roleID int64, userID, actor string) error {
-	tx, err := s.beginSheetRoleChange(eventID, userID)
+func (s *Store) PutInSheetRole(eventID, roleID int64, userID, displayName, actor string) error {
+	tx, role, err := s.beginSheetRoleChange(eventID, roleID, userID)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	var capacity int
-	err = tx.QueryRow(`SELECT capacity FROM sheet_roles WHERE id = ? AND event_id = ? AND removed_at = 0`,
-		roleID, eventID).Scan(&capacity)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrNotFound
-	}
-	if err != nil {
-		return fmt.Errorf("read sheet role: %w", err)
-	}
 	var in int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM sheet_role_signups
 		WHERE role_id = ? AND discord_user_id = ? AND left_at = 0`, roleID, userID).Scan(&in); err != nil {
@@ -400,7 +460,10 @@ func (s *Store) PutInSheetRole(eventID, roleID int64, userID, actor string) erro
 	if in > 0 {
 		return ErrAlreadyInSheetRole
 	}
-	if err := joinSheetRoleTx(tx, eventID, roleID, capacity, userID, "", actor, now()); err != nil {
+	if err := role.mayJoin(tx, userID); err != nil {
+		return err
+	}
+	if err := joinSheetRoleTx(tx, eventID, roleID, role.capacity, role.takesPlace, userID, displayName, "", actor, now()); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -421,64 +484,90 @@ func (s *Store) TakeOutOfSheetRole(eventID, roleID int64, userID, actor string) 
 	return nil
 }
 
-// beginSheetRoleChange opens a transaction for someone taking or leaving a
-// role, refusing an event whose roles are off or closed and a person not
-// going.
-func (s *Store) beginSheetRoleChange(eventID int64, userID string) (*sql.Tx, error) {
+// sheetRoleInTx is the role a change is about, read inside its transaction.
+type sheetRoleInTx struct {
+	id         int64
+	capacity   int
+	takesPlace bool
+}
+
+// mayJoin refuses someone not going a role that takes a place.
+func (r sheetRoleInTx) mayJoin(tx *sql.Tx, userID string) error {
+	if !r.takesPlace {
+		return nil
+	}
+	var state string
+	err := tx.QueryRow(`SELECT state FROM signups s JOIN sheet_roles r ON r.event_id = s.event_id
+		WHERE r.id = ? AND s.discord_user_id = ?`, r.id, userID).Scan(&state)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && state != StateAttending) {
+		return ErrNotGoing
+	}
+	if err != nil {
+		return fmt.Errorf("read signup: %w", err)
+	}
+	return nil
+}
+
+// beginSheetRoleChange opens a transaction for a change to someone's place
+// in a role, refusing an event whose roles are off or closed and a role no
+// longer on it, and reads the role.
+func (s *Store) beginSheetRoleChange(eventID, roleID int64, userID string) (*sql.Tx, sheetRoleInTx, error) {
+	role := sheetRoleInTx{id: roleID}
 	tx, err := s.db.Begin()
 	if err != nil {
-		return nil, fmt.Errorf("begin: %w", err)
+		return nil, role, fmt.Errorf("begin: %w", err)
 	}
 	var enabled bool
 	var status string
 	err = tx.QueryRow(`SELECT roles_enabled, status FROM events WHERE id = ? AND deleted_at = 0`, eventID).Scan(&enabled, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		tx.Rollback()
-		return nil, ErrNotFound
+		return nil, role, ErrNotFound
 	}
 	if err != nil {
 		tx.Rollback()
-		return nil, fmt.Errorf("read event: %w", err)
+		return nil, role, fmt.Errorf("read event: %w", err)
 	}
 	if !enabled {
 		tx.Rollback()
-		return nil, ErrSheetRolesOff
+		return nil, role, ErrSheetRolesOff
 	}
 	if !sheetRolesTakeAnswers(&Event{RolesEnabled: enabled, Status: status}) {
 		tx.Rollback()
-		return nil, ErrSheetRolesClosed
+		return nil, role, ErrSheetRolesClosed
 	}
-	var state string
-	err = tx.QueryRow(`SELECT state FROM signups WHERE event_id = ? AND discord_user_id = ?`, eventID, userID).Scan(&state)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && state != StateAttending) {
+	err = tx.QueryRow(`SELECT capacity, takes_place FROM sheet_roles WHERE id = ? AND event_id = ? AND removed_at = 0`,
+		roleID, eventID).Scan(&role.capacity, &role.takesPlace)
+	if errors.Is(err, sql.ErrNoRows) {
 		tx.Rollback()
-		return nil, ErrNotGoing
+		return nil, role, ErrNotFound
 	}
 	if err != nil {
 		tx.Rollback()
-		return nil, fmt.Errorf("read signup: %w", err)
+		return nil, role, fmt.Errorf("read sheet role: %w", err)
 	}
-	return tx, nil
+	return tx, role, nil
 }
 
-// joinSheetRoleTx adds someone to a role if it has room. joinedBy is ""
-// when they take it themselves or the spreadsheet copies it, and
-// "web:<id>" when an organizer puts them in.
-func joinSheetRoleTx(tx *sql.Tx, eventID, roleID int64, capacity int, userID, source, joinedBy string, ts int64) error {
+// joinSheetRoleTx adds someone to a role if it has room. For a role that
+// takes a place only people going count toward its cap; for any other,
+// everyone in it does. joinedBy is "" when they take it themselves or the
+// spreadsheet copies it, and "web:<id>" when an organizer puts them in.
+func joinSheetRoleTx(tx *sql.Tx, eventID, roleID int64, capacity int, takesPlace bool, userID, displayName, source, joinedBy string, ts int64) error {
 	if capacity > 0 {
 		var taken int
 		if err := tx.QueryRow(`
 			SELECT COUNT(*) FROM sheet_role_signups m
-			JOIN signups s ON s.event_id = m.event_id AND s.discord_user_id = m.discord_user_id
-			WHERE m.role_id = ? AND m.left_at = 0 AND s.state = ?`, roleID, StateAttending).Scan(&taken); err != nil {
+			LEFT JOIN signups s ON s.event_id = m.event_id AND s.discord_user_id = m.discord_user_id
+			WHERE m.role_id = ? AND m.left_at = 0 AND (? = 0 OR s.state = ?)`, roleID, takesPlace, StateAttending).Scan(&taken); err != nil {
 			return fmt.Errorf("count sheet role: %w", err)
 		}
 		if taken >= capacity {
 			return ErrSheetRoleFull
 		}
 	}
-	if _, err := tx.Exec(`INSERT INTO sheet_role_signups (role_id, event_id, discord_user_id, source, joined_at, joined_by)
-		VALUES (?,?,?,?,?,?)`, roleID, eventID, userID, source, ts, joinedBy); err != nil {
+	if _, err := tx.Exec(`INSERT INTO sheet_role_signups (role_id, event_id, discord_user_id, display_name, source, joined_at, joined_by)
+		VALUES (?,?,?,?,?,?,?)`, roleID, eventID, userID, displayName, source, ts, joinedBy); err != nil {
 		return fmt.Errorf("join sheet role: %w", err)
 	}
 	return nil
@@ -537,7 +626,7 @@ func sheetRoleRow(ev *Event) []any {
 
 // handleSheetRoleButton takes or leaves a role from a press on the card or
 // in the view.
-func (s *Server) handleSheetRoleButton(w http.ResponseWriter, action string, eventID int64, userID string) {
+func (s *Server) handleSheetRoleButton(w http.ResponseWriter, in *Interaction, action string, eventID int64, userID string) {
 	inView := strings.HasPrefix(action, sheetRolePanelPrefix)
 	roleText := strings.TrimPrefix(strings.TrimPrefix(action, sheetRolePanelPrefix), sheetRoleCardPrefix)
 	roleID, err := strconv.ParseInt(roleText, 10, 64)
@@ -545,7 +634,8 @@ func (s *Server) handleSheetRoleButton(w http.ResponseWriter, action string, eve
 		s.replyEphemeral(w, "Unknown role.")
 		return
 	}
-	in, err := s.store.ToggleSheetRole(eventID, roleID, userID)
+	_, displayName := in.actor()
+	nowIn, err := s.store.ToggleSheetRole(eventID, roleID, userID, displayName)
 	note := ""
 	if err != nil {
 		if !errors.Is(err, ErrSheetRoleFull) && !errors.Is(err, ErrNotFound) && !errors.Is(err, ErrSheetRolesOff) &&
@@ -559,13 +649,18 @@ func (s *Server) handleSheetRoleButton(w http.ResponseWriter, action string, eve
 	ev, readErr := s.store.GetEvent(eventID)
 	if note == "" {
 		name := "the role"
+		apart := false
 		if readErr == nil {
 			if r, ok := sheetRoleOf(ev.Roles, roleID); ok {
 				name = fmt.Sprintf("%s (%s)", r.Name, r.Count())
+				apart = !r.TakesPlace
 			}
 		}
-		if in {
+		if nowIn {
 			note = "You're down for " + name + "."
+			if apart {
+				note += " It's separate from the event's places, so it doesn't put you on the Going list."
+			}
 		} else {
 			note = "Took you off " + name + "."
 		}
@@ -584,12 +679,15 @@ func (s *Server) handleSheetRoleButton(w http.ResponseWriter, action string, eve
 // sheetRolePage is a role as the event pages show it.
 type sheetRolePage struct {
 	SheetRole
-	People []Signup
-	// Others are the people going who are not in it, whom an organizer
-	// may put in it, in signup order.
+	// Others are the people an organizer may put in it, in signup order:
+	// those going who are not in it, and for a role apart from the main list
+	// those waiting and maybe too.
 	Others []Signup
-	// Mine is whether the viewer is in it.
-	Mine bool
+	// Mine is whether the viewer is in it, and ViewerMayTake whether they may
+	// take it: anyone for a role apart from the main list, only someone going
+	// for a role that takes a place.
+	Mine          bool
+	ViewerMayTake bool
 }
 
 // sheetRolesPage is the event pages' roles section.
@@ -605,31 +703,29 @@ type sheetRolesPage struct {
 }
 
 // sheetRolesPageOf builds the roles section; nil when roles are off.
-func sheetRolesPageOf(ev *Event, going []Signup, viewerID string) *sheetRolesPage {
+func sheetRolesPageOf(ev *Event, going, waitingOrMaybe []Signup, viewerID string) *sheetRolesPage {
 	if !ev.RolesEnabled {
 		return nil
 	}
-	page := &sheetRolesPage{Roles: sheetRolePages(ev.Roles, going, viewerID), TakesAnswers: sheetRolesTakeAnswers(ev), ViewerID: viewerID}
+	page := &sheetRolesPage{TakesAnswers: sheetRolesTakeAnswers(ev), ViewerID: viewerID}
 	for _, sg := range going {
 		if sg.DiscordUserID == viewerID {
 			page.ViewerGoing = true
 		}
 	}
+	page.Roles = sheetRolePages(ev.Roles, going, waitingOrMaybe, viewerID, page.ViewerGoing)
 	return page
 }
 
-func sheetRolePages(roles []SheetRole, going []Signup, viewerID string) []sheetRolePage {
-	people := map[string]Signup{}
-	for _, sg := range going {
-		people[sg.DiscordUserID] = sg
-	}
+func sheetRolePages(roles []SheetRole, going, waitingOrMaybe []Signup, viewerID string, viewerGoing bool) []sheetRolePage {
 	out := make([]sheetRolePage, 0, len(roles))
 	for _, r := range roles {
-		page := sheetRolePage{SheetRole: r, Mine: r.Has(viewerID)}
-		for _, id := range r.Members {
-			page.People = append(page.People, people[id])
+		page := sheetRolePage{SheetRole: r, Mine: r.Has(viewerID), ViewerMayTake: viewerGoing || !r.TakesPlace}
+		candidates := going
+		if !r.TakesPlace {
+			candidates = append(append([]Signup{}, going...), waitingOrMaybe...)
 		}
-		for _, sg := range going {
+		for _, sg := range candidates {
 			if !r.Has(sg.DiscordUserID) {
 				page.Others = append(page.Others, sg)
 			}
@@ -661,7 +757,10 @@ func (s *Server) handleWebSheetRoleAdd(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	role, err := s.store.AddSheetRole(ev.ID, r.FormValue("name"), capacity, "web:"+session.DiscordUserID)
+	// A form that does not say takes a place, as every role did before roles
+	// could stand apart.
+	takesPlace := r.FormValue("takes_place") != "false"
+	role, err := s.store.AddSheetRole(ev.ID, r.FormValue("name"), capacity, takesPlace, "web:"+session.DiscordUserID)
 	if err != nil {
 		if !errors.Is(err, ErrInvalidSheetRole) {
 			log.Printf("[discord-signup] add role to %d: %v", ev.ID, err)
@@ -724,24 +823,46 @@ func (s *Server) handleWebEditSheetRole(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "role_id must be an integer", http.StatusBadRequest)
 		return
 	}
-	capacity := 0
-	if text := strings.TrimSpace(r.FormValue("capacity")); text != "" {
-		if capacity, err = strconv.Atoi(text); err != nil {
-			s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: the cap must be a whole number, or empty for none.")
-			return
-		}
-	}
-	emoji, err := s.checkRoleEmoji(ev.GuildID, r.FormValue("emoji"))
-	if err != nil {
-		if !errors.Is(err, ErrInvalidSheetRole) {
-			log.Printf("[discord-signup] check role emoji for %d: %v", ev.ID, err)
-			s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: could not check that emoji against the server's: "+err.Error())
-			return
-		}
-		s.redirectWithNotice(w, r, ev.ID, sheetRoleRefusal(err))
+	// Only the fields the request carries change, as on the event's own
+	// form: the emoji picker sends the emoji, the count sends the cap, and
+	// the switch sends whether it takes a place.
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "unreadable form: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	changed, err := s.store.EditSheetRole(ev.ID, roleID, emoji, capacity, "web:"+session.DiscordUserID)
+	var edit SheetRoleEdit
+	if _, sent := r.PostForm["capacity"]; sent {
+		capacity := 0
+		if text := strings.TrimSpace(r.PostFormValue("capacity")); text != "" {
+			if capacity, err = strconv.Atoi(text); err != nil {
+				s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: the cap must be a whole number, or empty for none.")
+				return
+			}
+		}
+		edit.Capacity = &capacity
+	}
+	if _, sent := r.PostForm["emoji"]; sent {
+		emoji, err := s.checkRoleEmoji(ev.GuildID, r.PostFormValue("emoji"))
+		if err != nil {
+			if !errors.Is(err, ErrInvalidSheetRole) {
+				log.Printf("[discord-signup] check role emoji for %d: %v", ev.ID, err)
+				s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: could not check that emoji against the server's: "+err.Error())
+				return
+			}
+			s.redirectWithNotice(w, r, ev.ID, sheetRoleRefusal(err))
+			return
+		}
+		edit.Emoji = &emoji
+	}
+	if _, sent := r.PostForm["takes_place"]; sent {
+		takesPlace, err := strconv.ParseBool(r.PostFormValue("takes_place"))
+		if err != nil {
+			http.Error(w, "takes_place must be true or false", http.StatusBadRequest)
+			return
+		}
+		edit.TakesPlace = &takesPlace
+	}
+	changed, err := s.store.EditSheetRole(ev.ID, roleID, edit, "web:"+session.DiscordUserID)
 	if err != nil {
 		if !errors.Is(err, ErrInvalidSheetRole) && !errors.Is(err, ErrNotFound) {
 			log.Printf("[discord-signup] edit role %d of %d: %v", roleID, ev.ID, err)
@@ -755,6 +876,37 @@ func (s *Server) handleWebEditSheetRole(w http.ResponseWriter, r *http.Request) 
 	}
 	s.inBackground(func() { s.syncAfterChange(ev.ID, nil) })
 	s.redirectWithNotice(w, r, ev.ID, "Saved the role.")
+}
+
+// nameForRole is the name to keep with someone's row in a role that does
+// not take a place, whose people may not be on the roster: their name on the
+// roster if they are on it, else the name Discord gives them in the server
+// now. A role that takes a place needs none — its people are on the roster.
+func (s *Server) nameForRole(ev *Event, roleID int64, userID string) (string, error) {
+	role, ok := sheetRoleOf(ev.Roles, roleID)
+	if !ok || role.TakesPlace {
+		return "", nil
+	}
+	roster, err := s.store.Roster(ev.ID, false)
+	if err != nil {
+		return "", fmt.Errorf("could not read the roster: %w", err)
+	}
+	for _, sg := range roster {
+		if sg.DiscordUserID == userID && sg.DisplayName != "" {
+			return sg.DisplayName, nil
+		}
+	}
+	if s.discord == nil {
+		return "", errors.New("no Discord client, so their name in the server cannot be read")
+	}
+	member, err := s.discord.GuildMember(ev.GuildID, userID)
+	if errors.Is(err, ErrUnknownMember) {
+		return "", errors.New("Discord says they are not in this event's server")
+	}
+	if err != nil {
+		return "", fmt.Errorf("could not read their name in the server from Discord: %w", err)
+	}
+	return member.DisplayName, nil
 }
 
 // handleWebPutInSheetRole puts someone going into a role, for an organizer.
@@ -794,7 +946,13 @@ func (s *Server) organizerSheetRoleChange(w http.ResponseWriter, r *http.Request
 	}
 	actor := "web:" + session.DiscordUserID
 	if putIn {
-		err = s.store.PutInSheetRole(ev.ID, roleID, userID, actor)
+		name, nameErr := s.nameForRole(ev, roleID, userID)
+		if nameErr != nil {
+			log.Printf("[discord-signup] put in role event=%d user=%s: %v", ev.ID, userID, nameErr)
+			s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: "+nameErr.Error())
+			return
+		}
+		err = s.store.PutInSheetRole(ev.ID, roleID, userID, name, actor)
 	} else {
 		err = s.store.TakeOutOfSheetRole(ev.ID, roleID, userID, actor)
 	}
@@ -834,7 +992,13 @@ func (s *Server) handleWebMySheetRole(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "role_id must be an integer", http.StatusBadRequest)
 		return
 	}
-	in, err := s.store.ToggleSheetRole(ev.ID, roleID, session.DiscordUserID)
+	name, nameErr := s.nameForRole(ev, roleID, session.DiscordUserID)
+	if nameErr != nil {
+		log.Printf("[discord-signup] web role change event=%d user=%s: %v", ev.ID, session.DiscordUserID, nameErr)
+		s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: "+nameErr.Error())
+		return
+	}
+	in, err := s.store.ToggleSheetRole(ev.ID, roleID, session.DiscordUserID, name)
 	if err != nil {
 		if !errors.Is(err, ErrSheetRoleFull) && !errors.Is(err, ErrNotFound) && !errors.Is(err, ErrSheetRolesOff) &&
 			!errors.Is(err, ErrSheetRolesClosed) && !errors.Is(err, ErrNotGoing) {
@@ -929,8 +1093,14 @@ func sheetRoleLogEntries(history []SheetRoleHistoryRow, names eventLogNames) []e
 		}
 		if h.Field != "" {
 			what := "changed " + role(h.RoleName) + "'s emoji from " + roleEmojiHTML(h.FromValue) + " to " + roleEmojiHTML(h.ToValue)
-			if h.Field == "capacity" {
+			switch h.Field {
+			case "capacity":
 				what = "changed " + role(h.RoleName) + "'s cap from " + sheetRoleCapWords(h.FromValue) + " to " + sheetRoleCapWords(h.ToValue)
+			case "takes_place":
+				what = "made " + role(h.RoleName) + " separate from Going"
+				if h.ToValue == "true" {
+					what = "made " + role(h.RoleName) + " count toward Going"
+				}
 			}
 			out = append(out, eventLogEntry{At: h.At, order: 5_000_000 + i, Subject: muted("the roles"),
 				What: what, By: names.actor(h.By)})

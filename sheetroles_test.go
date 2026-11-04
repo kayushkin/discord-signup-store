@@ -17,28 +17,28 @@ func TestARoleTakesPeopleGoingUpToItsCap(t *testing.T) {
 	store := testStore(t)
 	ev := potluckEvent(t, store, "ann", "bo", "cy")
 	switchRolesOn(t, store, ev.ID)
-	setup, err := store.AddSheetRole(ev.ID, "  Setup   (6:00) ", 2, "test")
+	setup, err := store.AddSheetRole(ev.ID, "  Setup   (6:00) ", 2, true, "test")
 	if err != nil || setup.Name != "Setup (6:00)" {
 		t.Fatalf("add = %+v, %v", setup, err)
 	}
-	if _, err := store.AddSheetRole(ev.ID, "setup (6:00)", 0, "test"); !errors.Is(err, ErrInvalidSheetRole) {
+	if _, err := store.AddSheetRole(ev.ID, "setup (6:00)", 0, true, "test"); !errors.Is(err, ErrInvalidSheetRole) {
 		t.Fatalf("a second role of the same name: err = %v", err)
 	}
 	for _, who := range []string{"ann", "bo"} {
-		if in, err := store.ToggleSheetRole(ev.ID, setup.ID, who); err != nil || !in {
+		if in, err := store.ToggleSheetRole(ev.ID, setup.ID, who, ""); err != nil || !in {
 			t.Fatalf("%s take = %v, %v", who, in, err)
 		}
 	}
-	if _, err := store.ToggleSheetRole(ev.ID, setup.ID, "cy"); !errors.Is(err, ErrSheetRoleFull) {
+	if _, err := store.ToggleSheetRole(ev.ID, setup.ID, "cy", ""); !errors.Is(err, ErrSheetRoleFull) {
 		t.Fatalf("a third on a cap of 2: err = %v", err)
 	}
-	if _, err := store.ToggleSheetRole(ev.ID, setup.ID, "stranger"); !errors.Is(err, ErrNotGoing) {
+	if _, err := store.ToggleSheetRole(ev.ID, setup.ID, "stranger", ""); !errors.Is(err, ErrNotGoing) {
 		t.Fatalf("someone not going: err = %v", err)
 	}
-	if in, err := store.ToggleSheetRole(ev.ID, setup.ID, "ann"); err != nil || in {
+	if in, err := store.ToggleSheetRole(ev.ID, setup.ID, "ann", ""); err != nil || in {
 		t.Fatalf("ann leaving = %v, %v", in, err)
 	}
-	if in, _ := store.ToggleSheetRole(ev.ID, setup.ID, "cy"); !in {
+	if in, _ := store.ToggleSheetRole(ev.ID, setup.ID, "cy", ""); !in {
 		t.Fatal("cy could not take the place ann left")
 	}
 
@@ -98,8 +98,8 @@ func TestASpreadsheetColumnFillsTheRoleOfTheSameName(t *testing.T) {
 	copyAll()
 	lemonade := mustSheet(t, store, ev.ID).ItemsOf("ann")[0]
 
-	setup, _ := store.AddSheetRole(ev.ID, "Setup", 12, "test")
-	teardown, _ := store.AddSheetRole(ev.ID, "Teardown (next day)", 12, "test")
+	setup, _ := store.AddSheetRole(ev.ID, "Setup", 12, true, "test")
+	teardown, _ := store.AddSheetRole(ev.ID, "Teardown (next day)", 12, true, "test")
 	copyAll()
 	got := mustSheet(t, store, ev.ID)
 	roles := mustEvent(t, store, ev.ID).Roles
@@ -113,7 +113,7 @@ func TestASpreadsheetColumnFillsTheRoleOfTheSameName(t *testing.T) {
 		t.Errorf("adding roles copied Ann's item again: %+v", items)
 	}
 
-	if in, _ := store.ToggleSheetRole(ev.ID, setup.ID, "ann"); in {
+	if in, _ := store.ToggleSheetRole(ev.ID, setup.ID, "ann", ""); in {
 		t.Fatal("ann's toggle put her in rather than taking her out")
 	}
 	copyAll()
@@ -172,7 +172,7 @@ func TestAnOrganizerPutsPeopleInRolesAndTakesThemOut(t *testing.T) {
 	on := true
 	store.UpdateEvent(ev.ID, EventPatch{RolesEnabled: &on})
 	member, _ := store.CreateWebSession("member", "Member", "", map[string]uint64{"g1": 0})
-	host, err := store.AddSheetRole(ev.ID, "Host", 1, "test")
+	host, err := store.AddSheetRole(ev.ID, "Host", 1, true, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,10 +193,10 @@ func TestAnOrganizerPutsPeopleInRolesAndTakesThemOut(t *testing.T) {
 	if strings.Contains(page, "Put someone in Host") {
 		t.Error("a full role still offers to put someone in")
 	}
-	if err := store.PutInSheetRole(ev.ID, host.ID, "member", "web:manager"); !errors.Is(err, ErrSheetRoleFull) {
+	if err := store.PutInSheetRole(ev.ID, host.ID, "member", "", "web:manager"); !errors.Is(err, ErrSheetRoleFull) {
 		t.Fatalf("a second person in a role of 1: err = %v", err)
 	}
-	if err := store.PutInSheetRole(ev.ID, host.ID, "stranger", "web:manager"); !errors.Is(err, ErrNotGoing) {
+	if err := store.PutInSheetRole(ev.ID, host.ID, "stranger", "", "web:manager"); !errors.Is(err, ErrNotGoing) {
 		t.Fatalf("someone not going: err = %v", err)
 	}
 
@@ -238,7 +238,7 @@ func TestARoleButtonOnTheCardTogglesThroughTheSignedHandler(t *testing.T) {
 	srv, priv, store := testServer(t)
 	ev := potluckEvent(t, store, "ann")
 	switchRolesOn(t, store, ev.ID)
-	role, _ := store.AddSheetRole(ev.ID, "Setup", 0, "test")
+	role, _ := store.AddSheetRole(ev.ID, "Setup", 0, true, "test")
 	press := func(customID string) string {
 		rec := httptest.NewRecorder()
 		srv.HandleInteraction(rec, signedRequest(t, priv, "1700000000",
@@ -272,11 +272,11 @@ func TestRolesWorkWithoutAPotluckSheet(t *testing.T) {
 	ev := testEvent(t, store, 0)
 	switchRolesOn(t, store, ev.ID)
 	store.Join(ev.ID, "ann", "ann", JoinedViaButton)
-	setup, err := store.AddSheetRole(ev.ID, "Setup", 0, "test")
+	setup, err := store.AddSheetRole(ev.ID, "Setup", 0, true, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if in, err := store.ToggleSheetRole(ev.ID, setup.ID, "ann"); err != nil || !in {
+	if in, err := store.ToggleSheetRole(ev.ID, setup.ID, "ann", ""); err != nil || !in {
 		t.Fatalf("take a role with no sheet = %v, %v", in, err)
 	}
 	ev = mustEvent(t, store, ev.ID)
@@ -299,14 +299,14 @@ func TestRolesWorkWithoutAPotluckSheet(t *testing.T) {
 
 	off := false
 	store.UpdateEvent(ev.ID, EventPatch{RolesEnabled: &off})
-	if _, err := store.ToggleSheetRole(ev.ID, setup.ID, "ann"); !errors.Is(err, ErrSheetRolesOff) {
+	if _, err := store.ToggleSheetRole(ev.ID, setup.ID, "ann", ""); !errors.Is(err, ErrSheetRolesOff) {
 		t.Errorf("a press with roles off: err = %v", err)
 	}
 	if card := renderSignupMessage(mustEvent(t, store, ev.ID), nil); strings.Contains(fmt.Sprint(card), "Setup") {
 		t.Errorf("roles off, the card still shows them: %v", card)
 	}
 	potluckOnly := potluckEvent(t, store, "ann")
-	store.AddSheetRole(potluckOnly.ID, "Teardown", 0, "test")
+	store.AddSheetRole(potluckOnly.ID, "Teardown", 0, true, "test")
 	if roles := mustEvent(t, store, potluckOnly.ID).Roles; roles != nil {
 		t.Errorf("a potluck with roles off reads roles %+v", roles)
 	}
@@ -321,10 +321,10 @@ func TestRolesWorkWithoutAPotluckSheet(t *testing.T) {
 func TestAPotluckThatHadRolesKeepsThemOn(t *testing.T) {
 	store := testStore(t)
 	withRoles := potluckEvent(t, store)
-	store.AddSheetRole(withRoles.ID, "Setup", 0, "test")
+	store.AddSheetRole(withRoles.ID, "Setup", 0, true, "test")
 	withoutRoles := potluckEvent(t, store)
 	sheetOff := testEvent(t, store, 0)
-	store.AddSheetRole(sheetOff.ID, "Setup", 0, "test")
+	store.AddSheetRole(sheetOff.ID, "Setup", 0, true, "test")
 	if _, err := store.db.Exec(columnBackfills["events.roles_enabled"]); err != nil {
 		t.Fatal(err)
 	}
@@ -347,13 +347,13 @@ func TestAnOrganizerChangesARolesEmojiAndCap(t *testing.T) {
 	ev := publishedEvent(t, store, 0, "alice", "member")
 	on := true
 	store.UpdateEvent(ev.ID, EventPatch{RolesEnabled: &on})
-	first, _ := store.AddSheetRole(ev.ID, "Players", 12, "test")
-	second, _ := store.AddSheetRole(ev.ID, "Host", 2, "test")
+	first, _ := store.AddSheetRole(ev.ID, "Players", 12, true, "test")
+	second, _ := store.AddSheetRole(ev.ID, "Host", 2, true, "test")
 	if first.Emoji != sheetRoleEmojiDefaults()[0] || second.Emoji != sheetRoleEmojiDefaults()[1] {
 		t.Fatalf("defaults = %q, %q", first.Emoji, second.Emoji)
 	}
-	store.ToggleSheetRole(ev.ID, second.ID, "alice")
-	store.ToggleSheetRole(ev.ID, second.ID, "member")
+	store.ToggleSheetRole(ev.ID, second.ID, "alice", "")
+	store.ToggleSheetRole(ev.ID, second.ID, "member", "")
 
 	page := getPage(t, mux, token, eventPath(ev)).Body.String()
 	if !strings.Contains(page, "/roles/edit") || !strings.Contains(page, `value="🎤"`) {
@@ -365,19 +365,19 @@ func TestAnOrganizerChangesARolesEmojiAndCap(t *testing.T) {
 	if host.Emoji != "🎤" || host.Capacity != 1 || len(host.Members) != 2 {
 		t.Fatalf("after the edit host = %+v; want 🎤, cap 1, both still in it", host)
 	}
-	if _, err := store.EditSheetRole(ev.ID, second.ID, "not-an-emoji", 1, "web:manager"); !errors.Is(err, ErrInvalidSheetRole) {
+	if _, err := store.EditSheetRole(ev.ID, second.ID, sheetRoleEditOf("not-an-emoji", 1), "web:manager"); !errors.Is(err, ErrInvalidSheetRole) {
 		t.Fatalf("an emoji not offered: err = %v", err)
 	}
 	before := mustEvent(t, store, ev.ID)
 	beforeSignature := eventPublishSignature(before, nil)
-	if _, err := store.EditSheetRole(ev.ID, second.ID, "👑", 1, "web:manager"); err != nil {
+	if _, err := store.EditSheetRole(ev.ID, second.ID, sheetRoleEditOf("👑", 1), "web:manager"); err != nil {
 		t.Fatal(err)
 	}
 	if eventPublishSignature(mustEvent(t, store, ev.ID), nil) == beforeSignature {
 		t.Error("a new emoji leaves the publish signature as it was, so Discord would not be redrawn")
 	}
-	store.EditSheetRole(ev.ID, second.ID, "🎤", 1, "web:manager")
-	if changed, err := store.EditSheetRole(ev.ID, second.ID, "🎤", 1, "web:manager"); err != nil || len(changed) != 0 {
+	store.EditSheetRole(ev.ID, second.ID, sheetRoleEditOf("🎤", 1), "web:manager")
+	if changed, err := store.EditSheetRole(ev.ID, second.ID, sheetRoleEditOf("🎤", 1), "web:manager"); err != nil || len(changed) != 0 {
 		t.Fatalf("saving the same values = %v, %v; want nothing changed", changed, err)
 	}
 	card := renderSignupMessage(mustEvent(t, store, ev.ID), nil)
@@ -398,10 +398,10 @@ func TestRolesFromBeforeEmojisTakeTheDefaultsInOrder(t *testing.T) {
 	store := testStore(t)
 	ev := potluckEvent(t, store, "ann")
 	switchRolesOn(t, store, ev.ID)
-	a, _ := store.AddSheetRole(ev.ID, "A", 0, "test")
-	b, _ := store.AddSheetRole(ev.ID, "B", 0, "test")
+	a, _ := store.AddSheetRole(ev.ID, "A", 0, true, "test")
+	b, _ := store.AddSheetRole(ev.ID, "B", 0, true, "test")
 	other := potluckEvent(t, store, "bo")
-	c, _ := store.AddSheetRole(other.ID, "C", 0, "test")
+	c, _ := store.AddSheetRole(other.ID, "C", 0, true, "test")
 	if _, err := store.db.Exec(`UPDATE sheet_roles SET emoji = ''`); err != nil {
 		t.Fatal(err)
 	}
@@ -416,4 +416,9 @@ func TestRolesFromBeforeEmojisTakeTheDefaultsInOrder(t *testing.T) {
 			t.Errorf("role %d emoji = %q, want %q", id, got, emoji)
 		}
 	}
+}
+
+// sheetRoleEditOf is an edit setting both the emoji and the cap.
+func sheetRoleEditOf(emoji string, capacity int) SheetRoleEdit {
+	return SheetRoleEdit{Emoji: &emoji, Capacity: &capacity}
 }

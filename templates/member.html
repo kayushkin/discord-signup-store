@@ -31,7 +31,7 @@
       {{else if and .EventFull $ev.WaitlistDisabled}}<button disabled>Full</button>
       {{else if .EventFull}}<button>Join waitlist</button>
       {{else}}<button>Join</button>{{end}}
-      <span class="muted">{{$ev.AttendingCount}}{{if $ev.Capacity}} of {{$ev.Capacity}}{{end}} going{{if .FreePlaces}} · {{.FreePlaces}} free{{end}}{{if $ev.WaitlistCount}} · {{$ev.WaitlistCount}} waiting{{end}}</span>
+      <span class="muted">{{$ev.AttendingCount}}{{if $ev.Capacity}} of {{$ev.Capacity}}{{end}} going{{if .FreePlaces}} · {{.FreePlaces}} free{{end}}{{if $ev.WaitlistCount}} · {{$ev.WaitlistCount}} waiting{{end}}{{range $ev.SeparateRoles}} · {{roleEmoji .Emoji}} {{.Name}} {{.Count}}{{end}}</span>
     </form>
     {{end}}
     {{if and $ev.RecurrenceRule (or .IAmRegular (eq $ev.Status "open"))}}
@@ -167,8 +167,9 @@
     <div class="sheet-role">
       <div class="sheet-role-head">
         <strong>{{roleEmoji .Emoji}} {{.Name}}</strong> <span class="badge">{{.Count}}</span>
+        {{if not .TakesPlace}}<span class="pill role-apart" title="Taking it does not put you on the Going list or take one of the event's places.">separate from Going</span>{{end}}
         {{if .Mine}}<span class="role-mine">✓ You're in</span>
-        {{else if and $.Roles.TakesAnswers $.Roles.ViewerGoing}}
+        {{else if and $.Roles.TakesAnswers .ViewerMayTake}}
         <form method="post" action="/events/{{$ev.ID}}/roles/toggle">
           <input type="hidden" name="role_id" value="{{.ID}}">
           {{if .Full}}<button class="btn-sm" disabled>Full</button>{{else}}<button class="btn-sm">Count me in</button>{{end}}
@@ -184,12 +185,13 @@
       {{else}}<p class="empty">Nobody yet.</p>{{end}}
     </div>
     {{end}}
-    {{if and .TakesAnswers (not .ViewerGoing)}}<p class="hint">Join to sign up for a role.</p>{{end}}
+    {{if and .TakesAnswers (not .ViewerGoing)}}<p class="hint">Join the event to take a role that counts toward Going.</p>{{end}}
   </section>
   {{end}}{{end}}
 
   <section class="card">
-    <div class="card-head"><h3>Going</h3><span class="badge">{{$ev.AttendingCount}}{{if $ev.Capacity}} / {{$ev.Capacity}}{{end}}</span></div>
+    <div class="card-head"><h3>Going</h3><span class="badge">{{$ev.AttendingCount}}{{if $ev.Capacity}} / {{$ev.Capacity}}{{end}}</span>
+      {{range $ev.SeparateRoles}}<span class="badge badge-apart" title="{{.Name}}: separate from Going">{{roleEmoji .Emoji}} {{.Name}} {{.Count}}</span>{{end}}</div>
     {{if not .Going}}<p class="empty">Nobody yet.</p>{{end}}
     {{template "sortswitch"}}
     <ul class="name-cloud" data-sortable>

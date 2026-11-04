@@ -691,6 +691,16 @@ ul.role-people{position:relative}
 .name-cloud li.me .role-take-out button{color:var(--paper-light);opacity:.75}
 .name-cloud li.me .role-take-out button:hover,.name-cloud li.me .role-take-out button:focus-visible{opacity:1;color:var(--paper-light)}
 .role-mine{font-size:13px;font-weight:700;color:var(--ok)}
+/* Whether a role counts toward Going: a quiet pill on the members' page, a
+   button that flips it on the organizer's. Separate roles are blue. */
+.badge.badge-apart{margin-left:6px;background:var(--blue)}
+.pill.role-apart,button.pill.role-kind-button{text-transform:none;letter-spacing:normal;font-size:12px;font-weight:600}
+.pill.role-apart{background:color-mix(in srgb,var(--blue) 14%,var(--paper-light));color:var(--blue);border-color:var(--blue)}
+.role-kind{display:inline-flex;margin:0}
+button.pill.role-kind-button{font-size:12px;padding:2px 8px;border:1.5px dashed currentColor;background:var(--paper-light);color:var(--dim);
+  box-shadow:none;transform:none;cursor:pointer}
+button.pill.role-kind-button.role-apart{color:var(--blue);background:color-mix(in srgb,var(--blue) 10%,var(--paper-light))}
+button.pill.role-kind-button:hover{border-style:solid}
 /* An organizer changes a role's emoji by pressing it, and its cap by
    pressing its count: each opens a small box beside it. */
 /* The boxes hang from the role's row, not the thing pressed, so they stay

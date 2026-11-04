@@ -944,6 +944,10 @@ func signupBlock(ev *Event, roster []Signup, boardChannelID string, budget int) 
 	} else if ev.AttendingCount > 0 {
 		fmt.Fprintf(&b, " %s so far.", pluralise(ev.AttendingCount, "person"))
 	}
+	// Roles apart from the main list have places of their own.
+	if counts := separateRoleCounts(ev, true); counts != "" {
+		b.WriteString(" Plus" + strings.TrimPrefix(counts, " ·") + ".")
+	}
 
 	attending, waiting := splitRoster(roster)
 	attending = hostFirst(attending, ev.CreatedBy)

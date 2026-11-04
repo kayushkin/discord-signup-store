@@ -184,6 +184,7 @@
     <div class="card-head">
       <h3>Going</h3>
       <span class="badge">{{$ev.AttendingCount}}{{if $ev.Capacity}} / {{$ev.Capacity}}{{end}}</span>
+      {{range $ev.SeparateRoles}}<span class="badge badge-apart" title="{{.Name}}: separate from Going">{{roleEmoji .Emoji}} {{.Name}} {{.Count}}</span>{{end}}
       {{if $ev.HeldCount}}<span class="pill held">{{$ev.HeldCount}} held</span>{{end}}
       {{if and $ev.Capacity (gt $ev.AttendingCount $ev.Capacity)}}<span class="pill closed">over the limit</span>{{end}}
     </div>
@@ -517,8 +518,13 @@
               data-saved="{{if .Capacity}}{{.Capacity}}{{end}}" aria-label="Most people {{.Name}} takes; empty for no cap"><svg class="cap-edit-mark" aria-hidden="true" viewBox="0 0 16 16" width="10" height="10"><path d="M10.5 2.5l3 3L6 13H3v-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
           </label>
         </form>
+        <form method="post" action="/events/{{$ev.ID}}/roles/edit" data-async class="role-kind"
+          data-confirm="{{if .TakesPlace}}Make {{.Name}} separate from Going? Its people will not take event places, and anyone can take it without joining.{{else}}Make {{.Name}} count toward Going? Only people going can take it, and only they will show in it.{{end}}">
+          <input type="hidden" name="role_id" value="{{.ID}}"><input type="hidden" name="takes_place" value="{{not .TakesPlace}}">
+          <button class="pill role-kind-button{{if not .TakesPlace}} role-apart{{end}}" title="Press to change">{{if .TakesPlace}}counts toward Going{{else}}separate from Going{{end}}</button>
+        </form>
         {{if .Mine}}<span class="role-mine">✓ You're in</span>
-        {{else if and $.Roles.TakesAnswers $.Roles.ViewerGoing}}
+        {{else if and $.Roles.TakesAnswers .ViewerMayTake}}
         <form method="post" action="/events/{{$ev.ID}}/roles/toggle" data-async>
           <input type="hidden" name="role_id" value="{{.ID}}">
           {{if .Full}}<button class="btn-sm" disabled>Full</button>{{else}}<button class="btn-sm">Count me in</button>{{end}}
@@ -628,6 +634,10 @@
       <form method="post" action="/events/{{$ev.ID}}/roles" data-async class="potluck-add">
         <input name="name" required maxlength="40" placeholder="e.g. Setup (6:00)" aria-label="Role name">
         <input name="capacity" type="number" min="0" max="999" placeholder="cap" aria-label="Cap, empty for none" title="Cap, empty for none" class="narrow-number">
+        <select name="takes_place" aria-label="Whether it counts toward Going">
+          <option value="true">Counts toward Going</option>
+          <option value="false">Separate from Going</option>
+        </select>
         <button>Add</button>
       </form>
     </details>

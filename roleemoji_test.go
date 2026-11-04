@@ -25,7 +25,7 @@ func TestARoleTakesOneOfTheServersOwnEmojis(t *testing.T) {
 	ev := publishedEvent(t, store, 0, "alice")
 	on := true
 	store.UpdateEvent(ev.ID, EventPatch{RolesEnabled: &on})
-	role, _ := store.AddSheetRole(ev.ID, "Host", 1, "test")
+	role, _ := store.AddSheetRole(ev.ID, "Host", 1, true, "test")
 
 	page := getPage(t, mux, token, eventPath(ev)).Body.String()
 	server := strings.Index(page, `value="&lt;:kermit_blush:111&gt;"`)
@@ -82,7 +82,7 @@ func TestThePickerSaysWhenTheServersEmojisCannotBeRead(t *testing.T) {
 	ev := publishedEvent(t, store, 0, "alice")
 	on := true
 	store.UpdateEvent(ev.ID, EventPatch{RolesEnabled: &on})
-	store.AddSheetRole(ev.ID, "Host", 1, "test")
+	store.AddSheetRole(ev.ID, "Host", 1, true, "test")
 	page := getPage(t, mux, token, eventPath(ev)).Body.String()
 	if !strings.Contains(page, "Could not read the server's emojis: list the emojis of guild g1: discord api 403") || !strings.Contains(page, `value="😀"`) {
 		t.Error("the picker should say the server's emojis failed and still offer the standard ones")

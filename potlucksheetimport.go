@@ -325,7 +325,7 @@ func (s *Store) copySheetRow(eventID int64, userID string, row sheetRow, roles [
 		}
 		switch {
 		case ticked && copied+own == 0:
-			err := joinSheetRoleTx(tx, eventID, role.ID, role.Capacity, userID, potluckSourceSheet, "", ts)
+			err := joinSheetRoleTx(tx, eventID, role.ID, role.Capacity, role.TakesPlace, userID, "", potluckSourceSheet, "", ts)
 			if errors.Is(err, ErrSheetRoleFull) {
 				log.Printf("[discord-signup] sheet copy of %s for event %d: %s is full", userID, eventID, role.Name)
 			} else if err != nil {

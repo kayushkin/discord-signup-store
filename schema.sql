@@ -768,7 +768,8 @@ CREATE TABLE IF NOT EXISTS sheet_roles (
     created_by  TEXT NOT NULL DEFAULT '',
     removed_at  INTEGER NOT NULL DEFAULT 0,      -- 0 = on the sheet
     removed_by  TEXT NOT NULL DEFAULT '',
-    emoji       TEXT NOT NULL DEFAULT ''         -- one of sheetRoleEmojiChoices
+    emoji       TEXT NOT NULL DEFAULT '',        -- a standard emoji or <:name:id>; see roleemoji.go
+    takes_place INTEGER NOT NULL DEFAULT 1       -- 1: for people going, counts toward the event; 0: apart, anyone
 );
 CREATE INDEX IF NOT EXISTS idx_sheet_roles_event ON sheet_roles(event_id, removed_at);
 
@@ -783,7 +784,8 @@ CREATE TABLE IF NOT EXISTS sheet_role_signups (
     joined_at       INTEGER NOT NULL,
     left_at         INTEGER NOT NULL DEFAULT 0,  -- 0 = in the role
     left_by         TEXT NOT NULL DEFAULT '',    -- 'user', 'web:<id>', 'sheet-import' or 'recurrence'
-    joined_by       TEXT NOT NULL DEFAULT ''     -- '' they took it or the sheet copied it; 'web:<id>' an organizer put them in
+    joined_by       TEXT NOT NULL DEFAULT '',    -- '' they took it or the sheet copied it; 'web:<id>' an organizer put them in
+    display_name    TEXT NOT NULL DEFAULT ''     -- Discord's name for them when they took it, for someone not on the roster
 );
 CREATE INDEX IF NOT EXISTS idx_sheet_role_signups_role ON sheet_role_signups(role_id, left_at);
 CREATE INDEX IF NOT EXISTS idx_sheet_role_signups_event ON sheet_role_signups(event_id, left_at);
@@ -794,7 +796,7 @@ CREATE TABLE IF NOT EXISTS sheet_role_updates (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     role_id     INTEGER NOT NULL REFERENCES sheet_roles(id) ON DELETE CASCADE,
     event_id    INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-    field       TEXT NOT NULL,                   -- 'emoji' or 'capacity'
+    field       TEXT NOT NULL,                   -- 'emoji', 'capacity' or 'takes_place'
     from_value  TEXT NOT NULL,
     to_value    TEXT NOT NULL,
     actor       TEXT NOT NULL,                   -- 'web:<id>'

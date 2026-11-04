@@ -83,12 +83,13 @@ func renderSignupMessage(ev *Event, roster []Signup) map[string]any {
 	case ev.Status == StatusClosed:
 		b.WriteString("\n**Signups are closed.**\n")
 	case ev.Capacity == 0:
-		fmt.Fprintf(&b, "\n**%d signed up** — no limit.\n", ev.AttendingCount)
+		fmt.Fprintf(&b, "\n**%d signed up** — no limit%s\n", ev.AttendingCount, separateRoleCounts(ev, false))
 	default:
 		fmt.Fprintf(&b, "\n**%d/%d places taken**", ev.AttendingCount, ev.Capacity)
 		if ev.WaitlistCount > 0 {
 			fmt.Fprintf(&b, " · %d waiting", ev.WaitlistCount)
 		}
+		b.WriteString(separateRoleCounts(ev, false))
 		b.WriteString("\n")
 	}
 
