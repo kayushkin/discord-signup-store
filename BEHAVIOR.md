@@ -196,7 +196,8 @@ each with an optional cap and an emoji, and the card lists them under
 **🙋 Roles** with who is in each. A new role takes the next of the default
 emojis. On the event page an organizer presses a role's emoji to pick
 another — the server's own emojis first, then every standard one, with a
-search box — which saves at once, and presses its count to change the cap;
+search box — which saves at once, and types the cap into the number after the slash in its count, which saves when
+they leave the box or press Enter (empty is no cap);
 lowering it takes nobody out. Anyone going takes one, or leaves it, with its own button
 on the card, in the What I'm bringing view when there is a sheet, or on the
 event page; a full role refuses. On the event page a role you are in says

@@ -509,15 +509,12 @@
           <summary class="role-emoji-button" aria-label="Change {{.Name}}'s emoji" title="Change the emoji">{{roleEmoji .Emoji}}<span class="emoji-edit-mark" aria-hidden="true"><svg viewBox="0 0 16 16" width="10" height="10"><path d="M10.5 2.5l3 3L6 13H3v-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span></summary>
         </details>
         <strong>{{.Name}}</strong>
-        <details class="role-pick">
-          <summary class="badge role-cap-button" aria-label="Change how many people {{.Name}} takes" title="Change the cap">{{.Count}}</summary>
-          <form method="post" action="/events/{{$ev.ID}}/roles/edit" data-async class="role-pop role-cap-form">
-            <input type="hidden" name="role_id" value="{{.ID}}"><input type="hidden" name="emoji" value="{{.Emoji}}">
-            <label>Max people <input name="capacity" type="number" min="0" max="999" value="{{if .Capacity}}{{.Capacity}}{{end}}" placeholder="no cap"></label>
-            <button class="btn-sm">Save</button>
-            <p class="hint">Empty for no cap. Lowering it takes nobody out.</p>
-          </form>
-        </details>
+        <form method="post" action="/events/{{$ev.ID}}/roles/edit" data-async class="role-cap-inline">
+          <input type="hidden" name="role_id" value="{{.ID}}"><input type="hidden" name="emoji" value="{{.Emoji}}">
+          <label class="badge role-count" title="Click the number to change how many people {{.Name}} takes. Empty for no cap; lowering it takes nobody out.">{{len .Members}}/<input
+            name="capacity" type="number" min="0" max="999" inputmode="numeric" value="{{if .Capacity}}{{.Capacity}}{{end}}" placeholder="∞"
+            data-saved="{{if .Capacity}}{{.Capacity}}{{end}}" aria-label="Most people {{.Name}} takes; empty for no cap"><span class="cap-edit-mark" aria-hidden="true"><svg viewBox="0 0 16 16" width="9" height="9"><path d="M10.5 2.5l3 3L6 13H3v-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span></label>
+        </form>
         {{if .Mine}}<span class="role-mine">✓ You're in</span>
         {{else if and $.Roles.TakesAnswers $.Roles.ViewerGoing}}
         <form method="post" action="/events/{{$ev.ID}}/roles/toggle" data-async>
@@ -564,6 +561,16 @@
       </div>
     </form>
     <script>
+    // A role's cap is typed into its count: leaving the box, or Enter,
+    // saves it when it changed. Escape puts the saved number back.
+    document.querySelectorAll(".role-cap-inline input[name=capacity]").forEach(function (box) {
+      box.addEventListener("change", function () {
+        if (box.value !== box.getAttribute("data-saved")) box.form.requestSubmit();
+      });
+      box.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") { box.value = box.getAttribute("data-saved"); box.blur(); }
+      });
+    });
     // One picker serves every role: pressing a role's emoji moves it into that
     // role's box, with the role's id and cap, and marks its emoji. Picking one
     // sends the form, which saves and redraws the page.

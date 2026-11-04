@@ -681,6 +681,9 @@ ul.role-people{position:relative}
 .role-add-list button:hover,.role-add-list button:focus-visible{background:var(--ink);color:var(--paper-light)}
 /* Removing the role sits apart from the viewer's own state, at the far end. */
 .sheet-role-head .role-remove{margin-left:auto}
+/* Removing a role is rare, so its button is a small outlined cross that
+   leaves the row room on a phone. */
+.sheet-role-head .role-remove button{padding:3px 5px;box-shadow:none;border-width:1.5px}
 /* The viewer's own tag in a role: filled in, marked "you", and its cross
    takes them out of the role. */
 .name-cloud li.me{background:var(--ink);color:var(--paper-light);border-color:var(--ink)}
@@ -706,7 +709,6 @@ details.role-emoji-pick{margin-right:6px}
 .emoji-edit-mark{position:absolute;right:-7px;bottom:-7px;display:inline-flex;align-items:center;justify-content:center;
   width:17px;height:17px;border-radius:50%;background:var(--ink);color:var(--paper-light);border:1.5px solid var(--paper-light)}
 .role-emoji-button:hover .emoji-edit-mark,details.role-pick[open]>.role-emoji-button .emoji-edit-mark{background:var(--accent)}
-.role-cap-button:hover,details.role-pick[open]>.role-cap-button{background:var(--accent)}
 .role-pop{position:absolute;left:0;top:calc(100% + 6px);z-index:20;background:var(--paper-light);border:2px solid var(--ink);
   border-radius:2px;padding:8px;box-shadow:var(--shadow)}
 .emoji-picker{width:min(340px,calc(100vw - 48px));padding:8px}
@@ -721,10 +723,20 @@ img.custom-emoji{width:1.25em;height:1.25em;vertical-align:-0.25em;object-fit:co
   border-radius:4px;box-shadow:none;color:inherit;transform:none}
 .emoji-grid button.emoji-choice:hover,.emoji-grid button.emoji-choice:focus-visible{border-color:var(--ink);background:var(--paper)}
 .emoji-grid button.emoji-choice.chosen{border-color:var(--ink);background:var(--paper-deep)}
-.role-cap-form{display:flex;flex-wrap:wrap;align-items:center;gap:8px;width:max-content;max-width:min(320px,100%)}
-.role-cap-form label{display:flex;align-items:center;gap:8px;margin:0;font-size:13px;text-transform:none;letter-spacing:normal}
-.role-cap-form input{width:6em}
-.role-cap-form .hint{flex-basis:100%;margin:0;font-size:12px}
+/* A role's count on the organizer's page: the number after the slash is a
+   box to type the cap into, underlined with dashes and marked with a pencil
+   so it reads as editable; it turns paper-white while being typed in. */
+.role-cap-inline{display:inline-flex;margin:0}
+label.badge.role-count{display:inline-flex;align-items:center;gap:1px;margin:0;cursor:text;text-transform:none;letter-spacing:normal;
+  font-size:inherit;font-weight:inherit;color:var(--paper-light)}
+.role-count input{width:3.2ch;min-width:0;margin:0 0 0 1px;padding:0 1px;border:0;border-bottom:1.5px dashed var(--paper-light);border-radius:0;
+  background:transparent;color:inherit;font:inherit;text-align:center;box-shadow:none;-moz-appearance:textfield;appearance:textfield}
+.role-count input::-webkit-outer-spin-button,.role-count input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.role-count input::placeholder{color:var(--paper-light);opacity:.8}
+.role-count:hover input{border-bottom-style:solid}
+.role-count input:focus{outline:none;background:var(--paper-light);color:var(--ink);border-bottom-color:var(--accent)}
+.cap-edit-mark{display:inline-flex;margin-left:4px;opacity:.75}
+.role-count:hover .cap-edit-mark,.role-count:focus-within .cap-edit-mark{opacity:1;color:var(--accent)}
 .member-event{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
 /* The organizer page's narrow-screen order names .event-head; the members'
    page keeps the order it is written in. */
