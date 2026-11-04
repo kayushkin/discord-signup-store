@@ -86,10 +86,11 @@ func (s *Store) lastSignupUpdate(eventID int64, userID string) (*SignupUpdate, e
 }
 
 // forumUnfollowDue says when someone this service made follow an event's
-// post comes off it: 0 while they are going to a live event, a day after the
-// event ended or was canceled, a day after their date rolled over, and
-// otherwise — they left, or went to the waitlist or Maybe — now.
-func forumUnfollowDue(ev *Event, state string, last *SignupUpdate, at int64) int64 {
+// post comes off it: 0 while they are going to a live event or in one of its
+// separate roles, a day after the event ended or was canceled, a day after
+// their date rolled over, and otherwise — they left, or went to the waitlist
+// or Maybe, or left their separate role — now.
+func forumUnfollowDue(ev *Event, userID, state string, last *SignupUpdate, at int64) int64 {
 	grace := int64(forumFollowGrace / time.Second)
 	switch ev.Status {
 	case StatusCompleted:
@@ -97,7 +98,7 @@ func forumUnfollowDue(ev *Event, state string, last *SignupUpdate, at int64) int
 	case StatusCancelled:
 		return ev.UpdatedAt + grace
 	}
-	if state == StateAttending {
+	if state == StateAttending || ev.inSeparateRole(userID) {
 		return 0
 	}
 	if last != nil && last.Actor == ActorRecurrence && last.ToState == StateWithdrawn {
@@ -167,13 +168,16 @@ func (s *Server) settleForumFollows(ev *Event, roster []Signup, changes []stateC
 			continue
 		}
 		at := now()
-		if due := forumUnfollowDue(ev, stateIn(roster, change.UserID), last, at); due == 0 || due > at {
+		if due := forumUnfollowDue(ev, change.UserID, stateIn(roster, change.UserID), last, at); due == 0 || due > at {
 			continue
 		}
 		if err := s.unfollowForumPost(ev, change.UserID); err != nil {
 			log.Printf("[discord-signup] %v", err)
 		}
 	}
+	// Taking a separate role follows the post as a place does; leaving it
+	// comes off within UnfollowDueForumPosts' next run.
+	going = append(going, ev.separateRoleMembers(roster)...)
 	s.followForumPost(ev, going)
 }
 
@@ -231,7 +235,7 @@ func (s *Server) UnfollowDueForumPosts() (removed, failed int, err error) {
 			if err != nil {
 				return removed, failed, err
 			}
-			if when := forumUnfollowDue(ev, stateIn(roster, f.DiscordUserID), last, at); when != 0 && when <= at {
+			if when := forumUnfollowDue(ev, f.DiscordUserID, stateIn(roster, f.DiscordUserID), last, at); when != 0 && when <= at {
 				due = append(due, f.DiscordUserID)
 			}
 		}
@@ -263,8 +267,8 @@ func (s *Server) UnfollowDueForumPosts() (removed, failed int, err error) {
 	return removed, failed, nil
 }
 
-// FollowAllForumPosts makes everyone going to a live event follow its forum
-// post: for people who got their place before getting one did it.
+// FollowAllForumPosts makes everyone going to a live event, and everyone in
+// its separate roles, follow its forum post: for people who got their place before getting one did it.
 func (s *Server) FollowAllForumPosts() (followed, failed int, err error) {
 	if s.discord == nil {
 		return 0, 0, errors.New("following a forum post needs a Discord client")
@@ -289,6 +293,7 @@ func (s *Server) FollowAllForumPosts() (followed, failed int, err error) {
 					going = append(going, sg.DiscordUserID)
 				}
 			}
+			going = append(going, ev.separateRoleMembers(roster)...)
 			// A quiet post is archived, and an archived thread takes no new
 			// members; the same patch the card refresh sends reopens it.
 			if err := s.discord.ModifyThread(ev.ForumPostID, map[string]any{"archived": false}); err != nil {

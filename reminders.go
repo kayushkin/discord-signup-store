@@ -119,11 +119,16 @@ func (s *Server) sendReminder(ev *Event, stage string) bool {
 		return false
 	}
 	attending, _ := splitRoster(roster)
+	// People in a role apart from Going are on the event too, and are pinged
+	// after those going.
+	for _, id := range ev.separateRoleMembers(roster) {
+		attending = append(attending, Signup{DiscordUserID: id})
+	}
 	if len(attending) == 0 {
 		// Nobody to tell. Stamped anyway: an empty event does not become worth
 		// announcing later, and leaving it unstamped means checking it every
 		// minute forever.
-		s.stampReminder(ev, stage, "nobody has a place")
+		s.stampReminder(ev, stage, "nobody has a place or a separate role")
 		return false
 	}
 	channelID := s.guildChannels(ev.GuildID).Reminder

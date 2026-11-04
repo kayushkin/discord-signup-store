@@ -224,7 +224,11 @@ its own cap holds. An organizer can put in anyone going, waiting or on
 Maybe. Every count shows the main places and then each separate role's:
 "10/12 places taken · 🎤 Audience 3/6 · 🎉 Hosts 2/2". Switching a role's
 kind moves nobody; while a role counts toward Going, only its people who
-are going show in it.
+are going show in it. People in a separate role are on the event all the
+same: the reminders an hour before and at the start ping them after those
+going, and taking the role follows the event's forum post as a place does;
+leaving it takes them off the post within five minutes unless they are
+going.
 
 A repeating event's next date starts with an empty sheet and empty roles;
 what it needs, and the roles, carry over. The organizer's log has every change to the sheet: each thing

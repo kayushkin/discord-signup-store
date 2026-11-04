@@ -167,6 +167,41 @@ func (ev *Event) SeparateRoles() []SheetRole {
 	return out
 }
 
+// separateRoleMembers are the people in the event's separate roles who are
+// not going, in the order they took them, each once. With those going they
+// are everyone on the event: the reminders ping them and the forum post
+// keeps them.
+func (ev *Event) separateRoleMembers(roster []Signup) []string {
+	going := map[string]bool{}
+	for _, sg := range roster {
+		if sg.State == StateAttending {
+			going[sg.DiscordUserID] = true
+		}
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, r := range ev.SeparateRoles() {
+		for _, id := range r.Members {
+			if !going[id] && !seen[id] {
+				seen[id] = true
+				out = append(out, id)
+			}
+		}
+	}
+	return out
+}
+
+// inSeparateRole says whether someone is in one of the event's separate
+// roles.
+func (ev *Event) inSeparateRole(userID string) bool {
+	for _, r := range ev.SeparateRoles() {
+		if r.Has(userID) {
+			return true
+		}
+	}
+	return false
+}
+
 // separateRoleCounts is each separate role's count after the event's own:
 // " · 🎤 Audience 3/6 · 🎉 Hosts 2", or "" with none. plain writes a custom
 // emoji as :name:, for text Discord does not render as markdown.

@@ -467,14 +467,14 @@ func TestFollowersComeOffADayAfterTheEventEnds(t *testing.T) {
 func TestARolledOverDateWaitsADay(t *testing.T) {
 	ev := &Event{Status: StatusOpen}
 	rolled := &SignupUpdate{Actor: ActorRecurrence, ToState: StateWithdrawn, At: 1000}
-	if due := forumUnfollowDue(ev, StateWithdrawn, rolled, 2000); due != 1000+86400 {
+	if due := forumUnfollowDue(ev, "u1", StateWithdrawn, rolled, 2000); due != 1000+86400 {
 		t.Errorf("rolled over: due %d, want a day after", due)
 	}
 	left := &SignupUpdate{Actor: ActorUser, ToState: StateWithdrawn, At: 1000}
-	if due := forumUnfollowDue(ev, StateWithdrawn, left, 2000); due != 2000 {
+	if due := forumUnfollowDue(ev, "u1", StateWithdrawn, left, 2000); due != 2000 {
 		t.Errorf("left: due %d, want now", due)
 	}
-	if due := forumUnfollowDue(ev, StateAttending, rolled, 2000); due != 0 {
+	if due := forumUnfollowDue(ev, "u1", StateAttending, rolled, 2000); due != 0 {
 		t.Errorf("going again: due %d, want never", due)
 	}
 }
