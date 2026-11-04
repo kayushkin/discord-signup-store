@@ -533,25 +533,24 @@
           <input type="hidden" name="role_id" value="{{.ID}}">
           <button class="btn-sm danger" aria-label="Remove the role {{.Name}}" title="Remove the role">{{template "cross"}}</button></form>
       </div>
-      {{if .People}}<ul class="name-cloud">{{range .People}}{{if eq .DiscordUserID $.Roles.ViewerID}}<li class="me">{{person .ReadableName .DisplayName .DiscordUserID}}<span class="me-label">you</span>{{if $.Roles.TakesAnswers}}
+      {{$canAdd := and $.Roles.TakesAnswers .Others (not .Full)}}
+      {{if or .People $canAdd}}<ul class="name-cloud role-people">{{range .People}}{{if eq .DiscordUserID $.Roles.ViewerID}}<li class="me">{{person .ReadableName .DisplayName .DiscordUserID}}<span class="me-label">you</span>{{if $.Roles.TakesAnswers}}
         <form method="post" action="/events/{{$ev.ID}}/roles/toggle" data-async class="role-take-out"{{if $role.Full}}
           data-confirm="Leave {{$role.Name}}? It's full, so someone else can take your place."{{end}}>
           <input type="hidden" name="role_id" value="{{$role.ID}}">
           <button aria-label="Leave {{$role.Name}}" title="Leave {{$role.Name}}">{{template "cross"}}</button></form>{{end}}</li>{{else}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}
         <form method="post" action="/events/{{$ev.ID}}/roles/take-out" data-async class="role-take-out">
           <input type="hidden" name="role_id" value="{{$role.ID}}"><input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
-          <button aria-label="Take them out of {{$role.Name}}" title="Take out of {{$role.Name}}">{{template "cross"}}</button></form></li>{{end}}{{end}}</ul>
+          <button aria-label="Take them out of {{$role.Name}}" title="Take out of {{$role.Name}}">{{template "cross"}}</button></form></li>{{end}}{{end}}{{if $canAdd}}
+        <li class="role-add"><details class="role-pick">
+          <summary aria-label="Put someone in {{.Name}}" title="Put someone in {{.Name}}">+ Add someone</summary>
+          <form method="post" action="/events/{{$ev.ID}}/roles/put-in" data-async class="role-pop role-add-list">
+            <input type="hidden" name="role_id" value="{{.ID}}">
+            <p class="role-add-head">Put in {{.Emoji}} {{.Name}}</p>
+            {{range .Others}}<button name="discord_user_id" value="{{.DiscordUserID}}">{{if .ReadableName}}{{.ReadableName}}{{else if .DisplayName}}{{.DisplayName}}{{else}}{{.DiscordUserID}}{{end}}</button>{{end}}
+          </form>
+        </details></li>{{end}}</ul>
       {{else}}<p class="empty">Nobody yet.</p>{{end}}
-      {{if and $.Roles.TakesAnswers .Others (not .Full)}}
-      <form method="post" action="/events/{{$ev.ID}}/roles/put-in" data-async class="role-put-in">
-        <input type="hidden" name="role_id" value="{{.ID}}">
-        <select name="discord_user_id" aria-label="Someone going to put in {{.Name}}" required>
-          <option value="">Put someone in {{.Name}}…</option>
-          {{range .Others}}<option value="{{.DiscordUserID}}">{{if .ReadableName}}{{.ReadableName}}{{else if .DisplayName}}{{.DisplayName}}{{else}}{{.DiscordUserID}}{{end}}</option>{{end}}
-        </select>
-        <button class="btn-sm">Put in</button>
-      </form>
-      {{end}}
     </div>
     {{end}}
     <details class="fold" id="roles-setup" data-remember{{if not .Roles}} open{{end}}>

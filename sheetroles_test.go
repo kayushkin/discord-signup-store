@@ -179,7 +179,7 @@ func TestAnOrganizerPutsPeopleInRolesAndTakesThemOut(t *testing.T) {
 	roleID := fmt.Sprint(host.ID)
 
 	page := getPage(t, mux, token, eventPath(ev)).Body.String()
-	if !strings.Contains(page, "/roles/put-in") || !strings.Contains(page, `<option value="alice">`) {
+	if !strings.Contains(page, "/roles/put-in") || !strings.Contains(page, `name="discord_user_id" value="alice">alice</button>`) {
 		t.Fatal("the organizer's page does not offer to put someone in the role")
 	}
 	postForm(t, mux, token, eventPath(ev)+"/roles/put-in", url.Values{"role_id": {roleID}, "discord_user_id": {"alice"}})

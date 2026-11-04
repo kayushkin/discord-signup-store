@@ -667,11 +667,18 @@ ol.name-cloud li::before{counter-increment:place;content:counter(place) ".";font
 .role-take-out button{display:inline-flex;align-items:center;padding:3px;border:0;background:none;color:var(--dim);cursor:pointer;
   box-shadow:none;min-height:0}
 .role-take-out button:hover,.role-take-out button:focus-visible,.role-take-out button:active{color:var(--ink);transform:none;box-shadow:none}
-/* An organizer's "put someone in" row under a role: the list as wide as its
-   names, the button beside it. */
-.role-put-in{display:flex;align-items:center;gap:8px;margin:8px 0 0}
-.role-put-in select{width:auto;min-width:0;max-width:28em;flex:0 1 auto}
-.role-put-in button{flex:none}
+/* An organizer's "+ Add someone" tag at the end of a role's names: a
+   dashed tag that opens the people going who are not in it, one press each. */
+ul.role-people{position:relative}
+.name-cloud li.role-add{padding:0;border:0;background:none}
+.role-add details.role-pick>summary{display:inline-flex;align-items:center;padding:3px 10px;border:1.5px dashed var(--ink);
+  border-radius:999px;font-size:13px;font-weight:700;color:var(--dim)}
+.role-add details.role-pick>summary:hover,.role-add details.role-pick[open]>summary{color:var(--ink);background:var(--paper-light);border-style:solid}
+.role-add-list{display:flex;flex-wrap:wrap;gap:6px;width:max-content;max-width:min(360px,100%);max-height:260px;overflow:auto}
+.role-add-head{flex-basis:100%;margin:0 0 2px;font-size:12px;font-weight:700;color:var(--dim)}
+.role-add-list button{padding:3px 10px;border:1.5px solid var(--ink);border-radius:999px;background:var(--paper-light);color:var(--ink);
+  font-size:14px;font-weight:500;box-shadow:none;transform:none}
+.role-add-list button:hover,.role-add-list button:focus-visible{background:var(--ink);color:var(--paper-light)}
 /* Removing the role sits apart from the viewer's own state, at the far end. */
 .sheet-role-head .role-remove{margin-left:auto}
 /* The viewer's own tag in a role: filled in, marked "you", and its cross

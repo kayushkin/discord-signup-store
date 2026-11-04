@@ -202,7 +202,9 @@ event page; a full role refuses. On the event page a role you are in says
 *You're in*, and your own name tag in it is filled in and marked *you*; the
 cross on it takes you out, asking first when the role is full, since someone
 else can then take your place. On the event page an organizer can also
-put anyone going into a role, from a list under it, and take anyone out with
+put anyone going into a role — *+ Add someone* at the end of its names opens
+the people going who are not in it, and pressing one puts them in — and take
+anyone out with
 the cross beside their name; the cap holds for them too, so to swap who has a
 full role they take one person out and put the other in. Nobody is messaged,
 and the log names the organizer. Switching roles off hides them and keeps
