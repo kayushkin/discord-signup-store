@@ -348,7 +348,9 @@ func eventPublishSignature(ev *Event, roster []Signup) string {
 		b.WriteString("\x00roles1")
 	}
 	for _, r := range ev.Roles {
-		fmt.Fprintf(&b, "\x03%d\x00%s\x00%d\x00%s", r.ID, r.Name, r.Capacity, strings.Join(r.Members, ","))
+		// The emoji is on the card, the buttons and the native event, so a
+		// change of emoji has to redraw them.
+		fmt.Fprintf(&b, "\x03%d\x00%s\x00%s\x00%d\x00%s", r.ID, r.Emoji, r.Name, r.Capacity, strings.Join(r.Members, ","))
 	}
 	for _, sg := range roster {
 		fmt.Fprintf(&b, "\x01%s\x00%s\x00%s\x00%s", sg.DiscordUserID, sg.DisplayName, sg.ReadableName, sg.State)

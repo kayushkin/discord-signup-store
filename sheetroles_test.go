@@ -368,6 +368,15 @@ func TestAnOrganizerChangesARolesEmojiAndCap(t *testing.T) {
 	if _, err := store.EditSheetRole(ev.ID, second.ID, "not-an-emoji", 1, "web:manager"); !errors.Is(err, ErrInvalidSheetRole) {
 		t.Fatalf("an emoji not offered: err = %v", err)
 	}
+	before := mustEvent(t, store, ev.ID)
+	beforeSignature := eventPublishSignature(before, nil)
+	if _, err := store.EditSheetRole(ev.ID, second.ID, "👑", 1, "web:manager"); err != nil {
+		t.Fatal(err)
+	}
+	if eventPublishSignature(mustEvent(t, store, ev.ID), nil) == beforeSignature {
+		t.Error("a new emoji leaves the publish signature as it was, so Discord would not be redrawn")
+	}
+	store.EditSheetRole(ev.ID, second.ID, "🎤", 1, "web:manager")
 	if changed, err := store.EditSheetRole(ev.ID, second.ID, "🎤", 1, "web:manager"); err != nil || len(changed) != 0 {
 		t.Fatalf("saving the same values = %v, %v; want nothing changed", changed, err)
 	}
