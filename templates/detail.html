@@ -506,7 +506,7 @@
     <div class="sheet-role">
       <div class="sheet-role-head">
         <details class="role-pick role-emoji-pick" data-role-id="{{.ID}}" data-capacity="{{.Capacity}}" data-emoji="{{.Emoji}}">
-          <summary class="role-emoji-button" aria-label="Change {{.Name}}'s emoji" title="Change the emoji">{{roleEmoji .Emoji}}</summary>
+          <summary class="role-emoji-button" aria-label="Change {{.Name}}'s emoji" title="Change the emoji">{{roleEmoji .Emoji}}<span class="emoji-edit-mark" aria-hidden="true"><svg viewBox="0 0 16 16" width="10" height="10"><path d="M10.5 2.5l3 3L6 13H3v-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span></summary>
         </details>
         <strong>{{.Name}}</strong>
         <details class="role-pick">

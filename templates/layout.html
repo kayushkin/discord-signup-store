@@ -696,9 +696,16 @@ ul.role-people{position:relative}
 details.role-pick{display:inline-block;position:static}
 details.role-pick>summary{list-style:none;cursor:pointer}
 details.role-pick>summary::-webkit-details-marker{display:none}
-.role-emoji-button{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;font-size:19px;
-  border:1.5px dashed var(--rule);border-radius:4px}
-.role-emoji-button:hover,details.role-pick[open]>.role-emoji-button,.role-emoji-button:focus-visible{border-color:var(--ink);background:var(--paper-light)}
+/* A role's emoji on the organizer's page is a button: a dashed box with a
+   pencil on its corner, so it reads as something to press, filled in on
+   hover and while its picker is open. */
+.role-emoji-button{position:relative;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;font-size:20px;
+  border:1.5px dashed var(--ink);border-radius:4px;background:var(--paper-light)}
+.role-emoji-button:hover,details.role-pick[open]>.role-emoji-button,.role-emoji-button:focus-visible{border-style:solid;box-shadow:2px 2px 0 var(--ink)}
+details.role-emoji-pick{margin-right:6px}
+.emoji-edit-mark{position:absolute;right:-7px;bottom:-7px;display:inline-flex;align-items:center;justify-content:center;
+  width:17px;height:17px;border-radius:50%;background:var(--ink);color:var(--paper-light);border:1.5px solid var(--paper-light)}
+.role-emoji-button:hover .emoji-edit-mark,details.role-pick[open]>.role-emoji-button .emoji-edit-mark{background:var(--accent)}
 .role-cap-button:hover,details.role-pick[open]>.role-cap-button{background:var(--accent)}
 .role-pop{position:absolute;left:0;top:calc(100% + 6px);z-index:20;background:var(--paper-light);border:2px solid var(--ink);
   border-radius:2px;padding:8px;box-shadow:var(--shadow)}
