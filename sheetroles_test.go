@@ -293,7 +293,7 @@ func TestRolesWorkWithoutAPotluckSheet(t *testing.T) {
 	if !strings.Contains(content, "**🙋 Roles**") || strings.Contains(content, "Potluck") {
 		t.Errorf("card = %s; want Roles and no Potluck", content)
 	}
-	if note := potluckAndRolesJoinNote(ev); !strings.Contains(note, "Sign up to help if you can:** Setup") || strings.Contains(note, "potluck") {
+	if note := potluckAndRolesJoinNote(ev); !strings.Contains(note, "Pick a role if you like:** Setup") || strings.Contains(note, "potluck") {
 		t.Errorf("join note = %q", note)
 	}
 

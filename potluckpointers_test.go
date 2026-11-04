@@ -33,7 +33,7 @@ func TestJoiningAPotluckSaysToBringSomething(t *testing.T) {
 	}
 	data := join(ev.ID)
 	content := data["content"].(string)
-	for _, want := range []string{"You're in.", "please bring something", "sign up to help if you can: Setup", "📌 Asked for: 🍴 Ice"} {
+	for _, want := range []string{"You're in.", "please bring something", "pick a role if you like: Setup", "📌 Asked for: 🍴 Ice"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("join reply lacks %q:\n%s", want, content)
 		}
@@ -83,8 +83,20 @@ func TestAWebJoinToAPotluckLandsOnItsPage(t *testing.T) {
 	store.UpdateEvent(ev.ID, EventPatch{RolesEnabled: &on})
 	store.AddSheetRole(ev.ID, "Setup (6:00)", 0, "test")
 	store.AddSheetRole(ev.ID, "Teardown", 0, "test")
-	want := fmt.Sprintf("\n[Potluck list →](https://events.example%[1]s#potluck)\n[Sign up to Setup, Teardown →](https://events.example%[1]s#roles)", eventPath(ev))
+	host, _ := store.AddSheetRole(ev.ID, "Host", 1, "test")
+	want := fmt.Sprintf("\n[Potluck list →](https://events.example%[1]s#potluck)\n[Pick a role: Setup, Teardown or Host →](https://events.example%[1]s#roles)", eventPath(ev))
 	if link := linker.potluckAndRolesLinks(mustEvent(t, store, ev.ID)); link != want {
 		t.Errorf("#events link = %q", link)
+	}
+	// A full role is not offered.
+	if _, err := store.ToggleSheetRole(ev.ID, host.ID, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	want = fmt.Sprintf("\n[Potluck list →](https://events.example%[1]s#potluck)\n[Pick a role: Setup or Teardown →](https://events.example%[1]s#roles)", eventPath(ev))
+	if link := linker.potluckAndRolesLinks(mustEvent(t, store, ev.ID)); link != want {
+		t.Errorf("#events link with Host full = %q", link)
+	}
+	if note := potluckAndRolesJoinNote(mustEvent(t, store, ev.ID)); strings.Contains(note, "Host") {
+		t.Errorf("the join note offers the full role: %q", note)
 	}
 }

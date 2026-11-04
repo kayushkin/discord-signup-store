@@ -12,30 +12,32 @@ import (
 // to the sheet and the roles beside the event's name in #events.
 
 // potluckAndRolesJoinNote is what goes under "you're in" for an event whose
-// potluck sheet or roles take answers: bring something, the roles there are
-// to sign up to, and what is still asked for. "" for any other event.
+// potluck sheet or roles take answers: bring something, the roles that
+// still have room, and what is still asked for. "" for any other event.
 func potluckAndRolesJoinNote(ev *Event) string {
 	if ev == nil {
 		return ""
 	}
 	potluck := ev.Potluck != nil && potluckTakesAnswers(ev)
-	roles := sheetRolesTakeAnswers(ev) && len(ev.Roles) > 0
+	var names []string
+	if sheetRolesTakeAnswers(ev) {
+		for _, r := range sheetRolesWithRoom(ev.Roles) {
+			names = append(names, r.Name)
+		}
+	}
+	roles := len(names) > 0
 	if !potluck && !roles {
 		return ""
-	}
-	names := make([]string, len(ev.Roles))
-	for i, r := range ev.Roles {
-		names[i] = r.Name
 	}
 	var b strings.Builder
 	switch {
 	case potluck && roles:
 		b.WriteString("\n\n🍲 **It's a potluck — please bring something.** Press **What I'm bringing** to say what")
-		b.WriteString(", and sign up to help if you can: " + strings.Join(names, ", ") + ".")
+		b.WriteString(", and pick a role if you like: " + joinWithOr(names) + ".")
 	case potluck:
 		b.WriteString("\n\n🍲 **It's a potluck — please bring something.** Press **What I'm bringing** to say what.")
 	default:
-		b.WriteString("\n\n" + sheetRoleEmoji + " **Sign up to help if you can:** " + strings.Join(names, ", ") + ".")
+		b.WriteString("\n\n" + sheetRoleEmoji + " **Pick a role if you like:** " + joinWithOr(names) + ".")
 	}
 	if potluck {
 		if line := ev.Potluck.AskedForLine(); line != "" {
@@ -85,8 +87,8 @@ func (s *Server) replyEphemeralWithComponents(w http.ResponseWriter, content str
 }
 
 // potluckAndRolesLinks go under an event's name in #events, one to a line:
-// the potluck list when the sheet takes answers, and signing up to the roles
-// when they do. Both open the event's page at that part of it. "" for an
+// the potluck list when the sheet takes answers, and the roles that still
+// have room when roles take answers. Both open the event's page at that part of it. "" for an
 // event with neither.
 func (s *Server) potluckAndRolesLinks(ev *Event) string {
 	origin := s.webOrigin()
@@ -99,12 +101,32 @@ func (s *Server) potluckAndRolesLinks(ev *Event) string {
 	if potluckTakesAnswers(ev) {
 		links += fmt.Sprintf("\n[Potluck list →](%s#potluck)", page)
 	}
-	if sheetRolesTakeAnswers(ev) && len(ev.Roles) > 0 {
-		names := make([]string, len(ev.Roles))
-		for i, r := range ev.Roles {
+	if open := sheetRolesWithRoom(ev.Roles); sheetRolesTakeAnswers(ev) && len(open) > 0 {
+		names := make([]string, len(open))
+		for i, r := range open {
 			names[i] = escapeMarkdown(strings.TrimSpace(strings.SplitN(r.Name, "(", 2)[0]))
 		}
-		links += fmt.Sprintf("\n[Sign up to %s →](%s#roles)", strings.Join(names, ", "), page)
+		links += fmt.Sprintf("\n[Pick a role: %s →](%s#roles)", joinWithOr(names), page)
 	}
 	return links
+}
+
+// sheetRolesWithRoom are the roles someone could still take: a full role is
+// not offered, and once every role is full nothing is.
+func sheetRolesWithRoom(roles []SheetRole) []SheetRole {
+	var open []SheetRole
+	for _, r := range roles {
+		if !r.Full() {
+			open = append(open, r)
+		}
+	}
+	return open
+}
+
+// joinWithOr is "A", "A or B", or "A, B or C".
+func joinWithOr(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
 }

@@ -171,12 +171,14 @@ other. The pages badge the host and the organizers.
 
 **Getting a place points at the sheet and the roles.** On an event with a
 sheet or roles, the reply to Join, and the DM when someone moves up or an
-organizer puts them down as going, say it is a potluck, name the roles and
+organizer puts them down as going, say it is a potluck, name the roles that
+still have room and
 what is still asked for, and carry What I'm bringing (with a sheet), a
 button per role (with roles) and a link to the event page. A Join on the
 web lands on the event page. #events puts "Potluck list →" under the
-event's name when it has a sheet, and "Sign up to Setup, Teardown →" when
-it has roles, each opening that part of the event page. Each person may bring up to ten things, and every
+event's name when it has a sheet, and "Pick a role: Setup or Teardown →"
+naming the roles that still have room, each opening that part of the event
+page; a full role is left out, and with every role full there is no link. Each person may bring up to ten things, and every
 surface says they can add another.
 
 **Asking for things.** An organizer can ask for specific things — ice, two
