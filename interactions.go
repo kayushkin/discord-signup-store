@@ -684,6 +684,10 @@ func (s *Server) applyEditForm(w http.ResponseWriter, in *Interaction, eventID i
 		s.replyEphemeral(w, plainError(err))
 		return
 	}
+	if err := refuseStartInThePast(values.StartsAt, ev.StartsAt, zone); err != nil {
+		s.replyEphemeral(w, plainError(err))
+		return
+	}
 
 	userID, _ := in.actor()
 	updated, promoted, err := s.ApplyEventForm(ev, values, zone, "discord:"+userID)
@@ -704,6 +708,10 @@ func (s *Server) applyCreateForm(w http.ResponseWriter, in *Interaction, form Ev
 	zone := s.DefaultTimezone()
 	values, err := form.Validate(zone)
 	if err != nil {
+		s.replyEphemeral(w, plainError(err))
+		return
+	}
+	if err := refuseStartInThePast(values.StartsAt, 0, zone); err != nil {
 		s.replyEphemeral(w, plainError(err))
 		return
 	}

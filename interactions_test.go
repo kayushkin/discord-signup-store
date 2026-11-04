@@ -302,13 +302,13 @@ func TestEditButtonOpensAPrefilledFormAndSaves(t *testing.T) {
 		"type": 5, "guild_id": "g1", "channel_id": "c1",
 		"data": {"custom_id": %q, "components": [
 			{"components": [{"custom_id": "name", "value": "Playtest night"}]},
-			{"components": [{"custom_id": "starts", "value": "2026-09-06 18:30"}]},
+			{"components": [{"custom_id": "starts", "value": %q}]},
 			{"components": [{"custom_id": "capacity", "value": "3"}]},
 			{"components": [{"custom_id": "location", "value": "The big shed"}]},
 			{"components": [{"custom_id": "description", "value": "Bring dice and snacks."}]}
 		]},
 		"member": {"permissions": %q, "user": {"id": "boss", "username": "boss"}}
-	}`, EditModalCustomID(ev.ID), permissionsWithManageEvents))
+	}`, EditModalCustomID(ev.ID), aYearFromNow("18:30"), permissionsWithManageEvents))
 
 	content := reply["data"].(map[string]any)["content"].(string)
 	for _, want := range []string{"Playtest night", "3", "waitlist"} {
@@ -420,13 +420,13 @@ func TestCreateButtonMakesAnEvent(t *testing.T) {
 		"type": 5, "guild_id": "g1", "channel_id": "howto-channel",
 		"data": {"custom_id": %q, "components": [
 			{"components": [{"custom_id": "name", "value": "Board game night"}]},
-			{"components": [{"custom_id": "starts", "value": "2026-09-05 19:00"}]},
+			{"components": [{"custom_id": "starts", "value": %q}]},
 			{"components": [{"custom_id": "capacity", "value": "8"}]},
 			{"components": [{"custom_id": "location", "value": "The pub"}]},
 			{"components": [{"custom_id": "description", "value": "Catan and beer."}]}
 		]},
 		"member": {"permissions": %q, "user": {"id": "boss", "username": "boss"}}
-	}`, CreateModalCustomID(), permissionsWithManageEvents)))
+	}`, CreateModalCustomID(), aYearFromNow("19:00"), permissionsWithManageEvents)))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -485,4 +485,11 @@ func TestCreatingNeedsPermission(t *testing.T) {
 	if len(events) != 0 {
 		t.Errorf("an ordinary member created %d events", len(events))
 	}
+}
+
+// aYearFromNow is a start a form can still accept whenever the suite runs: a
+// start already gone by is refused, so a fixed date here stops working the
+// day it passes.
+func aYearFromNow(clock string) string {
+	return time.Now().AddDate(1, 0, 0).Format("2006-01-02") + " " + clock
 }

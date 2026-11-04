@@ -390,6 +390,10 @@ func (s *Server) handleWebUpdateEvent(w http.ResponseWriter, r *http.Request) {
 				failed(err)
 				return
 			}
+			if err := refuseStartInThePast(starts, ev.StartsAt, zone); err != nil {
+				failed(err)
+				return
+			}
 			patch.StartsAt = &starts
 		}
 		if r.Form.Has("ends_at") {

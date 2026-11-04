@@ -530,6 +530,10 @@ func (s *Server) handleWebCreateEvent(w http.ResponseWriter, r *http.Request) {
 		s.renderFormError(w, session, nil, err)
 		return
 	}
+	if err := refuseStartInThePast(starts, 0, zone); err != nil {
+		s.renderFormError(w, session, nil, err)
+		return
+	}
 	ends, err := ParseEventTime(r.FormValue("ends_at"), zone)
 	if err != nil {
 		s.renderFormError(w, session, nil, err)
@@ -592,6 +596,22 @@ func (s *Server) renderFormError(w http.ResponseWriter, session *WebSession, ev 
 // be published to Discord — PublishToDiscord refuses it — so allowing one to be
 // created just moves the failure to the moment someone tries to use it, which
 // is later and less obvious.
+// refuseStartInThePast refuses a typed start that has already gone by, unless
+// it is the start the event already had: an edit to the description of an
+// event that is under way sends its old start back, and that must still save.
+//
+// Without it, a start moved into the past was saved, the next sweep finished
+// the event and archived its forum post, and Discord — which refuses a past
+// start — kept the old date. On 2026-11-03 that left a hike closed here and
+// still listed a year out in Discord.
+func refuseStartInThePast(startsAt, previousStartsAt int64, zone string) error {
+	if startsAt == 0 || startsAt == previousStartsAt || startsAt > now() {
+		return nil
+	}
+	return fmt.Errorf("%w: %s has already gone by — an event has to start in the future",
+		ErrInvalidEvent, FormatEventTime(startsAt, zone))
+}
+
 func requireStartTime(startsAt int64) error {
 	if startsAt == 0 {
 		return fmt.Errorf("%w: a start time is required — without one the event "+
