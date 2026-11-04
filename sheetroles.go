@@ -139,7 +139,8 @@ func sheetRoleRefusal(err error) string {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		return "Nothing was changed: that role is no longer on the event."
-	case errors.Is(err, ErrSheetRoleFull), errors.Is(err, ErrSheetRolesOff), errors.Is(err, ErrSheetRolesClosed):
+	case errors.Is(err, ErrSheetRoleFull), errors.Is(err, ErrSheetRolesOff), errors.Is(err, ErrSheetRolesClosed),
+		errors.Is(err, ErrAlreadyInSheetRole), errors.Is(err, ErrNotInSheetRole):
 		return "Nothing was changed: " + err.Error() + "."
 	case errors.Is(err, ErrNotGoing):
 		return "Nothing was changed: roles are for people going. Join first, then sign up for one."
@@ -268,10 +269,63 @@ func (s *Store) ToggleSheetRole(eventID, roleID int64, userID string) (bool, err
 	if n, _ := res.RowsAffected(); n > 0 {
 		return false, tx.Commit()
 	}
-	if err := joinSheetRoleTx(tx, eventID, roleID, capacity, userID, "", ts); err != nil {
+	if err := joinSheetRoleTx(tx, eventID, roleID, capacity, userID, "", "", ts); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()
+}
+
+// ErrAlreadyInSheetRole is putting someone in a role they are already in.
+var ErrAlreadyInSheetRole = errors.New("they are already in that role")
+
+// ErrNotInSheetRole is taking someone out of a role they are not in.
+var ErrNotInSheetRole = errors.New("they are not in that role")
+
+// PutInSheetRole puts someone going into a role on an organizer's say-so.
+// The cap holds, as it does for people taking a role themselves: to swap
+// someone into a full role, take someone out first. actor is "web:<id>".
+func (s *Store) PutInSheetRole(eventID, roleID int64, userID, actor string) error {
+	tx, err := s.beginSheetRoleChange(eventID, userID)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var capacity int
+	err = tx.QueryRow(`SELECT capacity FROM sheet_roles WHERE id = ? AND event_id = ? AND removed_at = 0`,
+		roleID, eventID).Scan(&capacity)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("read sheet role: %w", err)
+	}
+	var in int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM sheet_role_signups
+		WHERE role_id = ? AND discord_user_id = ? AND left_at = 0`, roleID, userID).Scan(&in); err != nil {
+		return fmt.Errorf("read sheet role signup: %w", err)
+	}
+	if in > 0 {
+		return ErrAlreadyInSheetRole
+	}
+	if err := joinSheetRoleTx(tx, eventID, roleID, capacity, userID, "", actor, now()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// TakeOutOfSheetRole takes someone out of a role on an organizer's say-so.
+// Unlike taking a role, it works whether or not the person is still going
+// and whether or not the event is over. actor is "web:<id>".
+func (s *Store) TakeOutOfSheetRole(eventID, roleID int64, userID, actor string) error {
+	res, err := s.db.Exec(`UPDATE sheet_role_signups SET left_at = ?, left_by = ?
+		WHERE role_id = ? AND event_id = ? AND discord_user_id = ? AND left_at = 0`, now(), actor, roleID, eventID, userID)
+	if err != nil {
+		return fmt.Errorf("take out of sheet role: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotInSheetRole
+	}
+	return nil
 }
 
 // beginSheetRoleChange opens a transaction for someone taking or leaving a
@@ -314,8 +368,10 @@ func (s *Store) beginSheetRoleChange(eventID int64, userID string) (*sql.Tx, err
 	return tx, nil
 }
 
-// joinSheetRoleTx adds someone to a role if it has room.
-func joinSheetRoleTx(tx *sql.Tx, eventID, roleID int64, capacity int, userID, source string, ts int64) error {
+// joinSheetRoleTx adds someone to a role if it has room. joinedBy is ""
+// when they take it themselves or the spreadsheet copies it, and
+// "web:<id>" when an organizer puts them in.
+func joinSheetRoleTx(tx *sql.Tx, eventID, roleID int64, capacity int, userID, source, joinedBy string, ts int64) error {
 	if capacity > 0 {
 		var taken int
 		if err := tx.QueryRow(`
@@ -328,8 +384,8 @@ func joinSheetRoleTx(tx *sql.Tx, eventID, roleID int64, capacity int, userID, so
 			return ErrSheetRoleFull
 		}
 	}
-	if _, err := tx.Exec(`INSERT INTO sheet_role_signups (role_id, event_id, discord_user_id, source, joined_at)
-		VALUES (?,?,?,?,?)`, roleID, eventID, userID, source, ts); err != nil {
+	if _, err := tx.Exec(`INSERT INTO sheet_role_signups (role_id, event_id, discord_user_id, source, joined_at, joined_by)
+		VALUES (?,?,?,?,?,?)`, roleID, eventID, userID, source, ts, joinedBy); err != nil {
 		return fmt.Errorf("join sheet role: %w", err)
 	}
 	return nil
@@ -436,6 +492,9 @@ func (s *Server) handleSheetRoleButton(w http.ResponseWriter, action string, eve
 type sheetRolePage struct {
 	SheetRole
 	People []Signup
+	// Others are the people going who are not in it, whom an organizer
+	// may put in it, in signup order.
+	Others []Signup
 	// Mine is whether the viewer is in it.
 	Mine bool
 }
@@ -473,6 +532,11 @@ func sheetRolePages(roles []SheetRole, going []Signup, viewerID string) []sheetR
 		page := sheetRolePage{SheetRole: r, Mine: r.Has(viewerID)}
 		for _, id := range r.Members {
 			page.People = append(page.People, people[id])
+		}
+		for _, sg := range going {
+			if !r.Has(sg.DiscordUserID) {
+				page.Others = append(page.Others, sg)
+			}
 		}
 		out = append(out, page)
 	}
@@ -545,6 +609,71 @@ func (s *Server) handleWebSheetRoleRemove(w http.ResponseWriter, r *http.Request
 	s.redirectWithNotice(w, r, ev.ID, "Took the role off the event.")
 }
 
+// handleWebPutInSheetRole puts someone going into a role, for an organizer.
+func (s *Server) handleWebPutInSheetRole(w http.ResponseWriter, r *http.Request) {
+	s.organizerSheetRoleChange(w, r, true)
+}
+
+// handleWebTakeOutOfSheetRole takes someone out of a role, for an organizer.
+func (s *Server) handleWebTakeOutOfSheetRole(w http.ResponseWriter, r *http.Request) {
+	s.organizerSheetRoleChange(w, r, false)
+}
+
+// organizerSheetRoleChange puts discord_user_id into role_id, or takes them
+// out of it, on the say-so of whoever may edit the event.
+func (s *Server) organizerSheetRoleChange(w http.ResponseWriter, r *http.Request, putIn bool) {
+	session := s.requireSession(w, r)
+	if session == nil {
+		return
+	}
+	ev, canManage := s.webEvent(w, r, session)
+	if ev == nil {
+		return
+	}
+	if !canManage {
+		http.Error(w, "you cannot edit this event", http.StatusForbidden)
+		return
+	}
+	roleID, err := strconv.ParseInt(r.FormValue("role_id"), 10, 64)
+	if err != nil {
+		http.Error(w, "role_id must be an integer", http.StatusBadRequest)
+		return
+	}
+	userID := strings.TrimSpace(r.FormValue("discord_user_id"))
+	if userID == "" {
+		http.Error(w, "discord_user_id is required", http.StatusBadRequest)
+		return
+	}
+	actor := "web:" + session.DiscordUserID
+	if putIn {
+		err = s.store.PutInSheetRole(ev.ID, roleID, userID, actor)
+	} else {
+		err = s.store.TakeOutOfSheetRole(ev.ID, roleID, userID, actor)
+	}
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrNotGoing):
+			s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: roles are for people going, and they are not.")
+		case errors.Is(err, ErrSheetRoleFull):
+			s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: that role is full. Take someone out of it first.")
+		case errors.Is(err, ErrNotFound), errors.Is(err, ErrSheetRolesOff), errors.Is(err, ErrSheetRolesClosed),
+			errors.Is(err, ErrAlreadyInSheetRole), errors.Is(err, ErrNotInSheetRole):
+			s.redirectWithNotice(w, r, ev.ID, sheetRoleRefusal(err))
+		default:
+			log.Printf("[discord-signup] organizer role change event=%d role=%d user=%s: %v", ev.ID, roleID, userID, err)
+			s.redirectWithNotice(w, r, ev.ID, sheetRoleRefusal(err))
+		}
+		return
+	}
+	s.inBackground(func() { s.syncAfterChange(ev.ID, nil) })
+	role, _ := sheetRoleOf(ev.Roles, roleID)
+	if putIn {
+		s.redirectWithNotice(w, r, ev.ID, "Put them in "+role.Name+".")
+		return
+	}
+	s.redirectWithNotice(w, r, ev.ID, "Took them out of "+role.Name+".")
+}
+
 // handleWebMySheetRole takes or leaves a role for the viewer, from either
 // event page.
 func (s *Server) handleWebMySheetRole(w http.ResponseWriter, r *http.Request) {
@@ -586,6 +715,7 @@ type SheetRoleHistoryRow struct {
 	At            int64
 	LeftAt        int64
 	By            string // who added the role, or who took them out of it
+	JoinedBy      string // who put them in it: "" for themselves or the spreadsheet
 	RemovedAt     int64
 	RemovedBy     string
 }
@@ -594,11 +724,11 @@ type SheetRoleHistoryRow struct {
 // took one, oldest first.
 func (s *Store) SheetRoleHistory(eventID int64) ([]SheetRoleHistoryRow, error) {
 	rows, err := s.db.Query(`
-		SELECT r.name, '', '', '', '', r.created_at, 0, r.created_by, r.removed_at, r.removed_by
+		SELECT r.name, '', '', '', '', r.created_at, 0, r.created_by, r.removed_at, r.removed_by, ''
 		FROM sheet_roles r WHERE r.event_id = ?
 		UNION ALL
 		SELECT r.name, m.discord_user_id, COALESCE(s.display_name, ''), COALESCE(n.readable_name, ''), m.source,
-		       m.joined_at, m.left_at, m.left_by, 0, ''
+		       m.joined_at, m.left_at, m.left_by, 0, '', m.joined_by
 		FROM sheet_role_signups m
 		JOIN sheet_roles r ON r.id = m.role_id
 		LEFT JOIN signups s ON s.event_id = m.event_id AND s.discord_user_id = m.discord_user_id
@@ -613,7 +743,7 @@ func (s *Store) SheetRoleHistory(eventID int64) ([]SheetRoleHistoryRow, error) {
 	for rows.Next() {
 		var h SheetRoleHistoryRow
 		if err := rows.Scan(&h.RoleName, &h.DiscordUserID, &h.DisplayName, &h.ReadableName, &h.Source,
-			&h.At, &h.LeftAt, &h.By, &h.RemovedAt, &h.RemovedBy); err != nil {
+			&h.At, &h.LeftAt, &h.By, &h.RemovedAt, &h.RemovedBy, &h.JoinedBy); err != nil {
 			return nil, fmt.Errorf("scan sheet role history: %w", err)
 		}
 		out = append(out, h)
@@ -642,11 +772,16 @@ func sheetRoleLogEntries(history []SheetRoleHistoryRow, names eventLogNames) []e
 		}
 		subject := names.person(h.ReadableName, h.DisplayName, h.DiscordUserID)
 		by := subject
-		if h.Source == potluckSourceSheet {
+		what := "took the role " + role(h.RoleName)
+		switch {
+		case h.Source == potluckSourceSheet:
 			by = muted("copied from the spreadsheet")
+		case h.JoinedBy != "":
+			by = names.actor(h.JoinedBy)
+			what = "was put in the role " + role(h.RoleName)
 		}
 		out = append(out, eventLogEntry{At: h.At, order: 5_000_000 + i, Subject: subject,
-			What: "took the role " + role(h.RoleName), By: by})
+			What: what, By: by})
 		if h.LeftAt == 0 {
 			continue
 		}
@@ -660,8 +795,12 @@ func sheetRoleLogEntries(history []SheetRoleHistoryRow, names eventLogNames) []e
 		default:
 			by = names.actor(h.By)
 		}
+		what = "left the role " + role(h.RoleName)
+		if strings.HasPrefix(h.By, "web:") {
+			what = "was taken out of the role " + role(h.RoleName)
+		}
 		out = append(out, eventLogEntry{At: h.LeftAt, order: 6_000_000 + i, Subject: subject,
-			What: "left the role " + role(h.RoleName), By: by})
+			What: what, By: by})
 	}
 	return out
 }

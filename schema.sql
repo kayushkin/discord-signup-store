@@ -781,7 +781,8 @@ CREATE TABLE IF NOT EXISTS sheet_role_signups (
     source          TEXT NOT NULL DEFAULT '',    -- '' they took it; 'sheet' copied from a spreadsheet
     joined_at       INTEGER NOT NULL,
     left_at         INTEGER NOT NULL DEFAULT 0,  -- 0 = in the role
-    left_by         TEXT NOT NULL DEFAULT ''     -- 'user', 'web:<id>', 'sheet-import' or 'recurrence'
+    left_by         TEXT NOT NULL DEFAULT '',    -- 'user', 'web:<id>', 'sheet-import' or 'recurrence'
+    joined_by       TEXT NOT NULL DEFAULT ''     -- '' they took it or the sheet copied it; 'web:<id>' an organizer put them in
 );
 CREATE INDEX IF NOT EXISTS idx_sheet_role_signups_role ON sheet_role_signups(role_id, left_at);
 CREATE INDEX IF NOT EXISTS idx_sheet_role_signups_event ON sheet_role_signups(event_id, left_at);

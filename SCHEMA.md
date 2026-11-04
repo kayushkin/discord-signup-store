@@ -493,7 +493,7 @@ See `potluck.go`. Only rows of people going are shown or counted, so someone who
 
 ### `sheet_roles` and `sheet_role_signups` — roles, new 2026-10-26; their own switch since 2026-10-30
 
-Roles people going take themselves — setup, teardown, coming for part of the event — not Discord roles (`sheetroles.go`). `sheet_roles`: `id`, `event_id`, `name`, `capacity` (0 for no cap), `created_at`/`created_by`, `removed_at`/`removed_by` (0 while on the sheet). At most 5 live per event. `sheet_role_signups`: `role_id`, `event_id`, `discord_user_id`, `source` (`''` or `sheet`), `joined_at`, `left_at`/`left_by` (`user`, `web:<id>`, `sheet-import`, `recurrence`). Neither is ever deleted; only rows of people going count, and a new date of a repeating event clears the signups and keeps the roles.
+Roles people going take themselves — setup, teardown, coming for part of the event — not Discord roles (`sheetroles.go`). `sheet_roles`: `id`, `event_id`, `name`, `capacity` (0 for no cap), `created_at`/`created_by`, `removed_at`/`removed_by` (0 while on the sheet). At most 5 live per event. `sheet_role_signups`: `role_id`, `event_id`, `discord_user_id`, `source` (`''` or `sheet`), `joined_at`, `joined_by` (`''` when they took it or the spreadsheet copied it, `web:<id>` when an organizer put them in; added 2026-11-03), `left_at`/`left_by` (`user`, `web:<id>`, `sheet-import`, `recurrence`). Neither is ever deleted; only rows of people going count, and a new date of a repeating event clears the signups and keeps the roles.
 
 ### `potluck_sheet_imports` and `potluck_sheet_rows` — a sheet copied from a spreadsheet, new 2026-10-26
 

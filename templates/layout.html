@@ -662,6 +662,10 @@ ol.name-cloud{counter-reset:place}
 ol.name-cloud li::before{counter-increment:place;content:counter(place) ".";font-weight:700;color:var(--dim);margin-right:5px}
 .name-cloud li .pill{margin-left:6px}
 .name-cloud li .small{margin-left:4px}
+/* An organizer's cross beside a name in a role: takes them out of it. */
+.role-take-out{display:inline-flex;margin:0 0 0 5px}
+.role-take-out button{display:inline-flex;align-items:center;padding:2px;border:0;background:none;color:var(--dim);cursor:pointer}
+.role-take-out button:hover,.role-take-out button:focus-visible{color:var(--ink)}
 .member-event{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
 /* The organizer page's narrow-screen order names .event-head; the members'
    page keeps the order it is written in. */

@@ -3,6 +3,7 @@ package discordsignup
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -148,6 +149,77 @@ func TestRolesOnTheEventPagesAndInTheLog(t *testing.T) {
 	}
 	if strings.Contains(page, "/roles/remove") {
 		t.Error("the members' page offers to remove a role")
+	}
+}
+
+// TestAnOrganizerPutsPeopleInRolesAndTakesThemOut: the organizer's page
+// offers each person going for each role and a cross beside each person in
+// one; a full role refuses until someone is taken out; someone not going is
+// refused; a member cannot do either; and the log names the organizer.
+func TestAnOrganizerPutsPeopleInRolesAndTakesThemOut(t *testing.T) {
+	_, store, _, mux, token := webTestServer(t)
+	ev := publishedEvent(t, store, 0, "alice", "member")
+	on := true
+	store.UpdateEvent(ev.ID, EventPatch{RolesEnabled: &on})
+	member, _ := store.CreateWebSession("member", "Member", "", map[string]uint64{"g1": 0})
+	host, err := store.AddSheetRole(ev.ID, "Host", 1, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	roleID := fmt.Sprint(host.ID)
+
+	page := getPage(t, mux, token, eventPath(ev)).Body.String()
+	if !strings.Contains(page, "/roles/put-in") || !strings.Contains(page, `<option value="alice">`) {
+		t.Fatal("the organizer's page does not offer to put someone in the role")
+	}
+	postForm(t, mux, token, eventPath(ev)+"/roles/put-in", url.Values{"role_id": {roleID}, "discord_user_id": {"alice"}})
+	if r := mustEvent(t, store, ev.ID).Roles[0]; !r.Has("alice") {
+		t.Fatal("put-in did not put alice in the role")
+	}
+	page = getPage(t, mux, token, eventPath(ev)).Body.String()
+	if !strings.Contains(page, "/roles/take-out") {
+		t.Fatal("no cross beside alice in the role")
+	}
+	if strings.Contains(page, "Put someone in Host") {
+		t.Error("a full role still offers to put someone in")
+	}
+	if err := store.PutInSheetRole(ev.ID, host.ID, "member", "web:manager"); !errors.Is(err, ErrSheetRoleFull) {
+		t.Fatalf("a second person in a role of 1: err = %v", err)
+	}
+	if err := store.PutInSheetRole(ev.ID, host.ID, "stranger", "web:manager"); !errors.Is(err, ErrNotGoing) {
+		t.Fatalf("someone not going: err = %v", err)
+	}
+
+	// The swap: take alice out, put member in.
+	postForm(t, mux, token, eventPath(ev)+"/roles/take-out", url.Values{"role_id": {roleID}, "discord_user_id": {"alice"}})
+	postForm(t, mux, token, eventPath(ev)+"/roles/put-in", url.Values{"role_id": {roleID}, "discord_user_id": {"member"}})
+	if r := mustEvent(t, store, ev.ID).Roles[0]; r.Has("alice") || !r.Has("member") {
+		t.Fatalf("after the swap the role holds %v", r.Members)
+	}
+	if err := store.TakeOutOfSheetRole(ev.ID, host.ID, "alice", "web:manager"); !errors.Is(err, ErrNotInSheetRole) {
+		t.Fatalf("taking out someone not in it: err = %v", err)
+	}
+
+	for _, path := range []string{"/roles/put-in", "/roles/take-out"} {
+		req := httptest.NewRequest("POST", eventPath(ev)+path,
+			strings.NewReader(url.Values{"role_id": {roleID}, "discord_user_id": {"member"}}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: member.Token})
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code < 400 {
+			t.Errorf("a member's POST %s = %d, want refused", path, rec.Code)
+		}
+	}
+	if r := mustEvent(t, store, ev.ID).Roles[0]; !r.Has("member") {
+		t.Fatal("a member's request changed the role")
+	}
+
+	page = getPage(t, mux, token, eventPath(ev)).Body.String()
+	for _, want := range []string{"was put in the role 🙋 Host", "was taken out of the role 🙋 Host"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the log lacks %q", want)
+		}
 	}
 }
 

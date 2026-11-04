@@ -490,6 +490,9 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// The organizer's request a potluck item answers; 0 for none. See
 	// potluckrequests.go.
 	{"potluck_items", "request_id", "INTEGER NOT NULL DEFAULT 0"},
+	// Who put someone in a role: '' when they took it themselves or the
+	// spreadsheet copied it, 'web:<id>' for an organizer. See sheetroles.go.
+	{"sheet_role_signups", "joined_by", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // ensureColumns applies every ALTER that a pre-existing database is missing.

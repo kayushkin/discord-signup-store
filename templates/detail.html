@@ -515,8 +515,22 @@
           <input type="hidden" name="role_id" value="{{.ID}}">
           <button class="btn-sm danger" aria-label="Remove the role {{.Name}}" title="Remove the role">{{template "cross"}}</button></form>
       </div>
-      {{if .People}}<ul class="name-cloud">{{range .People}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}</li>{{end}}</ul>
+      {{$role := .}}
+      {{if .People}}<ul class="name-cloud">{{range .People}}<li>{{person .ReadableName .DisplayName .DiscordUserID}}
+        <form method="post" action="/events/{{$ev.ID}}/roles/take-out" data-async class="role-take-out">
+          <input type="hidden" name="role_id" value="{{$role.ID}}"><input type="hidden" name="discord_user_id" value="{{.DiscordUserID}}">
+          <button aria-label="Take them out of {{$role.Name}}" title="Take out of {{$role.Name}}">{{template "cross"}}</button></form></li>{{end}}</ul>
       {{else}}<p class="empty">Nobody yet.</p>{{end}}
+      {{if and $.Roles.TakesAnswers .Others (not .Full)}}
+      <form method="post" action="/events/{{$ev.ID}}/roles/put-in" data-async class="potluck-add">
+        <input type="hidden" name="role_id" value="{{.ID}}">
+        <select name="discord_user_id" aria-label="Someone going to put in {{.Name}}" required>
+          <option value="">Put someone in {{.Name}}…</option>
+          {{range .Others}}<option value="{{.DiscordUserID}}">{{if .ReadableName}}{{.ReadableName}}{{else if .DisplayName}}{{.DisplayName}}{{else}}{{.DiscordUserID}}{{end}}</option>{{end}}
+        </select>
+        <button class="btn-sm">Put in</button>
+      </form>
+      {{end}}
     </div>
     {{end}}
     <details class="fold" id="roles-setup" data-remember{{if not .Roles}} open{{end}}>
