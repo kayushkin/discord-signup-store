@@ -43,14 +43,14 @@ func TestARoleTakesPeopleGoingUpToItsCap(t *testing.T) {
 	}
 
 	ev = mustEvent(t, store, ev.ID)
-	if got := sheetRolesLine(ev.Roles); got != "🙋 Setup (6:00) 2/2" {
+	if got := sheetRolesLine(ev.Roles); got != "🎯 Setup (6:00) 2/2" {
 		t.Errorf("roles line = %q", got)
 	}
 	card := renderSignupMessage(ev, nil)
 	if !strings.Contains(fmt.Sprint(card["components"]), sheetRoleCustomID(sheetRoleCardPrefix, ev.ID, setup.ID)) {
 		t.Error("the card has no button for the role")
 	}
-	if !strings.Contains(card["content"].(string), "🙋 **Setup (6:00)** 2/2: <@bo>, <@cy>") {
+	if !strings.Contains(card["content"].(string), "🎯 **Setup (6:00)** 2/2: <@bo>, <@cy>") {
 		t.Errorf("card does not list the role:\n%s", card["content"])
 	}
 
@@ -152,7 +152,7 @@ func TestRolesOnTheEventPagesAndInTheLog(t *testing.T) {
 	}
 	postForm(t, mux, member.Token, eventPath(ev)+"/roles/toggle", url.Values{"role_id": {fmt.Sprint(role.ID)}})
 	organizerPage := getPage(t, mux, token, eventPath(ev)).Body.String()
-	for _, want := range []string{"added the role 🙋 Setup (6:00)", "took the role 🙋 Setup (6:00)"} {
+	for _, want := range []string{"added the role 🎯 Setup (6:00)", "took the role 🎯 Setup (6:00)"} {
 		if !strings.Contains(organizerPage, want) {
 			t.Errorf("the log lacks %q", want)
 		}
@@ -226,7 +226,7 @@ func TestAnOrganizerPutsPeopleInRolesAndTakesThemOut(t *testing.T) {
 	}
 
 	page = getPage(t, mux, token, eventPath(ev)).Body.String()
-	for _, want := range []string{"was put in the role 🙋 Host", "was taken out of the role 🙋 Host"} {
+	for _, want := range []string{"was put in the role 🎯 Host", "was taken out of the role 🎯 Host"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the log lacks %q", want)
 		}
@@ -334,6 +334,77 @@ func TestAPotluckThatHadRolesKeepsThemOn(t *testing.T) {
 	}{{withRoles, true}, {withoutRoles, false}, {sheetOff, false}} {
 		if got := mustEvent(t, store, c.ev.ID).RolesEnabled; got != c.want {
 			t.Errorf("event %d roles on = %v, want %v", c.ev.ID, got, c.want)
+		}
+	}
+}
+
+// TestAnOrganizerChangesARolesEmojiAndCap: new roles take the defaults in
+// order, an organizer picks another emoji and a new cap on the event page,
+// an emoji not offered is refused, lowering the cap takes nobody out, the
+// card shows the emoji, and the log says what changed.
+func TestAnOrganizerChangesARolesEmojiAndCap(t *testing.T) {
+	_, store, _, mux, token := webTestServer(t)
+	ev := publishedEvent(t, store, 0, "alice", "member")
+	on := true
+	store.UpdateEvent(ev.ID, EventPatch{RolesEnabled: &on})
+	first, _ := store.AddSheetRole(ev.ID, "Players", 12, "test")
+	second, _ := store.AddSheetRole(ev.ID, "Host", 2, "test")
+	if first.Emoji != sheetRoleEmojiDefaults()[0] || second.Emoji != sheetRoleEmojiDefaults()[1] {
+		t.Fatalf("defaults = %q, %q", first.Emoji, second.Emoji)
+	}
+	store.ToggleSheetRole(ev.ID, second.ID, "alice")
+	store.ToggleSheetRole(ev.ID, second.ID, "member")
+
+	page := getPage(t, mux, token, eventPath(ev)).Body.String()
+	if !strings.Contains(page, "/roles/edit") || !strings.Contains(page, `value="🎤"`) {
+		t.Fatal("the organizer's page offers no way to edit a role")
+	}
+	postForm(t, mux, token, eventPath(ev)+"/roles/edit",
+		url.Values{"role_id": {fmt.Sprint(second.ID)}, "emoji": {"🎤"}, "capacity": {"1"}})
+	host := mustEvent(t, store, ev.ID).Roles[1]
+	if host.Emoji != "🎤" || host.Capacity != 1 || len(host.Members) != 2 {
+		t.Fatalf("after the edit host = %+v; want 🎤, cap 1, both still in it", host)
+	}
+	if _, err := store.EditSheetRole(ev.ID, second.ID, "not-an-emoji", 1, "web:manager"); !errors.Is(err, ErrInvalidSheetRole) {
+		t.Fatalf("an emoji not offered: err = %v", err)
+	}
+	if changed, err := store.EditSheetRole(ev.ID, second.ID, "🎤", 1, "web:manager"); err != nil || len(changed) != 0 {
+		t.Fatalf("saving the same values = %v, %v; want nothing changed", changed, err)
+	}
+	card := renderSignupMessage(mustEvent(t, store, ev.ID), nil)
+	if !strings.Contains(card["content"].(string), "🎤 **Host** 2/1") || !strings.Contains(fmt.Sprint(card["components"]), "🎤") {
+		t.Errorf("the card does not show the new emoji:\n%s\n%v", card["content"], card["components"])
+	}
+	page = getPage(t, mux, token, eventPath(ev)).Body.String()
+	for _, want := range []string{"changed 🎤 Host's emoji from ⭐ to 🎤", "changed 🎤 Host's cap from 2 to 1"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the log lacks %q", want)
+		}
+	}
+}
+
+// TestRolesFromBeforeEmojisTakeTheDefaultsInOrder: the backfill numbers each
+// event's roles by the order they were added.
+func TestRolesFromBeforeEmojisTakeTheDefaultsInOrder(t *testing.T) {
+	store := testStore(t)
+	ev := potluckEvent(t, store, "ann")
+	switchRolesOn(t, store, ev.ID)
+	a, _ := store.AddSheetRole(ev.ID, "A", 0, "test")
+	b, _ := store.AddSheetRole(ev.ID, "B", 0, "test")
+	other := potluckEvent(t, store, "bo")
+	c, _ := store.AddSheetRole(other.ID, "C", 0, "test")
+	if _, err := store.db.Exec(`UPDATE sheet_roles SET emoji = ''`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(sheetRoleEmojiBackfill()); err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+	want := map[int64]string{a.ID: sheetRoleEmojiDefaults()[0], b.ID: sheetRoleEmojiDefaults()[1], c.ID: sheetRoleEmojiDefaults()[0]}
+	for id, emoji := range want {
+		var got string
+		store.db.QueryRow(`SELECT emoji FROM sheet_roles WHERE id = ?`, id).Scan(&got)
+		if got != emoji {
+			t.Errorf("role %d emoji = %q, want %q", id, got, emoji)
 		}
 	}
 }

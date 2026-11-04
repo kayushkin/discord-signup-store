@@ -207,7 +207,7 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 		actors = append(actors, h.RemovedBy)
 	}
 	for _, h := range roleHistory {
-		actors = append(actors, h.By, h.RemovedBy)
+		actors = append(actors, h.By, h.RemovedBy, h.JoinedBy)
 	}
 	for _, h := range requestHistory {
 		actors = append(actors, h.CreatedBy, h.RemovedBy)

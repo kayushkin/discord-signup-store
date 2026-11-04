@@ -681,6 +681,21 @@ ol.name-cloud li::before{counter-increment:place;content:counter(place) ".";font
 .name-cloud li.me .role-take-out button{color:var(--paper-light);opacity:.75}
 .name-cloud li.me .role-take-out button:hover,.name-cloud li.me .role-take-out button:focus-visible{opacity:1;color:var(--paper-light)}
 .role-mine{font-size:13px;font-weight:700;color:var(--ok)}
+/* An organizer's edit of a role: a grid of emojis to pick one from, then the cap. */
+.sheet-role details.role-edit{margin:6px 0 0;padding:0;border:0}
+.sheet-role details.role-edit>summary{font-size:13px;padding:2px 0;color:var(--dim)}
+.role-edit-form{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:6px 0 4px}
+.role-edit-form .hint{margin:0}
+.emoji-choices{display:flex;flex-wrap:wrap;gap:4px;border:0;margin:0;padding:0}
+.emoji-choices legend{font-size:13px;font-weight:700;margin-bottom:4px}
+label.emoji-choice{display:inline-block;margin:0;cursor:pointer}
+.emoji-choice input{position:absolute;opacity:0;width:1px;height:1px}
+.emoji-choice span{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;font-size:19px;
+  border:1.5px solid transparent;border-radius:4px}
+.emoji-choice input:checked+span{border-color:var(--ink);background:var(--paper-light);box-shadow:2px 2px 0 var(--ink)}
+.emoji-choice input:focus-visible+span{outline:2px solid var(--blue);outline-offset:1px}
+label.role-cap{display:flex;align-items:center;gap:8px;margin:0;font-size:13px;font-weight:700;text-transform:none;letter-spacing:normal}
+.role-cap input{width:6em}
 .member-event{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
 /* The organizer page's narrow-screen order names .event-head; the members'
    page keeps the order it is written in. */

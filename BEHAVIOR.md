@@ -192,8 +192,10 @@ reminder DMs and Discord's own event list what is still asked for.
 **Roles** are a switch of their own on the event page, apart from the
 potluck sheet, so an event can have either, both or neither. With roles on,
 an organizer can add up to five — setup, teardown, coming for part of it —
-each with an optional cap, and the card lists them under **🙋 Roles** with
-who is in each. Anyone going takes one, or leaves it, with its own button
+each with an optional cap and an emoji, and the card lists them under
+**🙋 Roles** with who is in each. A new role takes the next of the default
+emojis; an organizer can pick another from the event page's list, and change
+the cap there, where lowering it takes nobody out. Anyone going takes one, or leaves it, with its own button
 on the card, in the What I'm bringing view when there is a sheet, or on the
 event page; a full role refuses. On the event page a role you are in says
 *You're in*, and your own name tag in it is filled in and marked *you*; the

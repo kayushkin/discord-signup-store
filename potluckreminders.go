@@ -332,7 +332,7 @@ func potluckForumNudge(ev *Event, organizer string, roster, unanswered []Signup)
 		for i, id := range r.Members {
 			people[i] = names[id]
 		}
-		roles += fmt.Sprintf("\n**%s %s** %s", sheetRoleEmoji, r.Name, r.Count())
+		roles += fmt.Sprintf("\n**%s %s** %s", r.Emoji, r.Name, r.Count())
 		if len(people) > 0 {
 			roles += ": " + strings.Join(people, ", ")
 		}

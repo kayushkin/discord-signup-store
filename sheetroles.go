@@ -32,8 +32,62 @@ const (
 	sheetRolesPerEvent = 5
 	sheetRoleNameLimit = 40
 	sheetRoleCapLimit  = 999
-	sheetRoleEmoji     = "🙋"
+	// sheetRoleEmoji heads the roles on every surface; each role has its
+	// own emoji besides.
+	sheetRoleEmoji = "🙋"
 )
+
+// sheetRoleEmojiChoices are the emojis an organizer can give a role: plain
+// Unicode emoji with no variation selector, which Discord takes on a button.
+// The first sheetRolesPerEvent are the defaults, given in this order to the
+// roles of an event as they are added.
+var sheetRoleEmojiChoices = []string{
+	"🎯", "⭐", "🎉", "🎁", "🎨",
+	"🙋", "🎤", "🎮", "🎲", "🎬", "🎭", "🎵", "🎸", "🏆", "👑", "💃", "🕺", "👀",
+	"🍿", "📣", "📸", "🧠", "💡", "🔥", "🌟", "🎈", "🍕", "🍻", "🧹", "🔧",
+	"🚗", "🛒", "🍳", "🧊", "🃏", "🧩", "⚽", "🏀", "🐶", "🦀", "🤖", "👋", "😎", "🤠",
+}
+
+// sheetRoleEmojiDefaults are the first few choices, in the order new roles
+// take them.
+func sheetRoleEmojiDefaults() []string { return sheetRoleEmojiChoices[:sheetRolesPerEvent] }
+
+// nextSheetRoleEmoji is the first default no live role on the event has, or
+// the first default when every one is taken.
+func nextSheetRoleEmoji(roles []SheetRole) string {
+	used := map[string]bool{}
+	for _, r := range roles {
+		used[r.Emoji] = true
+	}
+	for _, e := range sheetRoleEmojiDefaults() {
+		if !used[e] {
+			return e
+		}
+	}
+	return sheetRoleEmojiDefaults()[0]
+}
+
+// sheetRoleEmojiBackfill gives roles from before emojis the defaults, by
+// the order each event's roles were added.
+func sheetRoleEmojiBackfill() string {
+	cases := ""
+	for i, e := range sheetRoleEmojiDefaults() {
+		cases += fmt.Sprintf(" WHEN %d THEN '%s'", i, e)
+	}
+	return `UPDATE sheet_roles SET emoji = (SELECT CASE ((x.n - 1) % ` + strconv.Itoa(sheetRolesPerEvent) + `)` + cases + ` END
+		FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY event_id ORDER BY id) AS n FROM sheet_roles) x
+		WHERE x.id = sheet_roles.id) WHERE emoji = ''`
+}
+
+// isSheetRoleEmojiChoice says whether an emoji is one a role may have.
+func isSheetRoleEmojiChoice(emoji string) bool {
+	for _, e := range sheetRoleEmojiChoices {
+		if e == emoji {
+			return true
+		}
+	}
+	return false
+}
 
 // ErrSheetRoleFull is taking a role that has no room.
 var ErrSheetRoleFull = errors.New("that role is full")
@@ -60,6 +114,7 @@ type SheetRole struct {
 	ID       int64  `json:"id"`
 	EventID  int64  `json:"event_id"`
 	Name     string `json:"name"`
+	Emoji    string `json:"emoji"`
 	Capacity int    `json:"capacity"`
 	// Members are the Discord user ids of the people going in it, in the
 	// order they took it.
@@ -95,9 +150,9 @@ func sheetRolesLine(roles []SheetRole) string {
 	}
 	parts := make([]string, len(roles))
 	for i, r := range roles {
-		parts[i] = r.Name + " " + r.Count()
+		parts[i] = r.Emoji + " " + r.Name + " " + r.Count()
 	}
-	return sheetRoleEmoji + " " + strings.Join(parts, " · ")
+	return strings.Join(parts, " · ")
 }
 
 // sheetRoleOf finds one role by id.
@@ -122,7 +177,7 @@ func writeSheetRolesSection(b *strings.Builder, roles []SheetRole, open bool) {
 	}
 	b.WriteString("\n")
 	for _, r := range roles {
-		fmt.Fprintf(b, "%s **%s** %s", sheetRoleEmoji, r.Name, r.Count())
+		fmt.Fprintf(b, "%s **%s** %s", r.Emoji, r.Name, r.Count())
 		if len(r.Members) > 0 {
 			mentions := make([]string, len(r.Members))
 			for i, id := range r.Members {
@@ -152,7 +207,7 @@ func sheetRoleRefusal(err error) string {
 
 // readSheetRoles reads an event's live roles and the people going in each.
 func (s *Store) readSheetRoles(eventID int64) ([]SheetRole, error) {
-	rows, err := s.db.Query(`SELECT id, event_id, name, capacity FROM sheet_roles
+	rows, err := s.db.Query(`SELECT id, event_id, name, emoji, capacity FROM sheet_roles
 		WHERE event_id = ? AND removed_at = 0 ORDER BY id`, eventID)
 	if err != nil {
 		return nil, fmt.Errorf("read sheet roles: %w", err)
@@ -161,7 +216,7 @@ func (s *Store) readSheetRoles(eventID int64) ([]SheetRole, error) {
 	index := map[int64]int{}
 	for rows.Next() {
 		var r SheetRole
-		if err := rows.Scan(&r.ID, &r.EventID, &r.Name, &r.Capacity); err != nil {
+		if err := rows.Scan(&r.ID, &r.EventID, &r.Name, &r.Emoji, &r.Capacity); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("scan sheet role: %w", err)
 		}
@@ -216,8 +271,9 @@ func (s *Store) AddSheetRole(eventID int64, name string, capacity int, actor str
 			return nil, fmt.Errorf("%w: there is already a role called %s", ErrInvalidSheetRole, r.Name)
 		}
 	}
-	res, err := s.db.Exec(`INSERT INTO sheet_roles (event_id, name, capacity, created_at, created_by) VALUES (?,?,?,?,?)`,
-		eventID, name, capacity, now(), actor)
+	emoji := nextSheetRoleEmoji(roles)
+	res, err := s.db.Exec(`INSERT INTO sheet_roles (event_id, name, emoji, capacity, created_at, created_by) VALUES (?,?,?,?,?,?)`,
+		eventID, name, emoji, capacity, now(), actor)
 	if err != nil {
 		return nil, fmt.Errorf("add sheet role: %w", err)
 	}
@@ -225,7 +281,7 @@ func (s *Store) AddSheetRole(eventID int64, name string, capacity int, actor str
 	if err != nil {
 		return nil, fmt.Errorf("read sheet role id: %w", err)
 	}
-	return &SheetRole{ID: id, EventID: eventID, Name: name, Capacity: capacity, Members: []string{}}, nil
+	return &SheetRole{ID: id, EventID: eventID, Name: name, Emoji: emoji, Capacity: capacity, Members: []string{}}, nil
 }
 
 // RemoveSheetRole takes a role off an event's sheet. Who was in it stays in
@@ -240,6 +296,62 @@ func (s *Store) RemoveSheetRole(eventID, roleID int64, actor string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// EditSheetRole changes a role's emoji and cap, recording each change in
+// sheet_role_updates. Lowering the cap takes nobody out: the role is over
+// its cap until people leave, as an event over its limit is. Returns which
+// fields changed.
+func (s *Store) EditSheetRole(eventID, roleID int64, emoji string, capacity int, actor string) ([]string, error) {
+	if !isSheetRoleEmojiChoice(emoji) {
+		return nil, fmt.Errorf("%w: pick one of the emojis offered", ErrInvalidSheetRole)
+	}
+	if capacity < 0 || capacity > sheetRoleCapLimit {
+		return nil, fmt.Errorf("%w: a role's cap is 0, for none, to %d", ErrInvalidSheetRole, sheetRoleCapLimit)
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback()
+	var oldEmoji string
+	var oldCapacity int
+	err = tx.QueryRow(`SELECT emoji, capacity FROM sheet_roles WHERE id = ? AND event_id = ? AND removed_at = 0`,
+		roleID, eventID).Scan(&oldEmoji, &oldCapacity)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read sheet role: %w", err)
+	}
+	ts := now()
+	var changed []string
+	record := func(field, from, to string) error {
+		_, err := tx.Exec(`INSERT INTO sheet_role_updates (role_id, event_id, field, from_value, to_value, actor, at)
+			VALUES (?,?,?,?,?,?,?)`, roleID, eventID, field, from, to, actor, ts)
+		if err != nil {
+			return fmt.Errorf("record sheet role %s change: %w", field, err)
+		}
+		changed = append(changed, field)
+		return nil
+	}
+	if emoji != oldEmoji {
+		if err := record("emoji", oldEmoji, emoji); err != nil {
+			return nil, err
+		}
+	}
+	if capacity != oldCapacity {
+		if err := record("capacity", strconv.Itoa(oldCapacity), strconv.Itoa(capacity)); err != nil {
+			return nil, err
+		}
+	}
+	if len(changed) == 0 {
+		return nil, nil
+	}
+	if _, err := tx.Exec(`UPDATE sheet_roles SET emoji = ?, capacity = ? WHERE id = ?`, emoji, capacity, roleID); err != nil {
+		return nil, fmt.Errorf("edit sheet role: %w", err)
+	}
+	return changed, tx.Commit()
 }
 
 // ToggleSheetRole puts someone going into a role, or takes them out of it if
@@ -427,7 +539,7 @@ func sheetRoleButtons(ev *Event, prefix, viewerID string) []any {
 		}
 		buttons = append(buttons, map[string]any{
 			"type": componentTypeButton, "style": style, "label": truncate(label, 80),
-			"emoji": map[string]any{"name": sheetRoleEmoji}, "custom_id": sheetRoleCustomID(prefix, ev.ID, r.ID),
+			"emoji": map[string]any{"name": r.Emoji}, "custom_id": sheetRoleCustomID(prefix, ev.ID, r.ID),
 		})
 	}
 	return buttons
@@ -509,6 +621,8 @@ type sheetRolesPage struct {
 	// ViewerID marks the viewer's own name tag, which carries their way
 	// out of the role.
 	ViewerID string
+	// EmojiChoices are the emojis an organizer may give a role.
+	EmojiChoices []string
 }
 
 // sheetRolesPageOf builds the roles section; nil when roles are off.
@@ -516,7 +630,8 @@ func sheetRolesPageOf(ev *Event, going []Signup, viewerID string) *sheetRolesPag
 	if !ev.RolesEnabled {
 		return nil
 	}
-	page := &sheetRolesPage{Roles: sheetRolePages(ev.Roles, going, viewerID), TakesAnswers: sheetRolesTakeAnswers(ev), ViewerID: viewerID}
+	page := &sheetRolesPage{Roles: sheetRolePages(ev.Roles, going, viewerID), TakesAnswers: sheetRolesTakeAnswers(ev), ViewerID: viewerID,
+		EmojiChoices: sheetRoleEmojiChoices}
 	for _, sg := range going {
 		if sg.DiscordUserID == viewerID {
 			page.ViewerGoing = true
@@ -610,6 +725,48 @@ func (s *Server) handleWebSheetRoleRemove(w http.ResponseWriter, r *http.Request
 	}
 	s.inBackground(func() { s.syncAfterChange(ev.ID, nil) })
 	s.redirectWithNotice(w, r, ev.ID, "Took the role off the event.")
+}
+
+// handleWebEditSheetRole changes a role's emoji and cap, for an organizer.
+func (s *Server) handleWebEditSheetRole(w http.ResponseWriter, r *http.Request) {
+	session := s.requireSession(w, r)
+	if session == nil {
+		return
+	}
+	ev, canManage := s.webEvent(w, r, session)
+	if ev == nil {
+		return
+	}
+	if !canManage {
+		http.Error(w, "you cannot edit this event", http.StatusForbidden)
+		return
+	}
+	roleID, err := strconv.ParseInt(r.FormValue("role_id"), 10, 64)
+	if err != nil {
+		http.Error(w, "role_id must be an integer", http.StatusBadRequest)
+		return
+	}
+	capacity := 0
+	if text := strings.TrimSpace(r.FormValue("capacity")); text != "" {
+		if capacity, err = strconv.Atoi(text); err != nil {
+			s.redirectWithNotice(w, r, ev.ID, "Nothing was changed: the cap must be a whole number, or empty for none.")
+			return
+		}
+	}
+	changed, err := s.store.EditSheetRole(ev.ID, roleID, r.FormValue("emoji"), capacity, "web:"+session.DiscordUserID)
+	if err != nil {
+		if !errors.Is(err, ErrInvalidSheetRole) && !errors.Is(err, ErrNotFound) {
+			log.Printf("[discord-signup] edit role %d of %d: %v", roleID, ev.ID, err)
+		}
+		s.redirectWithNotice(w, r, ev.ID, sheetRoleRefusal(err))
+		return
+	}
+	if len(changed) == 0 {
+		s.redirectWithNotice(w, r, ev.ID, "Nothing to change.")
+		return
+	}
+	s.inBackground(func() { s.syncAfterChange(ev.ID, nil) })
+	s.redirectWithNotice(w, r, ev.ID, "Saved the role.")
 }
 
 // handleWebPutInSheetRole puts someone going into a role, for an organizer.
@@ -721,23 +878,32 @@ type SheetRoleHistoryRow struct {
 	JoinedBy      string // who put them in it: "" for themselves or the spreadsheet
 	RemovedAt     int64
 	RemovedBy     string
+	RoleEmoji     string // the role's emoji now
+	// Field, FromValue and ToValue are set on an organizer's edit of the
+	// role ("emoji" or "capacity"), whose By is the organizer.
+	Field, FromValue, ToValue string
 }
 
 // SheetRoleHistory is every role an event has had and everyone who
 // took one, oldest first.
 func (s *Store) SheetRoleHistory(eventID int64) ([]SheetRoleHistoryRow, error) {
 	rows, err := s.db.Query(`
-		SELECT r.name, '', '', '', '', r.created_at, 0, r.created_by, r.removed_at, r.removed_by, ''
+		SELECT r.name, '', '', '', '', r.created_at, 0, r.created_by, r.removed_at, r.removed_by, '', r.emoji, '', '', ''
 		FROM sheet_roles r WHERE r.event_id = ?
 		UNION ALL
 		SELECT r.name, m.discord_user_id, COALESCE(s.display_name, ''), COALESCE(n.readable_name, ''), m.source,
-		       m.joined_at, m.left_at, m.left_by, 0, '', m.joined_by
+		       m.joined_at, m.left_at, m.left_by, 0, '', m.joined_by, r.emoji, '', '', ''
 		FROM sheet_role_signups m
 		JOIN sheet_roles r ON r.id = m.role_id
 		LEFT JOIN signups s ON s.event_id = m.event_id AND s.discord_user_id = m.discord_user_id
 		LEFT JOIN readable_names n ON n.discord_user_id = m.discord_user_id
 		WHERE m.event_id = ?
-		ORDER BY 6`, eventID, eventID)
+		UNION ALL
+		SELECT r.name, '', '', '', '', u.at, 0, u.actor, 0, '', '', r.emoji, u.field, u.from_value, u.to_value
+		FROM sheet_role_updates u
+		JOIN sheet_roles r ON r.id = u.role_id
+		WHERE u.event_id = ?
+		ORDER BY 6`, eventID, eventID, eventID)
 	if err != nil {
 		return nil, fmt.Errorf("read sheet role history: %w", err)
 	}
@@ -746,7 +912,8 @@ func (s *Store) SheetRoleHistory(eventID int64) ([]SheetRoleHistoryRow, error) {
 	for rows.Next() {
 		var h SheetRoleHistoryRow
 		if err := rows.Scan(&h.RoleName, &h.DiscordUserID, &h.DisplayName, &h.ReadableName, &h.Source,
-			&h.At, &h.LeftAt, &h.By, &h.RemovedAt, &h.RemovedBy, &h.JoinedBy); err != nil {
+			&h.At, &h.LeftAt, &h.By, &h.RemovedAt, &h.RemovedBy, &h.JoinedBy, &h.RoleEmoji,
+			&h.Field, &h.FromValue, &h.ToValue); err != nil {
 			return nil, fmt.Errorf("scan sheet role history: %w", err)
 		}
 		out = append(out, h)
@@ -754,16 +921,34 @@ func (s *Store) SheetRoleHistory(eventID int64) ([]SheetRoleHistoryRow, error) {
 	return out, rows.Err()
 }
 
+// sheetRoleCapWords is a stored cap as the log says it: "none" for 0.
+func sheetRoleCapWords(value string) template.HTML {
+	if value == "0" {
+		return template.HTML(`<span class="muted">none</span>`)
+	}
+	return template.HTML(template.HTMLEscapeString(value))
+}
+
 // sheetRoleLogEntries are the roles' lines in the event's log.
 func sheetRoleLogEntries(history []SheetRoleHistoryRow, names eventLogNames) []eventLogEntry {
 	muted := func(text string) template.HTML {
 		return template.HTML(`<span class="muted">` + template.HTMLEscapeString(text) + `</span>`)
 	}
-	role := func(name string) template.HTML {
-		return template.HTML(template.HTMLEscapeString(sheetRoleEmoji + " " + name))
-	}
 	var out []eventLogEntry
 	for i, h := range history {
+		role := func(name string) template.HTML {
+			return template.HTML(template.HTMLEscapeString(h.RoleEmoji + " " + name))
+		}
+		if h.Field != "" {
+			what := "changed " + role(h.RoleName) + "'s emoji from " + template.HTML(template.HTMLEscapeString(h.FromValue)) +
+				" to " + template.HTML(template.HTMLEscapeString(h.ToValue))
+			if h.Field == "capacity" {
+				what = "changed " + role(h.RoleName) + "'s cap from " + sheetRoleCapWords(h.FromValue) + " to " + sheetRoleCapWords(h.ToValue)
+			}
+			out = append(out, eventLogEntry{At: h.At, order: 5_000_000 + i, Subject: muted("the roles"),
+				What: what, By: names.actor(h.By)})
+			continue
+		}
 		if h.DiscordUserID == "" {
 			out = append(out, eventLogEntry{At: h.At, order: 5_000_000 + i, Subject: muted("the roles"),
 				What: "added the role " + role(h.RoleName), By: names.actor(h.By)})

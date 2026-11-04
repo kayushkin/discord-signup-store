@@ -493,6 +493,9 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// Who put someone in a role: '' when they took it themselves or the
 	// spreadsheet copied it, 'web:<id>' for an organizer. See sheetroles.go.
 	{"sheet_role_signups", "joined_by", "TEXT NOT NULL DEFAULT ''"},
+	// Each role's emoji, which an organizer can change; a new role takes the
+	// next default. See sheetroles.go.
+	{"sheet_roles", "emoji", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // ensureColumns applies every ALTER that a pre-existing database is missing.
@@ -637,6 +640,9 @@ func dropRetiredTables(db *sql.DB) error {
 // columnBackfills set a column for the rows already there, once, right after
 // ensureColumns adds it; keyed "table.column".
 var columnBackfills = map[string]string{
+	// Roles from before emojis take the defaults in the order each event's
+	// roles were added.
+	"sheet_roles.emoji": sheetRoleEmojiBackfill(),
 	// Roles were part of the potluck sheet until 2026-10-30, so an event
 	// whose sheet was on and had roles keeps them on.
 	"events.roles_enabled": `UPDATE events SET roles_enabled = 1 WHERE potluck_enabled = 1

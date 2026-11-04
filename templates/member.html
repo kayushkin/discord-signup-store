@@ -166,7 +166,7 @@
     {{range .Roles}}
     <div class="sheet-role">
       <div class="sheet-role-head">
-        <strong>{{.Name}}</strong> <span class="badge">{{.Count}}</span>
+        <strong>{{.Emoji}} {{.Name}}</strong> <span class="badge">{{.Count}}</span>
         {{if .Mine}}<span class="role-mine">✓ You're in</span>
         {{else if and $.Roles.TakesAnswers $.Roles.ViewerGoing}}
         <form method="post" action="/events/{{$ev.ID}}/roles/toggle">

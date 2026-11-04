@@ -199,7 +199,7 @@ func potluckPanel(ev *Event, userID string, going bool, note string) map[string]
 		for i, id := range r.Members {
 			mentions[i] = "<@" + id + ">"
 		}
-		fmt.Fprintf(&b, "%s **%s** %s", sheetRoleEmoji, r.Name, r.Count())
+		fmt.Fprintf(&b, "%s **%s** %s", r.Emoji, r.Name, r.Count())
 		if len(mentions) > 0 {
 			b.WriteString(": " + strings.Join(mentions, ", "))
 		}

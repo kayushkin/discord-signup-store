@@ -767,7 +767,8 @@ CREATE TABLE IF NOT EXISTS sheet_roles (
     created_at  INTEGER NOT NULL,
     created_by  TEXT NOT NULL DEFAULT '',
     removed_at  INTEGER NOT NULL DEFAULT 0,      -- 0 = on the sheet
-    removed_by  TEXT NOT NULL DEFAULT ''
+    removed_by  TEXT NOT NULL DEFAULT '',
+    emoji       TEXT NOT NULL DEFAULT ''         -- one of sheetRoleEmojiChoices
 );
 CREATE INDEX IF NOT EXISTS idx_sheet_roles_event ON sheet_roles(event_id, removed_at);
 
@@ -786,6 +787,20 @@ CREATE TABLE IF NOT EXISTS sheet_role_signups (
 );
 CREATE INDEX IF NOT EXISTS idx_sheet_role_signups_role ON sheet_role_signups(role_id, left_at);
 CREATE INDEX IF NOT EXISTS idx_sheet_role_signups_event ON sheet_role_signups(event_id, left_at);
+
+-- sheet_role_updates: each change an organizer made to a role after adding
+-- it — its emoji or its cap. Append-only, as event_updates is.
+CREATE TABLE IF NOT EXISTS sheet_role_updates (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    role_id     INTEGER NOT NULL REFERENCES sheet_roles(id) ON DELETE CASCADE,
+    event_id    INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    field       TEXT NOT NULL,                   -- 'emoji' or 'capacity'
+    from_value  TEXT NOT NULL,
+    to_value    TEXT NOT NULL,
+    actor       TEXT NOT NULL,                   -- 'web:<id>'
+    at          INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sheet_role_updates_event ON sheet_role_updates(event_id, at);
 
 -- potluck_requests: specific things an organizer asked for on the potluck
 -- sheet, each in a category and wanted by how many people. Someone going

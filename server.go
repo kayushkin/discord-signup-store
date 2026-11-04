@@ -249,6 +249,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /events/{id}/roles/remove", s.handleWebSheetRoleRemove)
 	mux.HandleFunc("POST /events/{id}/roles/toggle", s.handleWebMySheetRole)
 	mux.HandleFunc("POST /events/{id}/roles/put-in", s.handleWebPutInSheetRole)
+	mux.HandleFunc("POST /events/{id}/roles/edit", s.handleWebEditSheetRole)
 	mux.HandleFunc("POST /events/{id}/roles/take-out", s.handleWebTakeOutOfSheetRole)
 	mux.HandleFunc("POST /events/{id}/potluck/mine/nothing", s.handleWebMyPotluckNothing)
 	mux.HandleFunc("POST /events/{id}/potluck/mine/remove", s.handleWebMyPotluckRemove)
