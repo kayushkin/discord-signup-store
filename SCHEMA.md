@@ -399,6 +399,15 @@ count; the files stay in the DM), `replied_to` (our DM's id when they used
 Reply), `matched` (`reply`, or `latest` for a plain message put with the
 latest DM in the last 14 days), `at`.
 
+## `dm_handoffs` — people whose DMs another service answers, new 2026-11-04
+
+One row per handoff: `discord_user_id`, `handled_by` (the record that answers
+them, by its owner's id, e.g. an llm-bridge-server chat link), `reason`,
+`since`, `ended_at` (0 while active), `created_at`. At most one active row per
+person (partial unique index). While active, `receiveDMReply` leaves their DMs
+alone, and `DMReplies` leaves out any reply of theirs with `since <= at <
+ended_at`.
+
 ## `roster_watchers` — organizers told by DM who joins and leaves, new 2026-09-26
 
 One row per organizer per event, from the switch on the event's page; turning

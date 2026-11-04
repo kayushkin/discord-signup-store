@@ -836,3 +836,20 @@ CREATE TABLE IF NOT EXISTS event_organisers (
     removed_by      TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_event_organisers_event ON event_organisers(event_id, removed_at);
+
+-- dm_handoffs: a person whose DMs to the bot another service answers, from
+-- since until ended_at (0 while active). While one is active their DMs are not
+-- put with events, and event pages leave out what they wrote in that time.
+-- handled_by names the record that answers them, by its owner's id (for
+-- example an llm-bridge-server chat link).
+CREATE TABLE IF NOT EXISTS dm_handoffs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_user_id TEXT NOT NULL,
+    handled_by      TEXT NOT NULL,
+    reason          TEXT NOT NULL DEFAULT '',
+    since           INTEGER NOT NULL,
+    ended_at        INTEGER NOT NULL DEFAULT 0,
+    created_at      INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_handoffs_active ON dm_handoffs(discord_user_id) WHERE ended_at = 0;

@@ -115,7 +115,8 @@ func (s *Store) RecordDMReply(r DMReply) error {
 }
 
 // DMReplies lists the replies about an event, newest first, each with what
-// they answered.
+// they answered. What someone wrote while their DMs were handed off
+// (dmhandoffs.go) is left out.
 func (s *Store) DMReplies(eventID int64) ([]DMReply, error) {
 	rows, err := s.db.Query(`
 		SELECT r.id, r.event_id, r.discord_user_id, r.display_name, COALESCE(n.readable_name, ''),
@@ -126,7 +127,10 @@ func (s *Store) DMReplies(eventID int64) ([]DMReply, error) {
 		LEFT JOIN event_dms d ON d.message_id = CASE WHEN r.replied_to != '' THEN r.replied_to ELSE
 			(SELECT message_id FROM event_dms WHERE discord_user_id = r.discord_user_id AND event_id = r.event_id
 			 AND sent_at <= r.at ORDER BY sent_at DESC, rowid DESC LIMIT 1) END
-		WHERE r.event_id = ? ORDER BY r.at DESC, r.id DESC`, eventID)
+		WHERE r.event_id = ?
+		  AND NOT EXISTS (SELECT 1 FROM dm_handoffs h WHERE h.discord_user_id = r.discord_user_id
+		      AND r.at >= h.since AND (h.ended_at = 0 OR r.at < h.ended_at))
+		ORDER BY r.at DESC, r.id DESC`, eventID)
 	if err != nil {
 		return nil, fmt.Errorf("list dm replies: %w", err)
 	}
@@ -171,8 +175,15 @@ func summarize(body string) string {
 
 // receiveDMReply takes a message someone sent the bot in a DM and puts it
 // with the event it answers. Not about any event we wrote to them about
-// lately: left alone. It is acknowledged with a 📨 so they know it arrived.
+// lately, or from someone whose DMs are handed off: left alone. It is acknowledged with a 📨 so they know it arrived.
 func (s *Server) receiveDMReply(channelID, messageID, userID, content, repliedTo string, attachments int) {
+	if handoff, found, err := s.store.ActiveDMHandoff(userID); err != nil {
+		log.Printf("[discord-signup] read dm handoff for %s: %v", userID, err)
+		return
+	} else if found {
+		log.Printf("[discord-signup] dm from %s left to %s (dm handoff %d)", userID, handoff.HandledBy, handoff.ID)
+		return
+	}
 	eventID, matched, err := s.store.EventForDMReply(userID, repliedTo, now()-int64(replyWindow/time.Second))
 	if errors.Is(err, ErrNotFound) {
 		log.Printf("[discord-signup] dm from %s about no recent event; left alone", userID)
