@@ -22,6 +22,10 @@ A Join click enforces the cap inside one `BEGIN IMMEDIATE` transaction, so two p
 
 Another store cites an event as `discord_event_000126` (`eventref.go`): the integer id written out, made on every read and stored nowhere, so it can never disagree with `events.id`. Every event body carries it as `ref`, `GET /api/discord-events/{ref}` reads one, and kanban-store's entity-type registry carries the pattern so a chat draws it as a chip. Journal timelines cite the events a person went to by this ref.
 
+## Attendance: who went
+
+The roster says who signed up; the `attendance` table says who went, one row per person per date, and only for people who went (`attendance.go`). Nothing writes it by itself: an organizer, the operator or an agent records it after the event with a `basis` — `roster`, `evidence` or `confirmed` — and names the evidence by id. A row is cited as `discord_attendance_000001` and draws as a chip; removing one keeps it with `removed_at`, and every change keeps the old row in `attendance_updates`. Journal timelines are written from attendance, not from the roster.
+
 ## Arrival order, state and history
 
 **`(signed_up_at, id)` is arrival order** — it cannot be recovered from Discord. The waitlist follows it unless an organizer reorders the line on the web page, which ranks everyone in `signups.waitlist_rank`; every "who is next" query orders by `waitlistOrder()` so the page and promotion cannot disagree. There is no `position` column any more: it was a second copy of `signed_up_at` that could disagree with it; older notes still name it. A signup's `state` (`attending`, `waitlisted`, `withdrawn`) is **stored, not derived**, on purpose: it records a decision that was made and told to a person. `signup_updates` and `event_updates` are the append-only histories (the first was once called `transitions`).

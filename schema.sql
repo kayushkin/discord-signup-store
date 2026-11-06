@@ -856,3 +856,36 @@ CREATE TABLE IF NOT EXISTS dm_handoffs (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_handoffs_active ON dm_handoffs(discord_user_id) WHERE ended_at = 0;
+
+-- Who went to an event: one row per person per date they were there. A row
+-- means they went; someone who did not go has no row. occurrence_starts_at is
+-- the start of the date they went to, which for a repeating event is a date
+-- the event has since moved on from. basis says what the row rests on
+-- (attendanceBases in attendance.go) and evidence names it, by ids where it
+-- can. Other stores cite a row as discord_attendance_000001 (its id written
+-- out, as an event's ref is).
+CREATE TABLE IF NOT EXISTS attendance (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id             INTEGER NOT NULL REFERENCES events(id),
+    occurrence_starts_at INTEGER NOT NULL,
+    discord_user_id      TEXT NOT NULL,
+    display_name         TEXT NOT NULL DEFAULT '',
+    basis                TEXT NOT NULL,
+    evidence             TEXT NOT NULL DEFAULT '',
+    marked_by            TEXT NOT NULL,
+    marked_at            INTEGER NOT NULL,
+    updated_at           INTEGER NOT NULL,
+    removed_at           INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (event_id, occurrence_starts_at, discord_user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance(discord_user_id);
+
+-- Every change to an attendance row, the row as it was before.
+CREATE TABLE IF NOT EXISTS attendance_updates (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    attendance_id INTEGER NOT NULL REFERENCES attendance(id),
+    action        TEXT NOT NULL,
+    row_json      TEXT NOT NULL,
+    actor         TEXT NOT NULL,
+    at            INTEGER NOT NULL
+);

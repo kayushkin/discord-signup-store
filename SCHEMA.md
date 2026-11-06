@@ -519,3 +519,7 @@ when paging shipped — none matched a live `events.message_id`.
 
 `dropRetiredTables` runs `DROP TABLE IF EXISTS` at open, so it goes on the next
 boot of every deployment and is a no-op on every boot after.
+
+## attendance, attendance_updates
+
+Who went to an event: one row per person per date, only for people who went. `basis` is `roster`, `evidence` or `confirmed`; `evidence` names what shows it; `removed_at` marks a record found wrong. `attendance_updates` keeps each row as it was before a change or removal. See `schema.sql` and `attendance.go`.
