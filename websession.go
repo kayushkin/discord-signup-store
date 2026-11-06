@@ -11,12 +11,18 @@ import (
 	"time"
 )
 
-// sessionLifetime is how long a browser login lasts.
-//
-// Bounded mainly because guild_permissions is cached on the session: someone
-// whose MANAGE_EVENTS is revoked in Discord keeps it here until their session
-// ends. A week would make that gap a week long.
-const sessionLifetime = 12 * time.Hour
+// sessionIdleLifetime is how long a browser login lasts without a visit. Each
+// visit moves the end forward, so someone who uses the site keeps their login.
+const sessionIdleLifetime = 30 * 24 * time.Hour
+
+// sessionExtendStep is how far the end must move before a visit writes it,
+// so a burst of requests writes the row once rather than once each.
+const sessionExtendStep = time.Hour
+
+// permissionRefreshInterval is how old guild_permissions may get before the bot
+// reads them again. It bounds how long a permission taken away in Discord, such
+// as MANAGE_EVENTS, keeps working here.
+const permissionRefreshInterval = 12 * time.Hour
 
 // Discord permission bits this service checks. Named rather than inlined so a
 // permission test reads as what it means.
@@ -35,6 +41,8 @@ type WebSession struct {
 	// for this user in that guild, as of login.
 	GuildPermissions map[string]uint64
 	ExpiresAt        int64
+	// PermissionsCheckedAt is when GuildPermissions was last read from Discord.
+	PermissionsCheckedAt int64
 }
 
 // IsMemberOf reports whether Discord listed this guild for the user at login.
@@ -62,18 +70,19 @@ func (s *Store) CreateWebSession(userID, displayName, avatar string, perms map[s
 		return nil, fmt.Errorf("encode guild permissions: %w", err)
 	}
 	created := now()
-	expires := created + int64(sessionLifetime.Seconds())
+	expires := created + int64(sessionIdleLifetime.Seconds())
 	_, err = s.db.Exec(`
 		INSERT INTO web_sessions (token, discord_user_id, display_name, avatar,
-		                          guild_permissions, created_at, expires_at)
-		VALUES (?,?,?,?,?,?,?)`,
-		token, userID, displayName, avatar, string(encoded), created, expires)
+		                          guild_permissions, created_at, expires_at, permissions_checked_at)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		token, userID, displayName, avatar, string(encoded), created, expires, created)
 	if err != nil {
 		return nil, fmt.Errorf("insert session: %w", err)
 	}
 	return &WebSession{
 		Token: token, DiscordUserID: userID, DisplayName: displayName,
 		Avatar: avatar, GuildPermissions: perms, ExpiresAt: expires,
+		PermissionsCheckedAt: created,
 	}, nil
 }
 
@@ -84,9 +93,11 @@ func (s *Store) WebSessionByToken(token string) (*WebSession, error) {
 	var ws WebSession
 	var encoded string
 	err := s.db.QueryRow(`
-		SELECT token, discord_user_id, display_name, avatar, guild_permissions, expires_at
+		SELECT token, discord_user_id, display_name, avatar, guild_permissions, expires_at,
+		       permissions_checked_at
 		FROM web_sessions WHERE token = ?`, token).
-		Scan(&ws.Token, &ws.DiscordUserID, &ws.DisplayName, &ws.Avatar, &encoded, &ws.ExpiresAt)
+		Scan(&ws.Token, &ws.DiscordUserID, &ws.DisplayName, &ws.Avatar, &encoded, &ws.ExpiresAt,
+			&ws.PermissionsCheckedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -103,6 +114,29 @@ func (s *Store) WebSessionByToken(token string) (*WebSession, error) {
 	}
 	ws.GuildPermissions = parsePermissions(raw)
 	return &ws, nil
+}
+
+// ExtendWebSession moves a login's end to expiresAt.
+func (s *Store) ExtendWebSession(token string, expiresAt int64) error {
+	if _, err := s.db.Exec(`UPDATE web_sessions SET expires_at = ? WHERE token = ?`,
+		expiresAt, token); err != nil {
+		return fmt.Errorf("extend session: %w", err)
+	}
+	return nil
+}
+
+// ReplaceWebSessionPermissions stores permissions the bot has just read.
+func (s *Store) ReplaceWebSessionPermissions(token string, perms map[string]uint64, checkedAt int64) error {
+	encoded, err := json.Marshal(stringifyPermissions(perms))
+	if err != nil {
+		return fmt.Errorf("encode guild permissions: %w", err)
+	}
+	if _, err := s.db.Exec(`
+		UPDATE web_sessions SET guild_permissions = ?, permissions_checked_at = ? WHERE token = ?`,
+		string(encoded), checkedAt, token); err != nil {
+		return fmt.Errorf("replace session permissions: %w", err)
+	}
+	return nil
 }
 
 // DeleteWebSession logs someone out.

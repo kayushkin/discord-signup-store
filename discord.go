@@ -414,8 +414,13 @@ func AssignableRoles(roles []Role, botRoleIDs []string) []Role {
 }
 
 // GuildMemberRoleIDs reports which roles a member holds.
+// Someone not in the server is ErrUnknownMember.
 func (c *DiscordClient) GuildMemberRoleIDs(guildID, userID string) ([]string, error) {
 	raw, err := c.do(http.MethodGet, "/guilds/"+escapePathSegment(guildID)+"/members/"+escapePathSegment(userID), nil)
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.Code == errorCodeUnknownMember {
+		return nil, fmt.Errorf("%w: %s", ErrUnknownMember, userID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -426,6 +431,29 @@ func (c *DiscordClient) GuildMemberRoleIDs(guildID, userID string) ([]string, er
 		return nil, fmt.Errorf("decode member: %w", err)
 	}
 	return out.Roles, nil
+}
+
+// GuildOwnerAndRoles is what working out a member's server permissions needs
+// besides their own roles: who owns the server, and every role's bits.
+type GuildOwnerAndRoles struct {
+	OwnerID string `json:"owner_id"`
+	Roles   []Role `json:"roles"`
+}
+
+// GuildOwnerAndRoles reads a server's owner and roles in one call.
+func (c *DiscordClient) GuildOwnerAndRoles(guildID string) (GuildOwnerAndRoles, error) {
+	raw, err := c.do(http.MethodGet, "/guilds/"+escapePathSegment(guildID), nil)
+	if err != nil {
+		return GuildOwnerAndRoles{}, err
+	}
+	var out GuildOwnerAndRoles
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return GuildOwnerAndRoles{}, fmt.Errorf("decode guild: %w", err)
+	}
+	if out.OwnerID == "" {
+		return GuildOwnerAndRoles{}, fmt.Errorf("discord returned guild %s with no owner", guildID)
+	}
+	return out, nil
 }
 
 // CurrentUserID returns the bot's own Discord user id.

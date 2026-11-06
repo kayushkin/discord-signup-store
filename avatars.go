@@ -789,7 +789,7 @@ func (s *Server) handleWebAvatar(w http.ResponseWriter, r *http.Request) {
 // few seconds while a drawing is under way and adds it to the gallery when
 // it is done.
 func (s *Server) handleWebAvatarStatus(w http.ResponseWriter, r *http.Request) {
-	session := s.sessionFrom(r)
+	session := s.sessionFrom(w, r)
 	if session == nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in again"})
 		return

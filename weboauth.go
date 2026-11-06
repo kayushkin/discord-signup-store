@@ -214,6 +214,14 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not complete login", http.StatusInternalServerError)
 		return
 	}
+	setSessionCookie(w, session)
+	http.Redirect(w, r, redirect, http.StatusFound)
+}
+
+// setSessionCookie gives the browser the login's token, to keep until the
+// login ends. Sent again whenever the end moves, or the browser would drop the
+// cookie at the old end while the login still stands.
+func setSessionCookie(w http.ResponseWriter, session *WebSession) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    session.Token,
@@ -223,7 +231,6 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Unix(session.ExpiresAt, 0),
 	})
-	http.Redirect(w, r, redirect, http.StatusFound)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -239,8 +246,9 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-// sessionFrom reads the caller's login, or nil if there is not one.
-func (s *Server) sessionFrom(r *http.Request) *WebSession {
+// sessionFrom reads the caller's login, or nil if there is not one, and keeps
+// it current: permissions re-read when old, and the end moved forward.
+func (s *Server) sessionFrom(w http.ResponseWriter, r *http.Request) *WebSession {
 	c, err := r.Cookie(sessionCookieName)
 	if err != nil || c.Value == "" {
 		return nil
@@ -253,6 +261,7 @@ func (s *Server) sessionFrom(r *http.Request) *WebSession {
 		log.Printf("[discord-signup] load session: %v", err)
 		return nil
 	}
+	s.keepSessionCurrent(w, session)
 	return session
 }
 

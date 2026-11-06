@@ -105,10 +105,12 @@ CREATE INDEX IF NOT EXISTS idx_signup_updates_user  ON signup_updates(discord_us
 -- it expires; a row can be deleted. The cookie holds nothing but the token, so
 -- there is no payload to tamper with and nothing to verify.
 --
--- guild_permissions is what Discord reported for this user at login, per guild,
--- as JSON. Cached deliberately: re-asking Discord on every request would put a
--- network call in the path of every page load and rate-limit under any real
--- use. It goes stale, which is why it expires with the session.
+-- guild_permissions is the user's permission bits per guild, as JSON: what
+-- Discord reported at login, then what the bot reads again once
+-- permissions_checked_at is 12 hours old. Cached deliberately: asking Discord
+-- on every request would put a network call in every page load and hit rate
+-- limits under any real use. expires_at moves forward as the person keeps
+-- using the site; the session ends after 30 days without a visit.
 CREATE TABLE IF NOT EXISTS web_sessions (
     token             TEXT PRIMARY KEY,          -- opaque, 32 random bytes hex
     discord_user_id   TEXT NOT NULL,
@@ -116,7 +118,8 @@ CREATE TABLE IF NOT EXISTS web_sessions (
     avatar            TEXT NOT NULL DEFAULT '',
     guild_permissions TEXT NOT NULL DEFAULT '{}',-- JSON: {guild_id: permission_bits_as_string}
     created_at        INTEGER NOT NULL,
-    expires_at        INTEGER NOT NULL
+    expires_at        INTEGER NOT NULL,
+    permissions_checked_at INTEGER NOT NULL DEFAULT 0 -- when guild_permissions was last read from Discord
 );
 CREATE INDEX IF NOT EXISTS idx_web_sessions_user    ON web_sessions(discord_user_id);
 CREATE INDEX IF NOT EXISTS idx_web_sessions_expires ON web_sessions(expires_at);

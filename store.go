@@ -502,6 +502,9 @@ var columnsAddedAfterFirstRelease = []addedColumn{
 	// Discord's name for someone when they took a role, for a role apart from
 	// the main list, whose people may not be on the roster.
 	{"sheet_role_signups", "display_name", "TEXT NOT NULL DEFAULT ''"},
+	// When the bot last read a login's server permissions again, so a login
+	// can outlast them. See websession.go.
+	{"web_sessions", "permissions_checked_at", "INTEGER NOT NULL DEFAULT 0"},
 }
 
 // ensureColumns applies every ALTER that a pre-existing database is missing.
@@ -651,6 +654,8 @@ var columnBackfills = map[string]string{
 	"sheet_roles.emoji": sheetRoleEmojiBackfill(),
 	// Roles were part of the potluck sheet until 2026-10-30, so an event
 	// whose sheet was on and had roles keeps them on.
+	// A login from before this column had its permissions read when it began.
+	"web_sessions.permissions_checked_at": `UPDATE web_sessions SET permissions_checked_at = created_at`,
 	"events.roles_enabled": `UPDATE events SET roles_enabled = 1 WHERE potluck_enabled = 1
 		AND EXISTS (SELECT 1 FROM sheet_roles r WHERE r.event_id = events.id AND r.removed_at = 0)`,
 }

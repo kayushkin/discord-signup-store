@@ -317,8 +317,9 @@ Each server's own mascot; a server with no row shows the site's own, Maleeha, bu
 | `token` | TEXT PK | The cookie value. 32 random bytes, hex. |
 | `discord_user_id` | TEXT | Who. |
 | `display_name` · `avatar` | TEXT | For the page header. |
-| `guild_permissions` | TEXT | JSON, guild id → permission bits **as of login**. This is why sessions are short: someone whose Manage Events is revoked in Discord keeps it here until their session ends. A week-long session would make that gap a week long. |
-| `created_at` · `expires_at` | INTEGER | 12 hours. Swept hourly. |
+| `guild_permissions` | TEXT | JSON, guild id → permission bits. Discord's at login; after that the bot reads them again every 12 hours, keeping only the bot's servers the person is still in. So Manage Events taken away in Discord stops working here within 12 hours, with no new login. |
+| `permissions_checked_at` | INTEGER | When `guild_permissions` was last read from Discord. A failed read leaves it alone, so the next request tries again. |
+| `created_at` · `expires_at` | INTEGER | The login ends 30 days after the last visit; each visit moves `expires_at` and the cookie forward. Swept hourly. |
 
 Indexed by `expires_at` (the sweep) and `discord_user_id`.
 

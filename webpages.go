@@ -298,7 +298,7 @@ func (s *Server) render(w http.ResponseWriter, page string, data pageData) {
 // requireSession is the gate on every browser route. Anonymous callers are sent
 // to log in and returned to where they were going.
 func (s *Server) requireSession(w http.ResponseWriter, r *http.Request) *WebSession {
-	session := s.sessionFrom(r)
+	session := s.sessionFrom(w, r)
 	if session == nil {
 		http.Redirect(w, r, "/login?next="+template.URLQueryEscaper(r.URL.Path), http.StatusFound)
 		return nil
@@ -312,7 +312,7 @@ func (s *Server) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	session := s.sessionFrom(r)
+	session := s.sessionFrom(w, r)
 	data := pageData{Title: "Events", Session: session, Notice: r.URL.Query().Get("notice")}
 	if session == nil {
 		s.render(w, "index.html", data)

@@ -248,7 +248,7 @@ func (s *Server) mascotDrawingsLeftToday(guildID string) (int, error) {
 // handleWebMascotStatus answers the mascot page's script, which asks every
 // few seconds while a drawing is under way.
 func (s *Server) handleWebMascotStatus(w http.ResponseWriter, r *http.Request) {
-	session := s.sessionFrom(r)
+	session := s.sessionFrom(w, r)
 	if session == nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in again"})
 		return
