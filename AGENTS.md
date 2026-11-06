@@ -18,6 +18,10 @@ Do not "simplify" this back onto Discord's native list; each of these was checke
 
 A Join click enforces the cap inside one `BEGIN IMMEDIATE` transaction, so two people racing for the last place cannot both get it. ⚠️ **`_txlock=immediate` in the DSN (`store.go`) is the whole concurrency design** — remove it and `TestCapacityHoldsUnderConcurrentJoins` fails. The click is answered **ephemerally**, which a DM cannot do reliably: error `50007` bounces anyone whose DMs from server members are off. When someone leaves, the person who has waited longest is promoted and told by DM, with a channel mention if their DMs are closed. Raising a limit admits the queue in arrival order; lowering it removes nobody.
 
+## An event's ref
+
+Another store cites an event as `discord_event_000126` (`eventref.go`): the integer id written out, made on every read and stored nowhere, so it can never disagree with `events.id`. Every event body carries it as `ref`, `GET /api/discord-events/{ref}` reads one, and kanban-store's entity-type registry carries the pattern so a chat draws it as a chip. Journal timelines cite the events a person went to by this ref.
+
 ## Arrival order, state and history
 
 **`(signed_up_at, id)` is arrival order** — it cannot be recovered from Discord. The waitlist follows it unless an organizer reorders the line on the web page, which ranks everyone in `signups.waitlist_rank`; every "who is next" query orders by `waitlistOrder()` so the page and promotion cannot disagree. There is no `position` column any more: it was a second copy of `signed_up_at` that could disagree with it; older notes still name it. A signup's `state` (`attending`, `waitlisted`, `withdrawn`) is **stored, not derived**, on purpose: it records a decision that was made and told to a person. `signup_updates` and `event_updates` are the append-only histories (the first was once called `transitions`).

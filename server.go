@@ -152,6 +152,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/events", s.handleListEvents)
 	mux.HandleFunc("POST /api/events", s.handleCreateEvent)
 	mux.HandleFunc("GET /api/events/{id}", s.handleGetEvent)
+	mux.HandleFunc("GET /api/discord-events/{ref}", s.handleGetEventByRef)
 	mux.HandleFunc("PATCH /api/events/{id}", s.handleUpdateEvent)
 	mux.HandleFunc("DELETE /api/events/{id}", s.handleDeleteEvent)
 	mux.HandleFunc("POST /api/events/{id}/publish", s.handlePublish)

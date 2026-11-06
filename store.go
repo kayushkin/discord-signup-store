@@ -47,7 +47,10 @@ type Store struct {
 
 // Event is one signup roster.
 type Event struct {
-	ID                      int64  `json:"id"`
+	ID int64 `json:"id"`
+	// Ref is ID as other stores cite it (discord_event_000126), made on every
+	// read and never stored; see eventref.go.
+	Ref                     string `json:"ref"`
 	GuildID                 string `json:"guild_id"`
 	ChannelID               string `json:"channel_id"`
 	MessageID               string `json:"message_id"`
@@ -807,6 +810,7 @@ func scanEvent(sc interface{ Scan(...any) error }) (*Event, error) {
 	if err != nil {
 		return nil, err
 	}
+	e.Ref = EventRef(e.ID)
 	return &e, nil
 }
 
