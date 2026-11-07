@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +19,15 @@ type recordedCall struct {
 	Path   string
 	Auth   string
 	Body   map[string]any
+	// Files are the files a multipart request carried, whose payload_json
+	// part is Body.
+	Files []recordedFile
+}
+
+// recordedFile is one file part of a multipart request.
+type recordedFile struct {
+	Field, Filename, ContentType string
+	Size                         int
 }
 
 // fakeDiscord stands in for the Discord REST API. Every test below asserts on
@@ -30,18 +40,45 @@ type fakeDiscord struct {
 	server   *httptest.Server
 }
 
+// readMultipartCall reads a message sent with files: the payload_json part
+// and what each file part was.
+func readMultipartCall(t *testing.T, r *http.Request) (map[string]any, []recordedFile) {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		t.Errorf("read multipart call: %v", err)
+		return nil, nil
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(r.MultipartForm.Value["payload_json"][0]), &body); err != nil {
+		t.Errorf("read payload_json: %v", err)
+	}
+	var files []recordedFile
+	for field, headers := range r.MultipartForm.File {
+		for _, h := range headers {
+			files = append(files, recordedFile{Field: field, Filename: h.Filename,
+				ContentType: h.Header.Get("Content-Type"), Size: int(h.Size)})
+		}
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Field < files[j].Field })
+	return body, files
+}
+
 func newFakeDiscord(t *testing.T) *fakeDiscord {
 	t.Helper()
 	f := &fakeDiscord{handlers: map[string]func(http.ResponseWriter, *http.Request){}}
 	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&body)
+		var files []recordedFile
+		if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+			body, files = readMultipartCall(t, r)
+		} else {
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
 		key := r.Method + " " + r.URL.Path
 
 		f.mu.Lock()
 		f.calls = append(f.calls, recordedCall{
 			Method: r.Method, Path: r.URL.Path,
-			Auth: r.Header.Get("Authorization"), Body: body,
+			Auth: r.Header.Get("Authorization"), Body: body, Files: files,
 		})
 		handler := f.handlers[key]
 		f.mu.Unlock()

@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"sort"
 	"strconv"
@@ -192,17 +195,83 @@ func escapePathSegment(segment string) string {
 // bounded single retry is better than an unbounded loop that hides a genuine
 // rate-limit problem instead of surfacing it.
 func (c *DiscordClient) do(method, path string, body any) ([]byte, error) {
+	if body == nil {
+		return c.send(method, path, "", nil)
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode request: %w", err)
+	}
+	return c.send(method, path, "application/json", encoded)
+}
+
+// MessageFile is a file sent with a message, such as an image an organizer
+// attached. Discord shows an image inline.
+type MessageFile struct {
+	Filename    string
+	ContentType string
+	Data        []byte
+}
+
+// doWithFiles sends a message payload with files attached, as Discord takes
+// them: a multipart body whose payload_json part is the message and whose
+// files[n] parts are the files, each named in the payload's attachments.
+// Without files it is do.
+func (c *DiscordClient) doWithFiles(method, path string, payload map[string]any, files []MessageFile) ([]byte, error) {
+	if len(files) == 0 {
+		return c.do(method, path, payload)
+	}
+	withAttachments := make(map[string]any, len(payload)+1)
+	for key, value := range payload {
+		withAttachments[key] = value
+	}
+	attachments := make([]map[string]any, len(files))
+	for i, f := range files {
+		attachments[i] = map[string]any{"id": i, "filename": f.Filename}
+	}
+	withAttachments["attachments"] = attachments
+	encoded, err := json.Marshal(withAttachments)
+	if err != nil {
+		return nil, fmt.Errorf("encode request: %w", err)
+	}
+	var body bytes.Buffer
+	parts := multipart.NewWriter(&body)
+	jsonHeader := textproto.MIMEHeader{}
+	jsonHeader.Set("Content-Disposition", `form-data; name="payload_json"`)
+	jsonHeader.Set("Content-Type", "application/json")
+	jsonPart, err := parts.CreatePart(jsonHeader)
+	if err != nil {
+		return nil, fmt.Errorf("write payload part: %w", err)
+	}
+	jsonPart.Write(encoded)
+	for i, f := range files {
+		fileHeader := textproto.MIMEHeader{}
+		fileHeader.Set("Content-Disposition", mime.FormatMediaType("form-data",
+			map[string]string{"name": fmt.Sprintf("files[%d]", i), "filename": f.Filename}))
+		fileHeader.Set("Content-Type", f.ContentType)
+		filePart, err := parts.CreatePart(fileHeader)
+		if err != nil {
+			return nil, fmt.Errorf("write file part %s: %w", f.Filename, err)
+		}
+		filePart.Write(f.Data)
+	}
+	if err := parts.Close(); err != nil {
+		return nil, fmt.Errorf("close multipart body: %w", err)
+	}
+	return c.send(method, path, parts.FormDataContentType(), body.Bytes())
+}
+
+// send performs one authenticated request with a body already encoded,
+// retrying once on a rate limit or a stale token. A nil body is sent with
+// no content type.
+func (c *DiscordClient) send(method, path, contentType string, encoded []byte) ([]byte, error) {
 	for attempt := 0; attempt < 2; attempt++ {
 		tok, err := c.token()
 		if err != nil {
 			return nil, err
 		}
 		var payload io.Reader
-		if body != nil {
-			encoded, err := json.Marshal(body)
-			if err != nil {
-				return nil, fmt.Errorf("encode request: %w", err)
-			}
+		if encoded != nil {
 			payload = bytes.NewReader(encoded)
 		}
 		req, err := http.NewRequest(method, c.baseURL+path, payload)
@@ -211,12 +280,12 @@ func (c *DiscordClient) do(method, path string, body any) ([]byte, error) {
 		}
 		req.Header.Set("Authorization", "Bot "+tok)
 		req.Header.Set("User-Agent", "discord-signup-store (https://github.com/kayushkin/discord-signup-store, 0.1)")
-		if body != nil {
-			req.Header.Set("Content-Type", "application/json")
+		if encoded != nil {
+			req.Header.Set("Content-Type", contentType)
 		}
 		// A PUT with no body still needs an explicit zero length, or Discord's
 		// edge answers 411 Length Required instead of doing the thing.
-		if body == nil {
+		if encoded == nil {
 			req.Header.Set("Content-Length", "0")
 		}
 
@@ -292,6 +361,16 @@ func (c *DiscordClient) RemoveMemberRole(guildID, userID, roleID string) error {
 // — it is how a later button click finds its roster.
 func (c *DiscordClient) CreateMessage(channelID string, payload any) (string, error) {
 	raw, err := c.do(http.MethodPost, "/channels/"+escapePathSegment(channelID)+"/messages", payload)
+	return createdMessageID(raw, err)
+}
+
+// CreateMessageWithFiles is CreateMessage with files attached.
+func (c *DiscordClient) CreateMessageWithFiles(channelID string, payload map[string]any, files []MessageFile) (string, error) {
+	raw, err := c.doWithFiles(http.MethodPost, "/channels/"+escapePathSegment(channelID)+"/messages", payload, files)
+	return createdMessageID(raw, err)
+}
+
+func createdMessageID(raw []byte, err error) (string, error) {
 	if err != nil {
 		return "", err
 	}
@@ -322,7 +401,7 @@ func (c *DiscordClient) SendDirectMessage(userID, content string) error {
 // SendDirectMessagePayload is SendDirectMessage for a whole message body —
 // content, components, allowed mentions — rather than text alone.
 func (c *DiscordClient) SendDirectMessagePayload(userID string, payload map[string]any) error {
-	_, _, err := c.SendDirectMessageRecorded(userID, payload)
+	_, _, err := c.SendDirectMessageRecorded(userID, payload, nil)
 	return err
 }
 

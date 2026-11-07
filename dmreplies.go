@@ -151,10 +151,16 @@ func (s *Store) DMReplies(eventID int64) ([]DMReply, error) {
 // sendEventDM sends a DM about an event and records it, so a reply can be
 // traced back. The footer tells them replies reach the organizers.
 func (s *Server) sendEventDM(ev *Event, userID string, payload map[string]any, kind, summary string) error {
+	return s.sendEventDMWithFiles(ev, userID, payload, nil, kind, summary)
+}
+
+// sendEventDMWithFiles is sendEventDM with files attached, such as the
+// images on an organizer's message.
+func (s *Server) sendEventDMWithFiles(ev *Event, userID string, payload map[string]any, files []MessageFile, kind, summary string) error {
 	if content, ok := payload["content"].(string); ok {
 		payload["content"] = content + dmFooter
 	}
-	channelID, messageID, err := s.discord.SendDirectMessageRecorded(userID, payload)
+	channelID, messageID, err := s.discord.SendDirectMessageRecorded(userID, payload, files)
 	if err != nil {
 		return err
 	}
@@ -220,9 +226,9 @@ func (s *Server) receiveDMReply(channelID, messageID, userID, content, repliedTo
 	}
 }
 
-// SendDirectMessageRecorded sends a DM and returns where it went and its id,
-// so a reply to it can be traced.
-func (c *DiscordClient) SendDirectMessageRecorded(userID string, payload map[string]any) (channelID, messageID string, err error) {
+// SendDirectMessageRecorded sends a DM, with files attached if there are
+// any, and returns where it went and its id, so a reply to it can be traced.
+func (c *DiscordClient) SendDirectMessageRecorded(userID string, payload map[string]any, files []MessageFile) (channelID, messageID string, err error) {
 	raw, err := c.do(http.MethodPost, "/users/@me/channels", map[string]any{"recipient_id": userID})
 	if err != nil {
 		return "", "", err
@@ -236,7 +242,7 @@ func (c *DiscordClient) SendDirectMessageRecorded(userID string, payload map[str
 	if c.onDirectMessageChannel != nil {
 		c.onDirectMessageChannel(channel.ID, userID)
 	}
-	raw, err = c.do(http.MethodPost, "/channels/"+escapePathSegment(channel.ID)+"/messages", payload)
+	raw, err = c.doWithFiles(http.MethodPost, "/channels/"+escapePathSegment(channel.ID)+"/messages", payload, files)
 	if err != nil {
 		return "", "", err
 	}

@@ -371,6 +371,19 @@ CREATE TABLE IF NOT EXISTS event_messages (
 
 CREATE INDEX IF NOT EXISTS idx_event_messages_event ON event_messages(event_id, at);
 
+-- event_message_images: the images an organizer attached to a message, in the
+-- order they were attached. Only what each was is kept — its name, type and
+-- size — not the image: Discord holds the copies people received.
+CREATE TABLE IF NOT EXISTS event_message_images (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_message_id INTEGER NOT NULL REFERENCES event_messages(id) ON DELETE CASCADE,
+    position         INTEGER NOT NULL,
+    filename         TEXT NOT NULL,
+    content_type     TEXT NOT NULL,
+    bytes            INTEGER NOT NULL,
+    UNIQUE (event_message_id, position)
+);
+
 -- event_dms: every DM this service sent a person about an event — an
 -- organizer's message, an invite, being put on a list or given a place — so a
 -- reply in that DM can be traced to its event. summary is a short line saying

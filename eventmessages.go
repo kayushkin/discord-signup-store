@@ -3,8 +3,10 @@ package discordsignup
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -26,7 +28,22 @@ const (
 	// messageBodyLimit leaves room in Discord's 2000 characters for the
 	// heading and a line of mentions.
 	messageBodyLimit = 1500
+	// messageImagesMaximumCount and messageImagesMaximumBytes bound the
+	// images on one message. Discord takes 10 files and 10 MB a message from
+	// a bot outside a boosted server; the total stays under that with room
+	// for the text.
+	messageImagesMaximumCount = 4
+	messageImagesMaximumBytes = 8 << 20
 )
+
+// messageImageExtensions are the image types a message may carry, by the
+// type read from the file's own bytes, with the extension Discord is given.
+var messageImageExtensions = map[string]string{
+	"image/jpeg": ".jpg",
+	"image/png":  ".png",
+	"image/gif":  ".gif",
+	"image/webp": ".webp",
+}
 
 // Message routes and statuses.
 const (
@@ -56,6 +73,26 @@ type EventMessage struct {
 	Status     string   `json:"status"`
 	Detail     string   `json:"detail"`
 	At         int64    `json:"at"`
+	// Images are what was attached, in order; the images themselves are not
+	// kept.
+	Images []EventMessageImage `json:"images"`
+}
+
+// EventMessageImage is one image attached to a message.
+type EventMessageImage struct {
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	Bytes       int    `json:"bytes"`
+}
+
+// messageImagesOf says what each file attached to a message is, for the
+// record.
+func messageImagesOf(files []MessageFile) []EventMessageImage {
+	out := make([]EventMessageImage, len(files))
+	for i, f := range files {
+		out[i] = EventMessageImage{Filename: f.Filename, ContentType: f.ContentType, Bytes: len(f.Data)}
+	}
+	return out
 }
 
 // ClaimMessage records a message about to go out and returns its id. A DM
@@ -99,6 +136,12 @@ func (s *Store) ClaimMessage(m EventMessage) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("read message id: %w", err)
 	}
+	for position, image := range m.Images {
+		if _, err := tx.Exec(`INSERT INTO event_message_images (event_message_id, position, filename, content_type, bytes)
+			VALUES (?,?,?,?,?)`, id, position, image.Filename, image.ContentType, image.Bytes); err != nil {
+			return 0, fmt.Errorf("record message image %s: %w", image.Filename, err)
+		}
+	}
 	return id, tx.Commit()
 }
 
@@ -134,9 +177,35 @@ func (s *Store) Messages(eventID int64) ([]EventMessage, error) {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 		m.Audience = strings.Split(audience, ",")
+		m.Images = []EventMessageImage{}
 		out = append(out, m)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	byMessage := make(map[int64]int, len(out))
+	for i, m := range out {
+		byMessage[m.ID] = i
+	}
+	imageRows, err := s.db.Query(`SELECT i.event_message_id, i.filename, i.content_type, i.bytes
+		FROM event_message_images i JOIN event_messages m ON m.id = i.event_message_id
+		WHERE m.event_id = ? ORDER BY i.event_message_id, i.position`, eventID)
+	if err != nil {
+		return nil, fmt.Errorf("list message images: %w", err)
+	}
+	defer imageRows.Close()
+	for imageRows.Next() {
+		var messageID int64
+		var image EventMessageImage
+		if err := imageRows.Scan(&messageID, &image.Filename, &image.ContentType, &image.Bytes); err != nil {
+			return nil, fmt.Errorf("scan message image: %w", err)
+		}
+		if i, ok := byMessage[messageID]; ok {
+			out[i].Images = append(out[i].Images, image)
+		}
+	}
+	return out, imageRows.Err()
 }
 
 // messageAllowance is how many messages by DM an event may still send in
@@ -174,12 +243,26 @@ func audienceWords(lists []string) string {
 	return strings.Join(out[:len(out)-1], ", ") + " and " + out[len(out)-1]
 }
 
-// handleWebMessage sends an organizer's message to the people on the lists
-// they picked, by a post in the forum thread or by DM.
+// handleWebMessage sends an organizer's message, and any images they
+// attached, to the people on the lists they picked, by a post in the forum
+// thread or by DM.
 func (s *Server) handleWebMessage(w http.ResponseWriter, r *http.Request) {
 	session := s.requireSession(w, r)
 	if session == nil {
 		return
+	}
+	// A message with images comes as a multipart form; read it, within the
+	// limit, before anything reads a form value.
+	var images []MessageFile
+	var imagesProblem string
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		r.Body = http.MaxBytesReader(w, r.Body, messageImagesMaximumBytes+1<<20)
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			imagesProblem = fmt.Sprintf("Nothing was sent: the images could not be read. Together they may be at most %d MB. (%v)",
+				messageImagesMaximumBytes>>20, err)
+		} else {
+			images, imagesProblem = readMessageImages(r)
+		}
 	}
 	ev, canManage := s.webEvent(w, r, session)
 	if ev == nil {
@@ -193,8 +276,12 @@ func (s *Server) handleWebMessage(w http.ResponseWriter, r *http.Request) {
 		s.redirectWithNotice(w, r, ev.ID, "Nothing was sent: there is no Discord client configured.")
 		return
 	}
+	if imagesProblem != "" {
+		s.redirectWithNotice(w, r, ev.ID, imagesProblem)
+		return
+	}
 	body := strings.TrimSpace(r.FormValue("body"))
-	if body == "" {
+	if body == "" && len(images) == 0 {
 		s.redirectWithNotice(w, r, ev.ID, "Nothing was sent: the message is empty.")
 		return
 	}
@@ -237,7 +324,7 @@ func (s *Server) handleWebMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id, err := s.store.ClaimMessage(EventMessage{EventID: ev.ID, SentBy: "web:" + session.DiscordUserID,
-		Via: via, Audience: lists, Body: body, Recipients: len(people)})
+		Via: via, Audience: lists, Body: body, Recipients: len(people), Images: messageImagesOf(images)})
 	if errors.Is(err, ErrMessageLimit) {
 		_, next := messageAllowance(mustMessages(s.store, ev.ID), now())
 		s.redirectWithNotice(w, r, ev.ID, fmt.Sprintf("Nothing was sent: an event can send %d messages by DM in any %d minutes. The next can go at %s.",
@@ -255,14 +342,94 @@ func (s *Server) handleWebMessage(w http.ResponseWriter, r *http.Request) {
 	var detail string
 	switch via {
 	case MessageViaForum:
-		delivered, failed, detail, notice = s.postMessageInForum(ev, session, body, people, lists)
+		delivered, failed, detail, notice = s.postMessageInForum(ev, session, body, images, people, lists)
 	case MessageViaDM:
-		delivered, failed, detail, notice = s.sendMessageByDM(ev, session, body, people, lists)
+		delivered, failed, detail, notice = s.sendMessageByDM(ev, session, body, images, people, lists)
 	}
 	if err := s.store.FinishMessage(id, delivered, failed, detail); err != nil {
 		log.Printf("[discord-signup] finish message %d: %v", id, err)
 	}
 	s.redirectWithNotice(w, r, ev.ID, notice)
+}
+
+// readMessageImages reads the images attached to a message, in the order
+// they were chosen. A problem comes back as what to tell the organizer.
+func readMessageImages(r *http.Request) ([]MessageFile, string) {
+	headers := r.MultipartForm.File["image"]
+	if len(headers) > messageImagesMaximumCount {
+		return nil, fmt.Sprintf("Nothing was sent: a message may carry %d images, and %d were attached.",
+			messageImagesMaximumCount, len(headers))
+	}
+	var files []MessageFile
+	total := 0
+	for i, header := range headers {
+		file, err := header.Open()
+		if err != nil {
+			return nil, "Nothing was sent: could not read " + header.Filename + ": " + err.Error()
+		}
+		data, err := io.ReadAll(io.LimitReader(file, messageImagesMaximumBytes+1))
+		file.Close()
+		if err != nil {
+			return nil, "Nothing was sent: could not read " + header.Filename + ": " + err.Error()
+		}
+		if len(data) == 0 {
+			// An empty file box sends a part with no bytes.
+			continue
+		}
+		total += len(data)
+		if total > messageImagesMaximumBytes {
+			return nil, fmt.Sprintf("Nothing was sent: together the images are over %d MB.", messageImagesMaximumBytes>>20)
+		}
+		contentType := http.DetectContentType(data)
+		extension, ok := messageImageExtensions[contentType]
+		if !ok {
+			return nil, fmt.Sprintf("Nothing was sent: %s is not a JPEG, PNG, GIF or WebP image.", header.Filename)
+		}
+		files = append(files, MessageFile{Filename: messageImageFilename(header.Filename, i+1, extension),
+			ContentType: contentType, Data: data})
+	}
+	return files, ""
+}
+
+// messageImageFilename is the name Discord shows for an attached image: the
+// organizer's own name for it in letters, digits, dots, dashes and
+// underscores, ending in the extension of what it really is.
+func messageImageFilename(uploaded string, position int, extension string) string {
+	base := strings.TrimSuffix(filepath.Base(uploaded), filepath.Ext(uploaded))
+	var cleaned strings.Builder
+	for _, r := range base {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			cleaned.WriteRune(r)
+		default:
+			cleaned.WriteRune('-')
+		}
+	}
+	name := strings.Trim(cleaned.String(), "-.")
+	if r := []rune(name); len(r) > 60 {
+		name = string(r[:60])
+	}
+	if name == "" {
+		name = fmt.Sprintf("image-%d", position)
+	}
+	return name + extension
+}
+
+// messageSummary is a message in one line, for beside a reply to it.
+func messageSummary(body string, images []MessageFile) string {
+	if body != "" {
+		return summarize(body)
+	}
+	return fmt.Sprintf("%d %s", len(images), plural(len(images), "image", "images"))
+}
+
+// messageHeading puts the heading over the text of a message, which may be
+// only images.
+func messageHeading(heading, body string) string {
+	if body == "" {
+		return heading
+	}
+	return heading + "\n" + body
 }
 
 func mustMessages(store *Store, eventID int64) []EventMessage {
@@ -275,15 +442,15 @@ func mustMessages(store *Store, eventID int64) []EventMessage {
 
 // postMessageInForum posts the message in the event's forum thread with
 // everyone on the lists mentioned, and those mentions allowed to ping.
-func (s *Server) postMessageInForum(ev *Event, session *WebSession, body string, people []Signup, lists []string) (delivered, failed int, detail, notice string) {
+func (s *Server) postMessageInForum(ev *Event, session *WebSession, body string, images []MessageFile, people []Signup, lists []string) (delivered, failed int, detail, notice string) {
 	ids := make([]string, 0, len(people))
 	mentions := make([]string, 0, len(people))
 	for _, sg := range people {
 		ids = append(ids, sg.DiscordUserID)
 		mentions = append(mentions, "<@"+sg.DiscordUserID+">")
 	}
-	content := fmt.Sprintf("📣 **From %s, to everyone %s:**\n%s\n\n%s",
-		session.DisplayName, audienceWords(lists), body, strings.Join(mentions, " "))
+	content := messageHeading(fmt.Sprintf("📣 **From %s, to everyone %s:**", session.DisplayName, audienceWords(lists)), body) +
+		"\n\n" + strings.Join(mentions, " ")
 	// Discord allows 2000 characters and pings at most 100 users a message.
 	if n := len([]rune(content)); n > 2000 || len(ids) > 100 {
 		return 0, 0, "too long", fmt.Sprintf("Nothing was posted: with %d people mentioned the post would be %d characters, over Discord's 2000. Shorten the message, or send it by DM.", len(ids), n)
@@ -294,7 +461,7 @@ func (s *Server) postMessageInForum(ev *Event, session *WebSession, body string,
 		log.Printf("[discord-signup] unarchive forum post of %d to message: %v", ev.ID, err)
 	}
 	payload := map[string]any{"content": content, "allowed_mentions": map[string]any{"users": ids}}
-	if _, err := s.discord.CreateMessage(ev.ForumPostID, payload); err != nil {
+	if _, err := s.discord.CreateMessageWithFiles(ev.ForumPostID, payload, images); err != nil {
 		log.Printf("[discord-signup] message in forum post of %d: %v", ev.ID, err)
 		return 0, 1, err.Error(), "Discord refused the post: " + err.Error() + ". It does not count against the limit."
 	}
@@ -303,12 +470,15 @@ func (s *Server) postMessageInForum(ev *Event, session *WebSession, body string,
 
 // sendMessageByDM sends the message to each person, and says how many it
 // reached.
-func (s *Server) sendMessageByDM(ev *Event, session *WebSession, body string, people []Signup, lists []string) (delivered, failed int, detail, notice string) {
-	content := fmt.Sprintf("📣 **%s** sent a message to everyone %s at **%s**:\n\n%s",
-		session.DisplayName, audienceWords(lists), ev.Name, body)
+func (s *Server) sendMessageByDM(ev *Event, session *WebSession, body string, images []MessageFile, people []Signup, lists []string) (delivered, failed int, detail, notice string) {
+	heading := fmt.Sprintf("📣 **%s** sent a message to everyone %s at **%s**:", session.DisplayName, audienceWords(lists), ev.Name)
+	content := heading
+	if body != "" {
+		content += "\n\n" + body
+	}
 	var closed, broken []string
 	for _, sg := range people {
-		err := s.sendEventDM(ev, sg.DiscordUserID, map[string]any{"content": content}, DMKindMessage, summarize(body))
+		err := s.sendEventDMWithFiles(ev, sg.DiscordUserID, map[string]any{"content": content}, images, DMKindMessage, messageSummary(body, images))
 		switch {
 		case err == nil:
 			delivered++

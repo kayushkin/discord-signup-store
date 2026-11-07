@@ -516,6 +516,11 @@ table.log td{vertical-align:top}
 /* Message people. */
 .message-form textarea{min-height:96px}
 .msg-count{text-align:right;margin-top:3px}
+.msg-images{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;margin:6px 0 0;text-transform:none;letter-spacing:normal;font-weight:400}
+.msg-images .msg-label{width:auto}
+.msg-images input[type=file]{width:auto;max-width:100%;font-size:13px}
+.msg-image-previews{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.msg-image-previews img{width:64px;height:64px;object-fit:cover;border:1.5px solid var(--ink);border-radius:6px}
 .msg-opts{display:flex;flex-direction:column;gap:10px;margin:8px 0 12px}
 .msg-opt{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .msg-label{width:36px;color:var(--ink);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px}
@@ -1140,8 +1145,13 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
       if (w && w.checked) count += +form.getAttribute("data-waiting");
       if (m && m.checked) count += +form.getAttribute("data-maybe");
       var viaForum = form.querySelector("input[name=via]:checked").value === "forum";
+      var picked = form.querySelector("input[data-images]");
+      var images = picked ? picked.files.length : 0;
+      var text = form.querySelector("textarea[name=body]").value.trim();
+      if (!text && !images) { say("Write a message or attach an image.", true); return; }
       ask = (viaForum ? "Post this in the forum thread, pinging " : "Send this by DM to ") +
-        count + (count === 1 ? " person" : " people") + "?";
+        count + (count === 1 ? " person" : " people") +
+        (images ? ", with " + images + (images === 1 ? " image" : " images") : "") + "?";
     }
     // Anyone already on the event is moved, not added, and the question
     // says so, with what happens to a place given up.
@@ -1176,7 +1186,9 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     }
     asked.removeAttribute("data-confirmed");
     var action = (submitter && submitter.hasAttribute("formaction")) ? submitter.formAction : form.action;
-    var body = new URLSearchParams(new FormData(form, submitter));
+    // A form that carries files goes as multipart; any other as a plain form.
+    var fields = new FormData(form, submitter);
+    var body = form.enctype === "multipart/form-data" ? fields : new URLSearchParams(fields);
     var busy = form.querySelectorAll("button");
     busy.forEach(function (b) { b.disabled = true; });
     var fieldError = form.querySelector(".field-error");
@@ -1375,6 +1387,34 @@ document.querySelectorAll("form[data-member-search]").forEach(function (form) {
     text.addEventListener("input", show);
     show();
 
+    // The images chosen show under the box, and too many or too large are
+    // refused before anything is sent.
+    var picker = form.querySelector("input[data-images]");
+    var previews = form.querySelector("[data-image-previews]");
+    if (!picker) return;
+    var most = +form.getAttribute("data-images-max");
+    var mostBytes = +form.getAttribute("data-images-max-bytes");
+    picker.addEventListener("change", function () {
+      previews.querySelectorAll("img").forEach(function (img) { URL.revokeObjectURL(img.src); });
+      previews.textContent = "";
+      var files = Array.prototype.slice.call(picker.files);
+      var total = files.reduce(function (sum, f) { return sum + f.size; }, 0);
+      if (files.length > most || total > mostBytes) {
+        say(files.length > most ? "A message may carry " + most + " images." :
+          "Together the images may be at most " + Math.floor(mostBytes / 1048576) + " MB.", true);
+        picker.value = "";
+        previews.hidden = true;
+        return;
+      }
+      files.forEach(function (f) {
+        var img = document.createElement("img");
+        img.src = URL.createObjectURL(f);
+        img.alt = f.name;
+        img.title = f.name;
+        previews.appendChild(img);
+      });
+      previews.hidden = files.length === 0;
+    });
   });
 
   document.querySelectorAll("[data-open-dialog]").forEach(function (btn) {

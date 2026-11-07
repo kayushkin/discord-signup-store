@@ -272,6 +272,8 @@ func (s *Server) renderEventPage(w http.ResponseWriter, session *WebSession, ev 
 	}
 	data.MessagesLeft, data.MessagesNextAt = messageAllowance(messages, now())
 	data.MessageLimit, data.MessageWindowMinutes, data.MessageBodyLimit = messageLimit, int(messageWindow/time.Minute), messageBodyLimit
+	data.MessageImagesMaximumCount, data.MessageImagesMaximumBytes = messageImagesMaximumCount, messageImagesMaximumBytes
+	data.MessageImagesMaximumMegabytes = messageImagesMaximumBytes >> 20
 	data.AvatarUserIDs = avatars
 	if data.EventPicture, err = s.eventPicturePanelOf(ev); err != nil {
 		log.Printf("[discord-signup] event picture %d: %v", ev.ID, err)

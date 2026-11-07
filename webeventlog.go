@@ -249,6 +249,20 @@ type potluckLog struct {
 }
 
 
+// messageImagesLogLine names the images a message carried, under its text in
+// the log; nothing when it carried none.
+func messageImagesLogLine(images []EventMessageImage) string {
+	if len(images) == 0 {
+		return ""
+	}
+	names := make([]string, len(images))
+	for i, image := range images {
+		names[i] = template.HTMLEscapeString(image.Filename)
+	}
+	return `<div class="muted small">🖼 ` + strconv.Itoa(len(images)) + " " + plural(len(images), "image", "images") +
+		": " + strings.Join(names, ", ") + `</div>`
+}
+
 func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventInvite, regulars []EventRegular, messages []EventMessage, potluck potluckLog, organizers []EventOrganiser, names eventLogNames) []eventLogEntry {
 	out := make([]eventLogEntry, 0, len(signups)+len(edits)+len(invites)+len(regulars)+len(messages)+len(potluck.rows))
 	out = append(out, potluckLogEntries(potluck, names)...)
@@ -262,7 +276,8 @@ func buildEventLog(signups []SignupUpdate, edits []EventUpdate, invites []EventI
 		}
 		what := template.HTML(`<details class="log-more"><summary>messaged everyone ` +
 			template.HTMLEscapeString(audienceWords(m.Audience)) + " " + template.HTMLEscapeString(how) +
-			`</summary><div class="muted prose">` + template.HTMLEscapeString(m.Body) + `</div></details>`)
+			`</summary><div class="muted prose">` + template.HTMLEscapeString(m.Body) + `</div>` +
+			messageImagesLogLine(m.Images) + `</details>`)
 		if m.Status == messageFailed {
 			what += template.HTML(` <span class="bad">— not sent: ` + template.HTMLEscapeString(m.Detail) + `</span>`)
 		}

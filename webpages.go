@@ -84,6 +84,9 @@ type pageData struct {
 	// current window, and MessagesNextAt when the next is allowed once none
 	// are left; the other three are the limits, for the page to say.
 	MessagesLeft, MessageLimit, MessageWindowMinutes, MessageBodyLimit int
+	// MessageImagesMaximumCount, MessageImagesMaximumBytes and
+	// MessageImagesMaximumMegabytes bound the images on one message.
+	MessageImagesMaximumCount, MessageImagesMaximumBytes, MessageImagesMaximumMegabytes int
 	MessagesNextAt                                                     int64
 	// Replies are what people wrote back to the event's DMs, newest first.
 	Replies []DMReply

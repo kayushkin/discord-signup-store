@@ -77,7 +77,9 @@ regular the first time the event repeats; if they stop being one, that stands.
 **Messaging the people on an event.** From the event page an organizer can
 send a message to everyone going — and the waitlist and Maybe if they tick
 them — as a post in the event's forum thread that mentions each of them, which
-pings them, or as a DM to each. DMs are limited to two per event in any ten
+pings them, or as a DM to each. A message may carry up to four images
+(JPEG, PNG, GIF or WebP, 8 MB in all), shown in Discord under its text, and
+may be only images. DMs are limited to two per event in any ten
 minutes, whoever sends them, so the page cannot be used to fill people's DMs;
 a forum post is not limited.
 

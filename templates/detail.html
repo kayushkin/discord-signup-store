@@ -768,10 +768,16 @@
   <section class="card side-card" id="message">
     <details class="fold side-fold" data-remember{{if .Replies}} open{{end}}>
     <summary><h3>Message people</h3>{{if .Replies}} <span class="badge">{{len .Replies}} {{if eq (len .Replies) 1}}reply{{else}}replies{{end}}</span>{{end}}</summary>
-    <form method="post" action="/events/{{$ev.ID}}/message" data-async data-message class="message-form" data-dms-left="{{.MessagesLeft}}"
-          data-going="{{len .Going}}" data-waiting="{{len .Waiting}}" data-maybe="{{len .Maybes}}">
-      <textarea name="body" rows="4" maxlength="{{.MessageBodyLimit}}" required placeholder="What do you want to tell them?"></textarea>
+    <form method="post" action="/events/{{$ev.ID}}/message" enctype="multipart/form-data" data-async data-message class="message-form" data-dms-left="{{.MessagesLeft}}"
+          data-going="{{len .Going}}" data-waiting="{{len .Waiting}}" data-maybe="{{len .Maybes}}"
+          data-images-max="{{.MessageImagesMaximumCount}}" data-images-max-bytes="{{.MessageImagesMaximumBytes}}">
+      <textarea name="body" rows="4" maxlength="{{.MessageBodyLimit}}" placeholder="What do you want to tell them?"></textarea>
       <div class="hint msg-count" data-count>0 / {{.MessageBodyLimit}}</div>
+      <label class="msg-images"><span class="msg-label">Images</span>
+        <input type="file" name="image" accept="image/jpeg,image/png,image/gif,image/webp" multiple data-images>
+        <span class="hint">Up to {{.MessageImagesMaximumCount}}, {{.MessageImagesMaximumMegabytes}} MB in all · JPEG, PNG, GIF or WebP</span>
+      </label>
+      <div class="msg-image-previews" data-image-previews hidden></div>
       <div class="msg-opts">
         <div class="msg-opt"><span class="msg-label">To</span>
           <span class="chips">

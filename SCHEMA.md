@@ -387,6 +387,20 @@ regular. Values stored under the old name — `joined_via = pinned`, actor
 | `detail` | TEXT | Who had DMs closed, or what Discord said. |
 | `at` | INTEGER | When. |
 
+## `event_message_images` — the images on an organizer's message, new 2026-11-07
+
+One row per image attached, in the order attached. What each image was is
+kept; the image is not — Discord holds the copies people received.
+
+| column | type | description |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `event_message_id` | INTEGER | → `event_messages(id)` ON DELETE CASCADE. |
+| `position` | INTEGER | 0 for the first; unique per message. |
+| `filename` | TEXT | The name Discord shows: the organizer's own name for it in letters, digits, `.`, `-` and `_`, ending in the extension of the type its bytes are. |
+| `content_type` | TEXT | `image/jpeg`, `image/png`, `image/gif` or `image/webp`, read from the bytes. |
+| `bytes` | INTEGER | Its size. |
+
 ## `event_dms` and `event_dm_replies` — DMs about events, and what came back, new 2026-09-26
 
 `event_dms` is every DM sent about an event, keyed by Discord's message id:
