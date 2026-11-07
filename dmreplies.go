@@ -99,6 +99,9 @@ type DMReply struct {
 	// one replied to, or for a plain message the latest before it.
 	AnsweringKind    string `json:"answering_kind"`
 	AnsweringSummary string `json:"answering_summary"`
+	// Files are the files on the reply as recorded; Attachments is how many
+	// Discord said it carried.
+	Files []DMReplyAttachment `json:"files"`
 }
 
 // RecordDMReply stores one reply. A message already stored — the gateway can
@@ -143,9 +146,23 @@ func (s *Store) DMReplies(eventID int64) ([]DMReply, error) {
 			&r.AnsweringKind, &r.AnsweringSummary); err != nil {
 			return nil, fmt.Errorf("scan dm reply: %w", err)
 		}
+		r.Files = []DMReplyAttachment{}
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	files, err := s.replyAttachmentsByReply(eventID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		if f, ok := files[out[i].ID]; ok {
+			out[i].Files = f
+		}
+	}
+	return out, nil
 }
 
 // sendEventDM sends a DM about an event and records it, so a reply can be
@@ -182,7 +199,7 @@ func summarize(body string) string {
 // receiveDMReply takes a message someone sent the bot in a DM and puts it
 // with the event it answers. Not about any event we wrote to them about
 // lately, or from someone whose DMs are handed off: left alone. It is acknowledged with a 📨 so they know it arrived.
-func (s *Server) receiveDMReply(channelID, messageID, userID, content, repliedTo string, attachments int) {
+func (s *Server) receiveDMReply(channelID, messageID, userID, content, repliedTo string, attachments []DMAttachment) {
 	if handoff, found, err := s.store.ActiveDMHandoff(userID); err != nil {
 		log.Printf("[discord-signup] read dm handoff for %s: %v", userID, err)
 		return
@@ -213,12 +230,21 @@ func (s *Server) receiveDMReply(channelID, messageID, userID, content, repliedTo
 		}
 	}
 	if err := s.store.RecordDMReply(DMReply{EventID: eventID, DiscordUserID: userID, DisplayName: name,
-		MessageID: messageID, Content: content, Attachments: attachments, RepliedTo: repliedTo,
+		MessageID: messageID, Content: content, Attachments: len(attachments), RepliedTo: repliedTo,
 		Matched: matched, At: now()}); err != nil {
 		log.Printf("[discord-signup] record dm reply from %s: %v", userID, err)
 		return
 	}
 	log.Printf("[discord-signup] dm reply from %s put with event %d (%s)", userID, eventID, matched)
+	if len(attachments) > 0 {
+		replyID, err := s.store.replyIDForMessage(messageID)
+		if err == nil {
+			err = s.keepReplyAttachments(DMReply{ID: replyID, EventID: eventID, DiscordUserID: userID, MessageID: messageID}, attachments)
+		}
+		if err != nil {
+			log.Printf("[discord-signup] ERROR keep attachments on dm reply %s: %v", messageID, err)
+		}
+	}
 	if s.discord != nil {
 		if err := s.discord.CreateOwnReaction(channelID, messageID, "📨"); err != nil {
 			log.Printf("[discord-signup] acknowledge dm reply %s: %v", messageID, err)

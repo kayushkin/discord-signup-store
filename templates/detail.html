@@ -810,7 +810,16 @@
         </div>
         <div class="reply-to">{{if eq .Matched "reply"}}replying to{{else}}after{{end}}
           {{if eq .AnsweringKind "message"}}your message “{{.AnsweringSummary}}”{{else if .AnsweringSummary}}{{.AnsweringSummary}}{{else}}a DM{{end}}{{if eq .Matched "latest"}} <span class="muted" title="They did not use Reply; this was the last DM the bot sent them about an event.">· best guess</span>{{end}}</div>
-        <div class="reply-body prose">{{if .Content}}{{.Content}}{{else}}<span class="muted">no text</span>{{end}}{{if .Attachments}} <span class="muted">· {{.Attachments}} attachment{{if gt .Attachments 1}}s{{end}}, see the DM</span>{{end}}</div>
+        <div class="reply-body prose">{{if .Content}}{{.Content}}{{else if not .Files}}<span class="muted">no text</span>{{end}}{{if and .Attachments (not .Files)}} <span class="muted">· {{.Attachments}} attachment{{if gt .Attachments 1}}s{{end}}, see the DM</span>{{end}}</div>
+        {{if .Files}}{{$reply := .}}
+        <div class="reply-files">
+          {{range .Files}}{{if .Kept}}
+          <a class="reply-image" href="/events/{{$ev.ID}}/replies/{{$reply.ID}}/files/{{.Position}}" target="_blank" rel="noopener"><img src="/events/{{$ev.ID}}/replies/{{$reply.ID}}/files/{{.Position}}" alt="{{.Filename}}" title="{{.Filename}}" loading="lazy"></a>
+          {{else}}
+          <span class="reply-file muted" title="{{.NotKept}}">📎 {{.Filename}}, see the DM</span>
+          {{end}}{{end}}
+        </div>
+        {{end}}
       </li>
       {{end}}
     </ol>

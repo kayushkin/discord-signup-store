@@ -102,7 +102,12 @@ func (g *GatewayListener) onDirectMessage(_ *discordgo.Session, m *discordgo.Mes
 	if m.MessageReference != nil {
 		repliedTo = m.MessageReference.MessageID
 	}
-	g.server.receiveDMReply(m.ChannelID, m.ID, m.Author.ID, m.Content, repliedTo, len(m.Attachments))
+	attachments := make([]DMAttachment, 0, len(m.Attachments))
+	for _, a := range m.Attachments {
+		attachments = append(attachments, DMAttachment{ID: a.ID, Filename: a.Filename,
+			ContentType: a.ContentType, Size: a.Size, URL: a.URL})
+	}
+	g.server.receiveDMReply(m.ChannelID, m.ID, m.Author.ID, m.Content, repliedTo, attachments)
 }
 
 // onGuildMessage reacts to a message posted in a server by anyone with an

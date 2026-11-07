@@ -113,7 +113,10 @@ given a place — says replies reach the organizers, and is remembered with its
 event. Someone who writes back with Discord's Reply on one of those DMs is put
 with that DM's event; a plain message goes with the latest DM the bot sent
 them in the last two weeks, marked *best guess* on the page. The bot reacts 📨
-so they know it arrived. A DM about no recent event is left alone.
+so they know it arrived. A DM about no recent event is left alone. An image
+they send with it (JPEG, PNG, GIF or WebP, up to 25 MB) is kept and shown
+under their reply, only to whoever may edit the event; any other file is
+named there and stays in the DM.
 
 **Add now is not an invite.** Add now puts someone on the list the organizer
 picks — going even past the limit, maybe, or the waitlist while the event is

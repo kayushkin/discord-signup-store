@@ -419,6 +419,24 @@ CREATE TABLE IF NOT EXISTS event_dm_replies (
 
 CREATE INDEX IF NOT EXISTS idx_event_dm_replies_event ON event_dm_replies(event_id, at);
 
+-- event_dm_reply_attachments: the files on a reply, in Discord's order. An
+-- image is downloaded when the reply comes and kept in file-store (file_id);
+-- anything else, or an image that could not be kept, is noted with not_kept
+-- saying why, and stays only in the DM.
+CREATE TABLE IF NOT EXISTS event_dm_reply_attachments (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    reply_id              INTEGER NOT NULL REFERENCES event_dm_replies(id) ON DELETE CASCADE,
+    position              INTEGER NOT NULL,
+    discord_attachment_id TEXT NOT NULL,
+    filename              TEXT NOT NULL,
+    content_type          TEXT NOT NULL DEFAULT '',
+    bytes                 INTEGER NOT NULL DEFAULT 0,
+    file_id               TEXT NOT NULL DEFAULT '',
+    not_kept              TEXT NOT NULL DEFAULT '',
+    recorded_at           INTEGER NOT NULL,
+    UNIQUE (reply_id, position)
+);
+
 -- roster_watchers: organizers who asked, on an event's page, to be told by DM
 -- when people join or leave it. One row per organizer per event; turning it
 -- off deletes the row. A join or leave is told only once the person has left

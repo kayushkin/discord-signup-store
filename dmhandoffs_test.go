@@ -48,7 +48,7 @@ func TestAHandedOffPersonsDMsStayOffTheEventPage(t *testing.T) {
 		t.Errorf("a second active handoff answered %d, want 409", again.Code)
 	}
 
-	srv.receiveDMReply("dm-chan", "r3", "alice", "while handed off", "", 0)
+	srv.receiveDMReply("dm-chan", "r3", "alice", "while handed off", "", nil)
 	stored, _ := store.DMReplies(event.ID)
 	if len(stored) != 1 || stored[0].Content != "before the handoff" {
 		t.Errorf("replies shown while handed off = %+v, want only the one from before", stored)
@@ -64,7 +64,7 @@ func TestAHandedOffPersonsDMsStayOffTheEventPage(t *testing.T) {
 	if ended.Code != http.StatusOK {
 		t.Fatalf("end handoff: %d %s", ended.Code, ended.Body)
 	}
-	srv.receiveDMReply("dm-chan", "r4", "alice", "after the handoff", "", 0)
+	srv.receiveDMReply("dm-chan", "r4", "alice", "after the handoff", "", nil)
 	stored, _ = store.DMReplies(event.ID)
 	var contents []string
 	for _, reply := range stored {

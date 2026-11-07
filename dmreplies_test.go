@@ -29,9 +29,9 @@ func TestARepliedDMIsPutWithItsEvent(t *testing.T) {
 	postForm(t, mux, token, eventPath(first)+"/message", url.Values{"body": {"Bring snacks"}, "via": {"dm"}})      // dm-1
 	postForm(t, mux, token, eventPath(second)+"/message", url.Values{"body": {"Quiz starts late"}, "via": {"dm"}}) // dm-2
 
-	srv.receiveDMReply("dm-chan", "r1", "alice", "I'll bring crisps", "dm-1", 0) // Reply on the first
-	srv.receiveDMReply("dm-chan", "r2", "alice", "ok!", "", 0)                   // plain: the latest, the second
-	srv.receiveDMReply("dm-chan", "r3", "stranger", "hello?", "", 0)
+	srv.receiveDMReply("dm-chan", "r1", "alice", "I'll bring crisps", "dm-1", nil) // Reply on the first
+	srv.receiveDMReply("dm-chan", "r2", "alice", "ok!", "", nil)                   // plain: the latest, the second
+	srv.receiveDMReply("dm-chan", "r3", "stranger", "hello?", "", nil)
 
 	one, _ := store.DMReplies(first.ID)
 	two, _ := store.DMReplies(second.ID)

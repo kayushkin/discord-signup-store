@@ -409,10 +409,32 @@ kept; the image is not — Discord holds the copies people received.
 
 `event_dm_replies` is what people wrote back: `event_id`, `discord_user_id`,
 `display_name` (their name in the event's server when it came), `message_id`
-(unique, so a gateway replay stores it once), `content`, `attachments` (a
-count; the files stay in the DM), `replied_to` (our DM's id when they used
+(unique, so a gateway replay stores it once), `content`, `attachments` (how
+many files Discord said it carried; each is a row of
+`event_dm_reply_attachments`), `replied_to` (our DM's id when they used
 Reply), `matched` (`reply`, or `latest` for a plain message put with the
 latest DM in the last 14 days), `at`.
+
+
+## `event_dm_reply_attachments` — the files on a reply, new 2026-11-07
+
+One row per file on a reply, in Discord's order, written once when the reply
+comes (or later by `POST /api/dm-replies/keep-attachments`). An image is
+downloaded from Discord's CDN, whose links expire, and kept in file-store,
+owned as `dm-reply:<reply id>`. Rows are never changed.
+
+| column | type | description |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `reply_id` | INTEGER | → `event_dm_replies(id)` ON DELETE CASCADE. |
+| `position` | INTEGER | 0 for the first; unique per reply. |
+| `discord_attachment_id` | TEXT | Discord's id for the file. |
+| `filename` | TEXT | The sender's name for it. Display only. |
+| `content_type` | TEXT | Read from the bytes when kept; Discord's word for it otherwise. |
+| `bytes` | INTEGER | Its size. |
+| `file_id` | TEXT | file-store's id when kept; empty when not. |
+| `not_kept` | TEXT | Why not: `not an image`, too large, the download or file-store failing, or file-store not configured. |
+| `recorded_at` | INTEGER | When. |
 
 ## `dm_handoffs` — people whose DMs another service answers, new 2026-11-04
 
